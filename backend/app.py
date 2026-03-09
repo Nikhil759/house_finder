@@ -89,21 +89,27 @@ def extract_contact(text):
 
 
 async def fetch_telegram_async(bhk, keywords, limit=25):
-    api_id = os.getenv("TELEGRAM_API_ID")
-    api_hash = os.getenv("TELEGRAM_API_HASH")
-    session = os.getenv("TELEGRAM_SESSION_NAME", "housing_finder")
+    api_id         = os.getenv("TELEGRAM_API_ID")
+    api_hash       = os.getenv("TELEGRAM_API_HASH")
+    session_string = os.getenv("TELEGRAM_SESSION_STRING")   # preferred (production)
+    session_name   = os.getenv("TELEGRAM_SESSION_NAME", "housing_finder")  # local fallback
 
     if not api_id or not api_hash:
         print("Telegram credentials not set")
         return []
 
     from telethon import TelegramClient
+    from telethon.sessions import StringSession
     from telethon.errors import ChannelPrivateError, UsernameNotOccupiedError, FloodWaitError
 
-    # Resolve the session file path relative to this file so Flask can find it
-    session_path = os.path.join(os.path.dirname(__file__), session)
+    # Use StringSession when available (Railway/production — no disk needed),
+    # otherwise fall back to the local .session file (local dev).
+    if session_string:
+        session = StringSession(session_string)
+    else:
+        session = os.path.join(os.path.dirname(__file__), session_name)
 
-    client = TelegramClient(session_path, int(api_id), api_hash)
+    client = TelegramClient(session, int(api_id), api_hash)
     try:
         await client.connect()
         if not await client.is_user_authorized():
