@@ -25,7 +25,7 @@ CORS(app)
 # Start NoBroker background cache refresh
 start_background_refresh()
 
-HEADERS = {"User-Agent": "housing-finder/1.0"}
+HEADERS = {"User-Agent": "python:bangalore-housing-finder:v1.0 (by /u/nikhil7599)"}
 
 # ─────────────────────────────────────────────
 # Bangalore subreddits — fixed
