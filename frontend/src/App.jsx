@@ -274,6 +274,7 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
       href={post.url}
       target="_blank"
       rel="noopener noreferrer"
+      className="post-card"
       style={{
         display: "block",
         textDecoration: "none",
@@ -639,9 +640,10 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
       href={post.url}
       target="_blank"
       rel="noopener noreferrer"
+      className="post-tile"
       style={{
         display: "flex", flexDirection: "column",
-        textDecoration: "none", position: "relative", overflow: "hidden",
+        textDecoration: "none", position: "relative",
         background: "rgba(255,255,255,0.025)",
         border: `1px solid ${isNewSinceVisit ? "rgba(74,222,128,0.18)" : "rgba(255,255,255,0.06)"}`,
         borderTop: `3px solid ${isNewSinceVisit ? "#4ade80" : accentColor}`,
@@ -936,10 +938,7 @@ function MapView({ posts }) {
           ))}
         </div>
       </div>
-      <div ref={containerRef} style={{
-        height: "520px", borderRadius: "8px",
-        border: "1px solid #2a2a3a", overflow: "hidden",
-      }} />
+      <div ref={containerRef} className="map-container" />
     </div>
   );
 }
@@ -1329,6 +1328,7 @@ export default function App() {
   const [posts,          setPosts]          = useState([]);
   const [loading,        setLoading]        = useState(false);
   const [error,          setError]          = useState("");
+  const [redditWarning,  setRedditWarning]  = useState(false);
   const [meta,           setMeta]           = useState(null);
   const [searched,       setSearched]       = useState(false);
   const [savedSearches,  setSavedSearches]  = useState(loadSaved);
@@ -1380,6 +1380,7 @@ export default function App() {
   const doSearch = async ({ area: a, bhk: b, budget: bu, keywords: kw, sources: src, sort: s, minScore: ms }) => {
     setLoading(true);
     setError("");
+    setRedditWarning(false);
     setPosts([]);
     setMeta(null);
     setSearched(true);
@@ -1408,6 +1409,7 @@ export default function App() {
 
       setPosts(data.posts);
       setMeta({ query: data.query, subreddits: data.subreddits, total: data.total });
+      setRedditWarning(!!data.reddit_warning);
       localStorage.setItem(LAST_VISIT_KEY, Math.floor(Date.now() / 1000));
     } catch (err) {
       setError(err.message);
@@ -1463,7 +1465,7 @@ export default function App() {
         pointerEvents: "none", zIndex: 0,
       }} />
 
-      <div style={{ position: "relative", zIndex: 1, maxWidth: "1380px", margin: "0 auto", padding: "40px 32px" }}>
+      <div className="main-container" style={{ position: "relative", zIndex: 1, maxWidth: "1380px", margin: "0 auto" }}>
 
         {/* Header */}
         <div style={{ marginBottom: "36px" }}>
@@ -1477,7 +1479,7 @@ export default function App() {
               REDDIT HOUSING SCANNER
             </span>
           </div>
-          <h1 style={{
+          <h1 className="app-title" style={{
             fontSize: "30px", fontFamily: "'Georgia', serif",
             fontWeight: "normal", color: "#e8e4d8", margin: "0 0 6px 0",
           }}>
@@ -1579,7 +1581,7 @@ export default function App() {
           borderRadius: "10px", padding: "24px", marginBottom: "28px",
         }}>
           {/* Row 1: Area | Type | Budget | Keywords — 4 columns */}
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: "12px", marginBottom: "14px" }}>
+          <div className="search-fields-grid">
             <div>
               <label style={{ display: "block", fontSize: "9px", color: "#f5a623", letterSpacing: "0.15em", marginBottom: "7px" }}>
                 AREA <span style={{ opacity: 0.4 }}>(optional)</span>
@@ -1630,7 +1632,7 @@ export default function App() {
           </div>
 
           {/* Sort + Quality filter row */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "14px" }}>
+          <div className="sort-quality-grid">
             <div>
               <label style={{ display: "block", fontSize: "9px", color: "#f5a623", letterSpacing: "0.15em", marginBottom: "7px" }}>SORT BY</label>
               <select
@@ -1778,13 +1780,25 @@ export default function App() {
           </div>
         </div>
 
-        {/* Error */}
+        {/* Fatal error */}
         {error && (
           <div style={{
             background: "rgba(255,60,60,0.07)", border: "1px solid rgba(255,60,60,0.25)",
             borderRadius: "6px", padding: "12px 16px",
             color: "#ff6b6b", fontSize: "12px", marginBottom: "20px",
           }}>⚠ {error}</div>
+        )}
+
+        {/* Soft Reddit warning — amber, non-blocking */}
+        {redditWarning && sources.reddit && !error && (
+          <div style={{
+            background: "rgba(251,191,36,0.07)", border: "1px solid rgba(251,191,36,0.25)",
+            borderRadius: "6px", padding: "10px 16px",
+            color: "#fbbf24", fontSize: "11px", fontFamily: "monospace",
+            marginBottom: "20px",
+          }}>
+            ⚠ Reddit results unavailable — showing Telegram and NoBroker only
+          </div>
         )}
 
         {/* Loading */}
@@ -1803,10 +1817,7 @@ export default function App() {
 
         {/* Tab bar */}
         {!loading && (searched || savedListings.length > 0) && (
-          <div style={{
-            display: "flex", gap: "0",
-            borderBottom: "1px solid #1a1a24", marginBottom: "20px",
-          }}>
+          <div className="tab-bar" style={{ borderBottom: "1px solid #1a1a24", marginBottom: "20px" }}>
             {[
               { id: "results", label: `Search Results${posts.length > 0 ? ` (${posts.filter(p => !hiddenPosts.has(p.id)).length})` : ""}` },
               { id: "saved",   label: `💾 Saved Listings${savedListings.length > 0 ? ` (${savedListings.length})` : ""}` },
@@ -1867,7 +1878,7 @@ export default function App() {
               return (
                 <>
                   {newCount > 0 && viewMode !== "map" && (
-                    <div style={{
+                    <div className="new-listings-banner" style={{
                       display: "flex", alignItems: "center", gap: "8px",
                       background: "rgba(74,222,128,0.08)",
                       border: "1px solid rgba(74,222,128,0.2)",
@@ -1878,12 +1889,9 @@ export default function App() {
                       <span><strong>{newCount}</strong> new listing{newCount !== 1 ? "s" : ""} since your last visit</span>
                     </div>
                   )}
-                  <div style={{
-                    display: "flex", justifyContent: "space-between", alignItems: "center",
-                    marginBottom: "14px", paddingBottom: "10px", borderBottom: "1px solid #1a1a24",
-                  }}>
+                  <div className="results-header" style={{ marginBottom: "14px", paddingBottom: "10px", borderBottom: "1px solid #1a1a24" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                      <span style={{ color: "#f5a623", fontSize: "13px" }}>
+                      <span className="results-count" style={{ color: "#f5a623", fontSize: "13px" }}>
                         {sorted.length} listing{sorted.length !== 1 ? "s" : ""}
                       </span>
                       {multiSource && (
@@ -1919,7 +1927,7 @@ export default function App() {
                         ))}
                       </div>
                       {viewMode !== "map" && (
-                        <span style={{ color: "#3a3a4a", fontSize: "9px", letterSpacing: "0.1em", fontFamily: "monospace" }}>
+                        <span className="best-match-label" style={{ color: "#3a3a4a", fontSize: "9px", letterSpacing: "0.1em", fontFamily: "monospace" }}>
                           {SORT_OPTIONS.find(o => o.value === sortBy)?.label.toUpperCase()}
                         </span>
                       )}
@@ -1945,11 +1953,7 @@ export default function App() {
                     const paginated  = sorted.slice((page - 1) * TILES_PER_PAGE, page * TILES_PER_PAGE);
                     return (
                       <>
-                        <div style={{
-                          display: "grid",
-                          gridTemplateColumns: "repeat(4, 1fr)",
-                          gap: "14px", marginBottom: "8px",
-                        }}>
+                        <div className="cards-grid">
                           {paginated.map(post => (
                             <PostTile
                               key={post.id} post={post} lastVisit={lastVisit}
@@ -2001,7 +2005,7 @@ export default function App() {
                     Clear all saved
                   </button>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px" }}>
+                <div className="cards-grid" style={{ marginBottom: 0 }}>
                   {savedListings.map(post => (
                     <PostTile
                       key={post.id} post={post} lastVisit={lastVisit}
@@ -2040,6 +2044,89 @@ export default function App() {
         * { box-sizing: border-box; }
         select option { background: #0d0d14; }
         input::placeholder { color: #2a2a3a; }
+
+        /* ── Global mobile reset ─────────────────────────────────────── */
+        html, body { overflow-x: hidden; }
+
+        /* ── Main content container ──────────────────────────────────── */
+        .main-container { padding: 40px 32px; }
+        @media (max-width: 768px) { .main-container { padding: 16px; } }
+
+        /* ── App title ───────────────────────────────────────────────── */
+        @media (max-width: 768px) { .app-title { font-size: 22px !important; } }
+
+        /* ── Search fields: 4-col → 2-col → 1-col ───────────────────── */
+        .search-fields-grid {
+          display: grid;
+          grid-template-columns: 2fr 1fr 1fr 1fr;
+          gap: 12px;
+          margin-bottom: 14px;
+        }
+        @media (max-width: 768px) { .search-fields-grid { grid-template-columns: 1fr 1fr; } }
+        @media (max-width: 480px) { .search-fields-grid { grid-template-columns: 1fr; } }
+
+        /* ── Sort + quality row: 2-col → 1-col ──────────────────────── */
+        .sort-quality-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          margin-bottom: 14px;
+        }
+        @media (max-width: 768px) { .sort-quality-grid { grid-template-columns: 1fr; } }
+
+        /* ── Tab bar ─────────────────────────────────────────────────── */
+        .tab-bar { display: flex; }
+        @media (max-width: 768px) {
+          .tab-bar { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+          .tab-bar button { white-space: nowrap; flex-shrink: 0; }
+        }
+
+        /* ── Results header row ──────────────────────────────────────── */
+        .results-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        @media (max-width: 768px) { .results-count { font-size: 11px !important; } }
+
+        /* ── Hide "BEST MATCH" sort label on mobile ──────────────────── */
+        @media (max-width: 768px) { .best-match-label { display: none !important; } }
+
+        /* ── New listings banner ─────────────────────────────────────── */
+        .new-listings-banner { flex-wrap: wrap; }
+        @media (max-width: 768px) { .new-listings-banner { font-size: 13px !important; padding: 10px 14px !important; } }
+
+        /* ── Cards grid: 4-col → 3-col → 2-col ──────────────────────── */
+        .cards-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 14px;
+          margin-bottom: 8px;
+        }
+        @media (max-width: 768px) { .cards-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; } }
+        @media (max-width: 480px) { .cards-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; } }
+
+        /* ── Post tile (grid view) ────────────────────────────────────── */
+        .post-tile { overflow: hidden; word-break: break-word; box-sizing: border-box; }
+        @media (max-width: 768px) {
+          .post-tile { padding: 12px !important; min-height: unset !important; }
+          .post-tile img { max-height: 140px !important; }
+        }
+
+        /* ── Post card (list view) ───────────────────────────────────── */
+        .post-card { overflow: hidden; word-break: break-word; box-sizing: border-box; }
+        @media (max-width: 768px) { .post-card { padding: 12px !important; } }
+
+        /* ── Map container ───────────────────────────────────────────── */
+        .map-container {
+          height: 520px;
+          border-radius: 8px;
+          border: 1px solid #2a2a3a;
+          overflow: hidden;
+        }
+        @media (max-width: 768px) { .map-container { height: 60vh; min-height: 300px; } }
 
         /* Dark Leaflet popup */
         .dark-popup .leaflet-popup-content-wrapper {
