@@ -765,13 +765,15 @@ def fetch_listings(area="", bhk="any", budget="", keywords="", limit=30):
 
     # ── Tier 2: PullPush.io ───────────────────────────────────────────────────
     raw, err = _fetch_via_pullpush(query, limit)
-    if raw:
+    if err is None:
+        # PullPush succeeded — return even if 0 results (avoids falling through
+        # to the public Reddit API which is blocked on cloud IPs)
         posts = [_normalise_reddit_post(p) for p in raw]
         posts = [p for p in posts if is_listing(p)]
         return posts, query, None
     print(f"PullPush fetch failed ({err}), trying public Reddit API")
 
-    # ── Tier 3: Public Reddit API (local dev fallback) ────────────────────────
+    # ── Tier 3: Public Reddit API (local dev fallback only) ───────────────────
     params = {"q": query, "sort": "new", "limit": limit, "t": "month", "restrict_sr": "1"}
     try:
         resp = http.get(SEARCH_URL_PUBLIC, headers=HEADERS, params=params, timeout=10)
