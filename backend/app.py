@@ -8,11 +8,22 @@ import json
 import os
 import asyncio
 from dotenv import load_dotenv
+from nobroker import (
+    start_background_refresh,
+    get_cached_listings,
+    NOBROKER_LOCALITIES,
+    _cache_updated_at,
+    _nobroker_cache,
+    _cache_lock,
+)
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 app = Flask(__name__)
 CORS(app)
+
+# Start NoBroker background cache refresh
+start_background_refresh()
 
 HEADERS = {"User-Agent": "housing-finder/1.0"}
 
@@ -88,6 +99,172 @@ def extract_contact(text):
     return match.group(0) if match else None
 
 
+# ─────────────────────────────────────────────
+# Telegram structured parser
+# ─────────────────────────────────────────────
+
+# Patterns whose first line should be discarded as a generic header
+_GENERIC_TG_TITLE = re.compile(
+    r"^\W*\d\s*(?:bhk?|bedroom)\s*(?:listing|available|flat|apartment|for\s*rent|rental)?\W*$"
+    r"|^\W*(?:flat|room|apartment|property)\s*(?:for\s*rent|available|listing)?\W*$"
+    r"|^\W*(?:rent|rental|listing|post|announcement)\W*$"
+    r"|^\W*(?:🏠|🏡|🏢|🔑)+\W*$",
+    re.IGNORECASE,
+)
+
+_HEADER_FIELD_RE = re.compile(
+    r"^(location|rent|deposit|contact|call|note|nearby|amenities|bhk|type|available)[:\s]",
+    re.IGNORECASE,
+)
+
+
+def extract_telegram_title(text, parsed):
+    """
+    Return the most informative title line from a Telegram post.
+    Falls back to constructing one from parsed fields, then the raw first line.
+    """
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+
+    for line in lines:
+        # Strip markdown bold/header markers and common emojis used as decoration
+        clean = re.sub(r"\*+|={3,}|#+|[🏠🏡🏢🔑✅📍💰🛋️]", "", line).strip()
+        if len(clean) < 20:
+            continue
+        if _GENERIC_TG_TITLE.match(clean):
+            continue
+        if _HEADER_FIELD_RE.match(clean):
+            continue
+        return clean[:120]
+
+    # Nothing informative in the text — build a synthetic title from parsed fields
+    parts = []
+    if parsed.get("bhk"):
+        parts.append(parsed["bhk"])
+    if parsed.get("furnishing"):
+        parts.append(parsed["furnishing"])
+    if parsed.get("location_text"):
+        parts.append(parsed["location_text"])
+    if parsed.get("rent"):
+        parts.append(f"₹{parsed['rent']:,}/mo")
+    if parts:
+        return " · ".join(parts)
+
+    # Absolute last resort
+    return lines[0][:120] if lines else ""
+
+
+def parse_telegram_post(text):
+    """
+    Extract structured fields from a Telegram rental post body.
+    Returns a dict with all optional keys (absent if not found).
+    """
+    result = {}
+    if not text:
+        return result
+
+    # Rent
+    for pattern in [
+        r'rent[:\s*]+[₹rs\.]*\s*([\d,]+)',
+        r'[₹rs\.]+\s*([\d,]+)\s*/?\s*month',
+        r'[₹rs\.]+\s*([\d,]+)\s*(?:per month|pm|p\.m)',
+    ]:
+        m = re.search(pattern, text, re.IGNORECASE)
+        if m:
+            try:
+                result["rent"] = int(m.group(1).replace(",", ""))
+                break
+            except ValueError:
+                pass
+
+    # Deposit
+    for pattern in [
+        r'(?:total\s+)?deposit[:\s*]+[₹rs\.]*\s*([\d,]+(?:\.\d+)?(?:\s*lacs?)?)',
+        r'(?:security\s+)?deposit[:\s*]+[₹rs\.]*\s*([\d,]+)',
+        r'advance[:\s*]+[₹rs\.]*\s*([\d,]+)',
+    ]:
+        m = re.search(pattern, text, re.IGNORECASE)
+        if m:
+            result["deposit_text"] = m.group(1).strip()
+            break
+
+    # BHK
+    m = re.search(r'(\d)\s*(?:BHK|bhk|bedroom|bed room)', text, re.IGNORECASE)
+    if m:
+        result["bhk"] = f"{m.group(1)} BHK"
+    elif re.search(r'studio|1\s*rk', text, re.IGNORECASE):
+        result["bhk"] = "Studio/1RK"
+
+    # Furnishing
+    if re.search(r'fully[\s-]furnished', text, re.IGNORECASE):
+        result["furnishing"] = "Fully Furnished"
+    elif re.search(r'semi[\s-]furnished', text, re.IGNORECASE):
+        result["furnishing"] = "Semi Furnished"
+    elif re.search(r'unfurnished|un-furnished', text, re.IGNORECASE):
+        result["furnishing"] = "Unfurnished"
+
+    # Location line
+    m = re.search(r'\*{0,2}location[:\*\s]+\*{0,2}(.+?)(?:\n|$)', text, re.IGNORECASE)
+    if m:
+        result["location_text"] = m.group(1).strip().rstrip("*")
+
+    # Google Maps link
+    m = re.search(
+        r'(https?://(?:maps\.app\.goo\.gl|goo\.gl/maps|maps\.google\.com)\S+)', text
+    )
+    if m:
+        result["maps_url"] = m.group(1)
+
+    # Contact number (prefer labelled one over bare number)
+    m = re.search(
+        r'(?:contact|call|whatsapp|reach|phone|mob(?:ile)?)?[:\s]*'
+        r'(\+?91[\s-]?)?([6-9]\d{9})',
+        text, re.IGNORECASE,
+    )
+    if m:
+        result["contact"] = m.group(2)
+
+    # No-brokerage flag
+    result["no_brokerage"] = bool(
+        re.search(r'no[\s-]brok(?:er|erage)', text, re.IGNORECASE)
+    )
+
+    # Amenities
+    amenity_patterns = {
+        "Gym":          r'\bgym\b',
+        "Pool":         r'\bpool\b|\bswimming\b',
+        "Security":     r'\bsecurity\b|\b24/7\b',
+        "Parking":      r'\bparking\b',
+        "Wifi":         r'\bwifi\b|\bwi-fi\b|\binternet\b',
+        "Power Backup": r'\bpower[\s-]backup\b',
+        "Lift":         r'\blift\b|\belevator\b',
+        "Gated":        r'\bgated\b',
+    }
+    amenities = [label for label, pat in amenity_patterns.items()
+                 if re.search(pat, text, re.IGNORECASE)]
+    if amenities:
+        result["amenities"] = amenities
+
+    # Flatmate / shared flag
+    result["is_flatmate"] = bool(
+        re.search(
+            r'flatmate|flat.?mate|roommate|room.?mate|room available|'
+            r'single room|one room|1 room|sharing',
+            text, re.IGNORECASE,
+        )
+    )
+
+    # Subtitle — first meaningful non-header line
+    for line in [l.strip() for l in text.split("\n") if l.strip()]:
+        clean = re.sub(r'\*+|={3,}', '', line).strip()
+        if len(clean) > 20 and not clean.lower().startswith(
+            ('location', 'rent', 'deposit', 'contact', 'note', 'nearb')
+        ):
+            result["subtitle"] = clean
+            break
+
+    return result
+
+
 async def fetch_telegram_async(bhk, keywords, limit=25):
     api_id         = os.getenv("TELEGRAM_API_ID")
     api_hash       = os.getenv("TELEGRAM_API_HASH")
@@ -126,22 +303,44 @@ async def fetch_telegram_async(bhk, keywords, limit=25):
                     text = msg.text or ""
                     if not is_relevant(text, bhk, keywords):
                         continue
-                    first_line = text.split("\n")[0][:120]
-                    group_posts.append({
-                        "id": str(msg.id),
-                        "source": "telegram",
-                        "title": first_line,
-                        "body": text[:500],
-                        "author": str(msg.sender_id or ""),
-                        "url": f"https://t.me/{group}/{msg.id}",
-                        "group": f"t.me/{group}",
-                        "score": 0,
+                    parsed = parse_telegram_post(text)
+                    title  = extract_telegram_title(text, parsed)
+
+                    raw_price = extract_price(text)
+                    rent_int  = parsed.get("rent")
+                    price_formatted = (
+                        f"₹{rent_int:,}" if rent_int
+                        else raw_price
+                    )
+
+                    post = {
+                        "id":      str(msg.id),
+                        "source":  "telegram",
+                        "title":   title,
+                        "body":    text[:800],
+                        "author":  str(msg.sender_id or ""),
+                        "url":     f"https://t.me/{group}/{msg.id}",
+                        "group":   f"t.me/{group}",
+                        "score":   0,
                         "comments": 0,
                         "created": int(msg.date.timestamp()),
-                        "flair": "",
-                        "price": extract_price(text),
-                        "contact": extract_contact(text),
-                    })
+                        "flair":   "",
+                        # price: prefer parsed int, fall back to regex string
+                        "price":           rent_int or raw_price,
+                        "price_formatted": price_formatted,
+                        "contact":         parsed.get("contact") or extract_contact(text),
+                        # structured fields from parser
+                        "bhk":          parsed.get("bhk"),
+                        "furnishing":   parsed.get("furnishing"),
+                        "locality":     parsed.get("location_text"),
+                        "deposit_text": parsed.get("deposit_text"),
+                        "maps_url":     parsed.get("maps_url"),
+                        "amenities":    parsed.get("amenities", []),
+                        "no_brokerage": parsed.get("no_brokerage", False),
+                        "is_flatmate":  parsed.get("is_flatmate", False),
+                        "subtitle":     parsed.get("subtitle"),
+                    }
+                    group_posts.append(post)
                 # Cap at 15 best per group to prevent one noisy group dominating
                 posts.extend(group_posts[:15])
             except (ChannelPrivateError, UsernameNotOccupiedError):
@@ -240,6 +439,14 @@ def score_post(post):
             score += 5
         elif body_len < 30:
             score -= 10
+        # Telegram posts explicitly marked no-brokerage get same trust boost
+        if post.get("no_brokerage"):
+            score += 15
+
+    # NoBroker listings are guaranteed no-brokerage — skip broker penalty and
+    # give a baseline trust bonus instead.
+    if post.get("source") == "nobroker":
+        return max(0, min(100, score + 15))
 
     broker_hits = sum(1 for s in _BROKER_SIGNALS if s in text)
     if broker_hits >= 2:
@@ -611,7 +818,7 @@ def search():
     limit     = min(int(request.args.get("limit", 50)), 50)
     sort      = request.args.get("sort", "score")
     min_score = max(0, min(60, int(request.args.get("min_score", 20))))
-    sources_param = request.args.get("sources", "reddit")
+    sources_param = request.args.get("sources", "reddit,telegram,nobroker")
     source_list   = [s.strip() for s in sources_param.split(",") if s.strip()]
 
     all_posts = []
@@ -626,6 +833,33 @@ def search():
 
     if "telegram" in source_list:
         all_posts += fetch_telegram(bhk, keywords, limit)
+
+    if "nobroker" in source_list:
+        nb_listings = get_cached_listings()
+
+        if area:
+            area_lower = area.lower()
+            nb_listings = [
+                p for p in nb_listings
+                if area_lower in p.get("locality", "").lower()
+                or area_lower in p.get("address", "").lower()
+            ]
+
+        if bhk and bhk != "any":
+            bhk_norm = bhk.lower().replace(" ", "")
+            nb_listings = [
+                p for p in nb_listings
+                if bhk_norm in p.get("bhk", "").lower().replace(" ", "")
+            ]
+
+        if budget:
+            try:
+                budget_val = int(budget)
+                nb_listings = [p for p in nb_listings if (p.get("price") or 0) <= budget_val]
+            except ValueError:
+                pass
+
+        all_posts += nb_listings
 
     # Score every post
     for post in all_posts:
@@ -717,6 +951,22 @@ def check_alerts():
             results.append({"id": alert["id"], "new": 0, "sent": False})
 
     return jsonify({"emails_sent": sent_count, "results": results})
+
+
+@app.route("/api/nobroker/status")
+def nobroker_status():
+    with _cache_lock:
+        status = {
+            locality["name"]: {
+                "count":        len(_nobroker_cache.get(locality["name"], [])),
+                "last_updated": _cache_updated_at.get(locality["name"]),
+                "age_minutes":  round(
+                    (time.time() - _cache_updated_at[locality["name"]]) / 60, 1
+                ) if locality["name"] in _cache_updated_at else None,
+            }
+            for locality in NOBROKER_LOCALITIES
+        }
+    return jsonify(status)
 
 
 if __name__ == "__main__":

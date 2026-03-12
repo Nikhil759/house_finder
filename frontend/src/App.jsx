@@ -7,6 +7,7 @@ const SUBREDDITS = ["r/bangalore", "r/bengaluru", "r/indianrealestate", "r/banga
 const SOURCE_DEFS = [
   { id: "reddit",   label: "Reddit",   icon: "🟠", color: "#ff4500" },
   { id: "telegram", label: "Telegram", icon: "✈️",  color: "#229ed9" },
+  { id: "nobroker", label: "NoBroker", icon: "🔴", color: "#e63946" },
 ];
 
 const BANGALORE_AREAS = [
@@ -123,6 +124,15 @@ function Pill({ icon, label, bg, color, extra }) {
 }
 
 
+/** Safely format a price value that may be an int, a "₹18,000" string, or null. */
+function formatPriceValue(price, priceFormatted) {
+  if (priceFormatted) return priceFormatted;
+  if (!price && price !== 0) return null;
+  if (typeof price === "string") return price; // already a display string
+  const n = Number(price);
+  return Number.isFinite(n) && n > 0 ? `₹${n.toLocaleString("en-IN")}` : null;
+}
+
 function timeAgo(utcSeconds) {
   const diff = Math.floor(Date.now() / 1000 - utcSeconds);
   if (diff < 60)    return `${diff}s ago`;
@@ -187,17 +197,24 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
   const isTop           = index < 3;
   const isNewSinceVisit = post.created > lastVisit;
   const isTelegram      = post.source === "telegram";
+  const isNoBroker      = post.source === "nobroker";
 
-  // For Reddit posts: extract from text. For Telegram: use server-provided fields.
-  const bodyText = isTelegram ? (post.body || "") : (post.selftext || "");
-  const { bhk, locality, price: clientPrice, furnished, phone: clientPhone } =
+  // For Reddit: extract from text. For Telegram/NoBroker: prefer server-provided fields.
+  const bodyText = (isTelegram || isNoBroker) ? (post.body || "") : (post.selftext || "");
+  const { bhk: clientBhk, locality: clientLocality, price: clientPrice, furnished: clientFurnished, phone: clientPhone } =
     extractListingInfo(post.title, bodyText);
 
-  // Prefer server-extracted price/contact for Telegram; fall back to client extraction for Reddit
-  const displayPrice   = isTelegram ? post.price   : (clientPrice   || post.price);
-  const displayContact = isTelegram ? post.contact  : (clientPhone   || post.contact);
+  const displayPrice = (isTelegram || isNoBroker)
+    ? formatPriceValue(post.price, post.price_formatted)
+    : (clientPrice || post.price);
+  const displayContact  = isNoBroker ? null : (isTelegram ? post.contact : (clientPhone || post.contact));
+  const displayBhk      = isNoBroker ? post.bhk      : (isTelegram ? (post.bhk      || clientBhk)      : clientBhk);
+  const displayLocality = isNoBroker ? post.locality  : (isTelegram ? (post.locality || clientLocality) : clientLocality);
+  const displayFurnished = isNoBroker ? post.furnishing : (isTelegram ? (post.furnishing || clientFurnished) : clientFurnished);
 
-  const hasPills = bhk || locality || displayPrice || furnished || displayContact;
+  const hasPills = displayBhk || displayLocality || displayPrice || displayFurnished || displayContact
+    || (isNoBroker && (post.area_sqft || post.deposit_formatted))
+    || (isTelegram && (post.deposit_text || post.no_brokerage || post.is_flatmate));
 
   const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
 
@@ -281,8 +298,22 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
         e.currentTarget.style.transform = "translateX(0)";
       }}
     >
+      {/* NoBroker thumbnail */}
+      {isNoBroker && post.thumbnail && (
+        <img
+          src={post.thumbnail}
+          alt="property"
+          style={{
+            width: "100%", maxHeight: "160px", objectFit: "cover",
+            borderRadius: "4px", marginBottom: "10px",
+            border: "1px solid #1a1a24",
+          }}
+          onError={e => { e.currentTarget.style.display = "none"; }}
+        />
+      )}
+
       {/* Title row */}
-      <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", marginBottom: "7px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", marginBottom: isTelegram && post.subtitle ? "4px" : "7px" }}>
         <div style={{ color: "#e8e4d8", fontSize: "14px", fontFamily: "'Georgia', serif", lineHeight: "1.5", flex: 1 }}>
           {isNewSinceVisit && (
             <span style={{
@@ -292,35 +323,125 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
               border: "1px solid rgba(74,222,128,0.35)",
             }}>NEW</span>
           )}
+          {isNoBroker && post.sponsored && (
+            <span style={{
+              background: "rgba(255,255,255,0.06)", color: "#555", fontSize: "8px",
+              padding: "2px 6px", borderRadius: "3px", marginRight: "8px",
+              verticalAlign: "middle", border: "1px solid #2a2a3a",
+            }}>Sponsored</span>
+          )}
           {post.title}
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "5px", flexShrink: 0 }}>
           <SourceBadge source={post.source || "reddit"} />
           {post.quality_score != null && <ScoreBadge score={post.quality_score} post={post} />}
           <span style={{ color: "#3a3a4a", fontSize: "10px", fontFamily: "monospace", whiteSpace: "nowrap" }}>
-            {timeAgo(post.created)}
+            {isNoBroker && post.last_update_string ? post.last_update_string : timeAgo(post.created)}
           </span>
         </div>
       </div>
 
-      {/* Extracted info pills */}
+      {/* Telegram subtitle — only when it adds info beyond the title */}
+      {isTelegram && post.subtitle &&
+       post.subtitle.toLowerCase().trim() !== post.title.toLowerCase().trim() && (
+        <div style={{
+          color: "#666", fontSize: "11px", fontFamily: "monospace",
+          lineHeight: "1.4", marginBottom: "8px", fontStyle: "italic",
+        }}>
+          {post.subtitle.length > 90 ? post.subtitle.slice(0, 90) + "…" : post.subtitle}
+        </div>
+      )}
+
+      {/* Info pills */}
       {hasPills && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
-          {bhk           && <Pill icon="🏠" label={bhk}          bg="rgba(59,130,246,0.15)"  color="#7eb8f7" />}
-          {locality      && <Pill icon="📍" label={locality}     bg="rgba(255,255,255,0.06)" color="#999" />}
-          {displayPrice  && <Pill icon="💰" label={displayPrice} bg="rgba(34,197,94,0.15)"   color="#6ee09a" />}
-          {furnished     && <Pill icon="🛋️" label={furnished}    bg="rgba(168,85,247,0.15)"  color="#c084fc" />}
+          {displayBhk && (isNoBroker && post.area_sqft)
+            ? <Pill icon="🏠" label={`${displayBhk} · ${post.area_sqft} sqft`} bg="rgba(59,130,246,0.15)" color="#7eb8f7" />
+            : displayBhk && <Pill icon="🏠" label={displayBhk} bg="rgba(59,130,246,0.15)" color="#7eb8f7" />}
+          {displayLocality && <Pill icon="📍" label={displayLocality} bg="rgba(255,255,255,0.06)" color="#999" />}
+          {displayPrice    && <Pill icon="💰" label={String(displayPrice)} bg="rgba(34,197,94,0.15)" color="#6ee09a" />}
+          {displayFurnished && <Pill icon="🛋️" label={displayFurnished} bg="rgba(168,85,247,0.15)" color="#c084fc" />}
+          {isNoBroker && post.deposit_formatted && (
+            <Pill icon="🔒" label={`Deposit: ${post.deposit_formatted}`} bg="rgba(255,255,255,0.04)" color="#777" />
+          )}
+          {isNoBroker && post.lease_type && post.lease_type !== "ANYONE" && (
+            <Pill icon="👤" label={post.lease_type.charAt(0) + post.lease_type.slice(1).toLowerCase()} bg="rgba(255,255,255,0.04)" color="#666" />
+          )}
+          {isTelegram && post.deposit_text && (
+            <Pill icon="🔒" label={`Deposit: ₹${post.deposit_text}`} bg="rgba(255,255,255,0.04)" color="#777" />
+          )}
+          {isTelegram && post.no_brokerage && (
+            <Pill icon="✅" label="No Brokerage" bg="rgba(34,197,94,0.12)" color="#4ade80" />
+          )}
+          {isTelegram && post.is_flatmate && (
+            <Pill icon="🤝" label="Flatmate" bg="rgba(168,85,247,0.15)" color="#c084fc" />
+          )}
           {displayContact && <ContactPill contact={displayContact} />}
+        </div>
+      )}
+
+      {/* Telegram amenities row */}
+      {isTelegram && post.amenities && post.amenities.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "8px" }}>
+          {post.amenities.slice(0, 4).map(a => (
+            <span key={a} style={{
+              background: "rgba(255,255,255,0.04)", color: "#555",
+              fontSize: "9px", fontFamily: "monospace",
+              padding: "2px 7px", borderRadius: "10px",
+              border: "1px solid #1e1e2e",
+            }}>{a}</span>
+          ))}
+          {post.amenities.length > 4 && (
+            <span style={{
+              background: "rgba(255,255,255,0.04)", color: "#444",
+              fontSize: "9px", fontFamily: "monospace",
+              padding: "2px 7px", borderRadius: "10px",
+              border: "1px solid #1e1e2e",
+            }}>+{post.amenities.length - 4} more</span>
+          )}
         </div>
       )}
 
       {/* Meta — differs by source */}
       <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "8px", flexWrap: "wrap" }}>
-        {isTelegram ? (
+        {isNoBroker ? (
+          <>
+            {post.society && (
+              <span style={{ color: "#e63946", fontSize: "10px", fontFamily: "monospace", opacity: 0.8 }}>
+                🏢 {post.society}
+              </span>
+            )}
+            {post.owner_name && (
+              <span style={{ color: "#555", fontSize: "10px", fontFamily: "monospace" }}>
+                Owner: {post.owner_name}
+              </span>
+            )}
+            {post.amenities && post.amenities.length > 0 && (
+              <span style={{ color: "#444", fontSize: "10px", fontFamily: "monospace" }}>
+                {post.amenities.join(" · ")}
+              </span>
+            )}
+          </>
+        ) : isTelegram ? (
           <>
             <span style={{ color: "#229ed9", fontSize: "10px", fontFamily: "monospace", opacity: 0.8 }}>
               {post.group}
             </span>
+            {post.maps_url && (
+              <a
+                href={post.maps_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={stop}
+                style={{
+                  color: "#6ee09a", fontSize: "10px", fontFamily: "monospace",
+                  textDecoration: "none", opacity: 0.85,
+                  display: "inline-flex", alignItems: "center", gap: "3px",
+                }}
+              >
+                📍 View on Maps
+              </a>
+            )}
           </>
         ) : (
           <>
@@ -377,8 +498,65 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
             borderTop: "1px solid #1a1a24",
           }}
         >
-          {actionBtn("📋", displayContact ? "Copy Number" : "No Number", handleCopy, { disabled: !displayContact })}
-          {actionBtn("🔗", "Open Post", handleOpen)}
+          {isNoBroker ? (
+            <a
+              href={post.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={stop}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "5px",
+                background: "rgba(230,57,70,0.12)", border: "1px solid rgba(230,57,70,0.3)",
+                borderRadius: "5px", padding: "5px 11px",
+                color: "#e63946", fontSize: "10px", fontFamily: "monospace",
+                textDecoration: "none", whiteSpace: "nowrap",
+              }}
+            >
+              🔴 View on NoBroker
+            </a>
+          ) : (
+            actionBtn("🔗", isTelegram ? "Open in Telegram" : "Open Post", handleOpen)
+          )}
+          {isNoBroker ? (
+            <a
+              href={post.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={stop}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "5px",
+                background: "rgba(255,255,255,0.04)", border: "1px solid #2a2a3a",
+                borderRadius: "5px", padding: "5px 11px",
+                color: "#555", fontSize: "10px", fontFamily: "monospace",
+                textDecoration: "none", whiteSpace: "nowrap",
+              }}
+            >
+              📞 Contact via NoBroker ↗
+            </a>
+          ) : isTelegram ? (
+            displayContact
+              ? actionBtn("📋", "Copy Number", handleCopy)
+              : actionBtn("✈️", "View in Telegram", handleOpen)
+          ) : (
+            actionBtn("📋", displayContact ? "Copy Number" : "No Number", handleCopy, { disabled: !displayContact })
+          )}
+          {isTelegram && post.maps_url && (
+            <a
+              href={post.maps_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={stop}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "5px",
+                background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)",
+                borderRadius: "5px", padding: "5px 11px",
+                color: "#4ade80", fontSize: "10px", fontFamily: "monospace",
+                textDecoration: "none", whiteSpace: "nowrap",
+              }}
+            >
+              📍 Maps
+            </a>
+          )}
           {actionBtn(isSaved ? "💾" : "💾", isSaved ? "Saved ✓" : "Save", handleSave, { active: isSaved })}
           {actionBtn("🚫", "Hide", handleHide)}
         </div>
@@ -432,13 +610,19 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
   const [hovered, setHovered] = useState(false);
   const isNewSinceVisit = post.created > lastVisit;
   const isTelegram      = post.source === "telegram";
-  const accentColor     = isTelegram ? "#229ed9" : "#ff4500";
+  const isNoBroker      = post.source === "nobroker";
+  const accentColor     = isNoBroker ? "#e63946" : isTelegram ? "#229ed9" : "#ff4500";
 
-  const bodyText = isTelegram ? (post.body || "") : (post.selftext || "");
-  const { bhk, locality, price: clientPrice, furnished, phone: clientPhone } =
+  const bodyText = (isTelegram || isNoBroker) ? (post.body || "") : (post.selftext || "");
+  const { bhk: clientBhk, locality: clientLocality, price: clientPrice, furnished: clientFurnished, phone: clientPhone } =
     extractListingInfo(post.title, bodyText);
-  const displayPrice   = isTelegram ? post.price   : (clientPrice   || post.price);
-  const displayContact = isTelegram ? post.contact  : (clientPhone   || post.contact);
+  const displayPrice = (isTelegram || isNoBroker)
+    ? formatPriceValue(post.price, post.price_formatted)
+    : (clientPrice || post.price);
+  const displayContact   = isNoBroker ? null : (isTelegram ? post.contact : (clientPhone || post.contact));
+  const displayBhk       = isNoBroker ? post.bhk       : (isTelegram ? (post.bhk       || clientBhk)       : clientBhk);
+  const displayLocality  = isNoBroker ? post.locality   : (isTelegram ? (post.locality  || clientLocality)  : clientLocality);
+  const displayFurnished = isNoBroker ? post.furnishing : (isTelegram ? (post.furnishing || clientFurnished) : clientFurnished);
 
   const stop       = (e) => { e.preventDefault(); e.stopPropagation(); };
   const handleOpen = (e) => { stop(e); window.open(post.url, "_blank", "noopener,noreferrer"); };
@@ -512,31 +696,48 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
       <div style={{
         color: "#e8e4d8", fontSize: "13px", fontFamily: "'Georgia', serif",
         lineHeight: "1.5", marginBottom: "10px", flex: 1,
-        display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden",
+        display: "-webkit-box", WebkitLineClamp: 3,
+        WebkitBoxOrient: "vertical", overflow: "hidden",
       }}>
         {post.title}
       </div>
 
-      {/* Pills — max 3, priority: BHK > price > locality > furnished */}
+      {/* Pills — priority: BHK > price > locality > furnished > badges */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "10px" }}>
-        {bhk          && <Pill icon="🏠" label={bhk}          bg="rgba(59,130,246,0.15)"  color="#7eb8f7" />}
-        {displayPrice && <Pill icon="💰" label={displayPrice} bg="rgba(34,197,94,0.15)"   color="#6ee09a" />}
-        {locality     ? <Pill icon="📍" label={locality}     bg="rgba(255,255,255,0.06)" color="#999" />
-                      : furnished && <Pill icon="🛋️" label={furnished} bg="rgba(168,85,247,0.15)" color="#c084fc" />}
+        {displayBhk && (isNoBroker && post.area_sqft)
+          ? <Pill icon="🏠" label={`${displayBhk} · ${post.area_sqft} sqft`} bg="rgba(59,130,246,0.15)" color="#7eb8f7" />
+          : displayBhk && <Pill icon="🏠" label={displayBhk} bg="rgba(59,130,246,0.15)" color="#7eb8f7" />}
+        {displayPrice && <Pill icon="💰" label={String(displayPrice)} bg="rgba(34,197,94,0.15)" color="#6ee09a" />}
+        {displayLocality
+          ? <Pill icon="📍" label={displayLocality} bg="rgba(255,255,255,0.06)" color="#999" />
+          : displayFurnished && <Pill icon="🛋️" label={displayFurnished} bg="rgba(168,85,247,0.15)" color="#c084fc" />}
+        {isTelegram && post.no_brokerage && (
+          <Pill icon="✅" label="No Brokerage" bg="rgba(34,197,94,0.12)" color="#4ade80" />
+        )}
+        {isTelegram && post.is_flatmate && (
+          <Pill icon="🤝" label="Flatmate" bg="rgba(168,85,247,0.15)" color="#c084fc" />
+        )}
       </div>
 
       {/* Footer meta */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "auto" }}>
         <span style={{
-          color: isTelegram ? "#229ed9" : "#f5a623",
+          color: accentColor,
           fontSize: "9px", fontFamily: "monospace", opacity: 0.65,
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "65%",
         }}>
-          {isTelegram ? post.group : `r/${post.subreddit}`}
+          {isNoBroker
+            ? (post.society || post.owner_name
+                ? `${post.society || ""}${post.society && post.owner_name ? " · " : ""}${post.owner_name ? "Owner: " + post.owner_name : ""}`
+                : "nobroker.in")
+            : isTelegram ? post.group : `r/${post.subreddit}`}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          {isTelegram && post.maps_url && (
+            <span style={{ fontSize: "9px", opacity: 0.6, color: "#4ade80" }} title="Has Maps link">📍</span>
+          )}
           {displayContact && <span style={{ fontSize: "9px", opacity: 0.5 }}>📞</span>}
-          {!isTelegram && (
+          {!isTelegram && !isNoBroker && (
             <span style={{ color: "#333", fontSize: "9px", fontFamily: "monospace" }}>
               ↑{post.score} 💬{post.comments}
             </span>
@@ -595,8 +796,12 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
           })()}
 
           {/* Action buttons */}
-          <button onClick={handleOpen} style={overlayBtnStyle("#f5a623")}>🔗 Open Post</button>
-          {displayContact && (
+          <button onClick={handleOpen} style={overlayBtnStyle(isNoBroker ? "#e63946" : "#f5a623")}>
+            {isNoBroker ? "🔴 View on NoBroker" : "🔗 Open Post"}
+          </button>
+          {isNoBroker ? (
+            <button onClick={handleOpen} style={overlayBtnStyle("#555")}>📞 Contact via NoBroker ↗</button>
+          ) : displayContact && (
             <button onClick={handleCopy} style={overlayBtnStyle("#f5a623")}>📋 Copy Number</button>
           )}
           <div style={{ display: "flex", gap: "8px" }}>
@@ -1025,6 +1230,12 @@ function buildScoreBreakdown(post) {
     if (bl > 200)      rows.push({ pts: +10, label: "Detailed message" });
     else if (bl > 100) rows.push({ pts: +5,  label: "Medium-length message" });
     else if (bl < 30)  rows.push({ pts: -10, label: "Very short message" });
+    if (post.no_brokerage) rows.push({ pts: +15, label: "No-brokerage confirmed" });
+  }
+
+  if (post.source === "nobroker") {
+    rows.push({ pts: +15, label: "NoBroker trust bonus (no-brokerage)" });
+    return rows;
   }
 
   const brokerHits = _BK_BROKER.filter(s => text.includes(s));
@@ -1114,7 +1325,7 @@ export default function App() {
   const [keywords,       setKeywords]       = useState("");
   const [sortBy,         setSortBy]         = useState("score");
   const [minScore,       setMinScore]       = useState(20);
-  const [sources,        setSources]        = useState({ reddit: true, telegram: true });
+  const [sources,        setSources]        = useState({ reddit: true, telegram: true, nobroker: true });
   const [posts,          setPosts]          = useState([]);
   const [loading,        setLoading]        = useState(false);
   const [error,          setError]          = useState("");
@@ -1444,20 +1655,21 @@ export default function App() {
                   <div>
                     <div style={{ color: "#e8e4d8", fontWeight: 700, marginBottom: "8px" }}>How scores are calculated</div>
                     {[
-                      ["Price found",          "+20"],
-                      ["Contact number",        "+20"],
-                      ["Recency (today)",       "+20"],
-                      ["Bangalore locality",    "+15"],
-                      ["BHK type mentioned",    "+15"],
-                      ["Recency (this week)",   "+10"],
-                      ["Detailed TG message",   "+10"],
-                      ["Reddit upvotes >10",    "+10"],
-                      ["Furnished status",      "+5"],
-                      ["Deposit info",          "+5"],
-                      ["Reddit comments >5",    "+5"],
-                      ["Broker signals (×1)",   "−10"],
-                      ["Spam signals",          "−15"],
-                      ["Broker signals (×2+)",  "−20"],
+                      ["Price found",              "+20"],
+                      ["Contact number",            "+20"],
+                      ["Recency (today)",           "+20"],
+                      ["Bangalore locality",        "+15"],
+                      ["BHK type mentioned",        "+15"],
+                      ["NoBroker trust bonus",      "+15"],
+                      ["Recency (this week)",       "+10"],
+                      ["Detailed TG message",       "+10"],
+                      ["Reddit upvotes >10",        "+10"],
+                      ["Furnished status",          "+5"],
+                      ["Deposit info",              "+5"],
+                      ["Reddit comments >5",        "+5"],
+                      ["Broker signals (×1)",       "−10"],
+                      ["Spam signals",              "−15"],
+                      ["Broker signals (×2+)",      "−20"],
                     ].map(([label, pts]) => (
                       <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: "20px", marginBottom: "2px" }}>
                         <span style={{ color: "#777" }}>{label}</span>
@@ -1647,10 +1859,11 @@ export default function App() {
 
             {posts.length > 0 ? (() => {
               const sorted   = sortedPosts(posts, sortBy).filter(p => !hiddenPosts.has(p.id));
-              const newCount = sorted.filter(p => p.created > lastVisit).length;
+              const newCount      = sorted.filter(p => p.created > lastVisit).length;
               const redditCount   = sorted.filter(p => (p.source || "reddit") === "reddit").length;
               const telegramCount = sorted.filter(p => p.source === "telegram").length;
-              const multiSource   = redditCount > 0 && telegramCount > 0;
+              const nobrokerCount = sorted.filter(p => p.source === "nobroker").length;
+              const multiSource   = (redditCount > 0 ? 1 : 0) + (telegramCount > 0 ? 1 : 0) + (nobrokerCount > 0 ? 1 : 0) > 1;
               return (
                 <>
                   {newCount > 0 && viewMode !== "map" && (
@@ -1676,9 +1889,9 @@ export default function App() {
                       {multiSource && (
                         <span style={{ color: "#555", fontSize: "10px", fontFamily: "monospace" }}>
                           —{" "}
-                          <span style={{ color: "#ff4500" }}>🟠 {redditCount} Reddit</span>
-                          {"  "}
-                          <span style={{ color: "#229ed9" }}>✈️ {telegramCount} Telegram</span>
+                          {redditCount > 0 && <span style={{ color: "#ff4500" }}>🟠 {redditCount} Reddit{"  "}</span>}
+                          {telegramCount > 0 && <span style={{ color: "#229ed9" }}>✈️ {telegramCount} Telegram{"  "}</span>}
+                          {nobrokerCount > 0 && <span style={{ color: "#e63946" }}>🔴 {nobrokerCount} NoBroker</span>}
                         </span>
                       )}
                     </div>
