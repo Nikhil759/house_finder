@@ -7,6 +7,8 @@ import sqlite3
 import json
 import os
 import asyncio
+import logging
+import random
 from dotenv import load_dotenv
 from nobroker import (
     start_background_refresh,
@@ -19,6 +21,8 @@ from nobroker import (
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
 CORS(app)
 
@@ -27,6 +31,30 @@ start_background_refresh()
 
 _UA = "python:bangalore-housing-finder:v1.0 (by /u/nikhil7599)"
 HEADERS = {"User-Agent": _UA}
+
+REDDIT_USER_AGENTS = [
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
+]
+
+
+def get_reddit_headers():
+    return {
+        "User-Agent":      random.choice(REDDIT_USER_AGENTS),
+        "Accept":          "application/json, text/javascript, */*; q=0.01",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Referer":         "https://www.reddit.com/",
+        "Origin":          "https://www.reddit.com",
+        "DNT":             "1",
+        "Connection":      "keep-alive",
+        "Sec-Fetch-Dest":  "empty",
+        "Sec-Fetch-Mode":  "cors",
+        "Sec-Fetch-Site":  "same-origin",
+    }
 
 # ─────────────────────────────────────────────
 # Bangalore subreddits — fixed
@@ -78,6 +106,72 @@ def _get_reddit_token():
     except Exception as e:
         print(f"Reddit OAuth token fetch failed: {e}")
         return None
+
+# ─────────────────────────────────────────────
+# Session-based Reddit fetching with anti-403 measures
+# ─────────────────────────────────────────────
+_reddit_cache: dict = {}
+REDDIT_CACHE_TTL = 600  # 10 minutes
+
+
+def fetch_reddit_listings(query, subreddits, limit=50):
+    """Hit the public Reddit search JSON endpoint using a browser-like session."""
+    session = http.Session()
+
+    # Warm up with a homepage hit so Reddit sets its session cookies
+    try:
+        session.get("https://www.reddit.com/", headers=get_reddit_headers(), timeout=10)
+        time.sleep(random.uniform(0.5, 1.5))
+    except Exception:
+        pass  # proceed even if warm-up fails
+
+    url = f"https://www.reddit.com/r/{'+'.join(subreddits)}/search.json"
+    params = {
+        "q":           query,
+        "sort":        "new",
+        "limit":       limit,
+        "t":           "month",
+        "restrict_sr": "on",
+    }
+
+    try:
+        resp = session.get(url, params=params, headers=get_reddit_headers(), timeout=15)
+        resp.raise_for_status()
+        return resp.json()
+    except http.exceptions.HTTPError as e:
+        if resp.status_code == 403:
+            logger.warning("Reddit 403 blocked. Returning empty.")
+            return {"data": {"children": []}}
+        raise
+
+
+def fetch_reddit_with_retry(query, subreddits, limit=50, retries=2):
+    """Retry fetch_reddit_listings with back-off when Reddit returns empty or 403."""
+    for attempt in range(retries):
+        result   = fetch_reddit_listings(query, subreddits, limit)
+        children = result.get("data", {}).get("children", [])
+        if children or attempt == retries - 1:
+            return result
+        wait = (attempt + 1) * random.uniform(2, 4)
+        logger.info(f"Reddit empty/blocked, retrying in {wait:.1f}s")
+        time.sleep(wait)
+    return {"data": {"children": []}}
+
+
+def get_reddit_cached(query, subreddits, limit=50):
+    """Return cached Reddit results (10-minute TTL) or fetch fresh ones."""
+    cache_key = f"{query}_{','.join(sorted(subreddits))}"
+    cached    = _reddit_cache.get(cache_key)
+    if cached:
+        ts, results = cached
+        if time.time() - ts < REDDIT_CACHE_TTL:
+            logger.info("Reddit: serving from cache")
+            return results
+
+    results = fetch_reddit_with_retry(query, subreddits, limit)
+    _reddit_cache[cache_key] = (time.time(), results)
+    return results
+
 
 BANGALORE_AREAS = [
     "indiranagar", "whitefield", "koramangala", "hsr layout", "hsr",
@@ -779,17 +873,28 @@ def fetch_listings(area="", bhk="any", budget="", keywords="", limit=30):
             posts = [p for p in posts if is_listing(p)]
             return posts, query, None
         except Exception as e:
-            print(f"Reddit OAuth fetch failed, trying PullPush: {e}")
+            logger.warning(f"Reddit OAuth fetch failed, trying session-based: {e}")
 
-    # ── Tier 2: PullPush.io ───────────────────────────────────────────────────
+    # ── Tier 2: Session-based public .json (UA rotation, cookies, cache) ────────
+    try:
+        data  = get_reddit_cached(query, SUBREDDITS, limit)
+        raw   = [item["data"] for item in data.get("data", {}).get("children", [])]
+        posts = [_normalise_reddit_post(p) for p in raw]
+        posts = [p for p in posts if is_listing(p)]
+        if posts:
+            return posts, query, None
+    except Exception as e:
+        logger.warning(f"Session-based Reddit fetch failed, trying PullPush: {e}")
+
+    # ── Tier 3: PullPush.io ───────────────────────────────────────────────────
     raw, err = _fetch_via_pullpush(area, bhk, keywords, limit)
     if err is None:
         posts = [_normalise_reddit_post(p) for p in raw]
         posts = [p for p in posts if is_listing(p)]
         return posts, query, None
 
-    # Both sources failed — return empty gracefully so Telegram/NoBroker still work
-    print(f"All Reddit sources failed: {err}")
+    # All sources failed — return empty gracefully so Telegram/NoBroker still work
+    logger.error(f"All Reddit sources failed: {err}")
     return [], query, None
 
 
@@ -932,15 +1037,17 @@ def search():
     sources_param = request.args.get("sources", "reddit,telegram,nobroker")
     source_list   = [s.strip() for s in sources_param.split(",") if s.strip()]
 
-    all_posts = []
-    query     = None
-    err       = None
+    all_posts      = []
+    query          = None
+    reddit_warning = False
 
     if "reddit" in source_list:
-        reddit_posts, query, err = fetch_listings(area, bhk, budget, keywords, limit)
-        if err:
-            return jsonify({"error": err}), 500
-        all_posts += reddit_posts
+        try:
+            reddit_posts, query, _ = fetch_listings(area, bhk, budget, keywords, limit)
+            all_posts += reddit_posts
+        except Exception as e:
+            logger.error(f"Reddit fetch failed: {e}")
+            reddit_warning = True
 
     if "telegram" in source_list:
         all_posts += fetch_telegram(bhk, keywords, limit)
@@ -988,10 +1095,11 @@ def search():
         all_posts.sort(key=lambda x: x["quality_score"], reverse=True)
 
     return jsonify({
-        "posts":      all_posts,
-        "total":      len(all_posts),
-        "query":      query or "",
-        "subreddits": SUBREDDITS,
+        "posts":          all_posts,
+        "total":          len(all_posts),
+        "query":          query or "",
+        "subreddits":     SUBREDDITS,
+        "reddit_warning": reddit_warning,
     })
 
 
