@@ -25,13 +25,59 @@ CORS(app)
 # Start NoBroker background cache refresh
 start_background_refresh()
 
-HEADERS = {"User-Agent": "python:bangalore-housing-finder:v1.0 (by /u/nikhil7599)"}
+_UA = "python:bangalore-housing-finder:v1.0 (by /u/nikhil7599)"
+HEADERS = {"User-Agent": _UA}
 
 # ─────────────────────────────────────────────
 # Bangalore subreddits — fixed
 # ─────────────────────────────────────────────
-SUBREDDITS = ["bangalore", "bengaluru", "indianrealestate", "bangalorerentals", "FlatandFlatmatesBLR", "FlatmatesinBangalore"]
-SEARCH_URL  = "https://www.reddit.com/r/" + "+".join(SUBREDDITS) + "/search.json"
+SUBREDDITS   = ["bangalore", "bengaluru", "indianrealestate", "bangalorerentals", "FlatandFlatmatesBLR", "FlatmatesinBangalore"]
+_SUBREDDIT_STR = "+".join(SUBREDDITS)
+# OAuth endpoint — used when credentials are present; avoids cloud-IP 403s
+SEARCH_URL_OAUTH  = f"https://oauth.reddit.com/r/{_SUBREDDIT_STR}/search"
+# Public fallback — works fine on local/residential IPs
+SEARCH_URL_PUBLIC = f"https://www.reddit.com/r/{_SUBREDDIT_STR}/search.json"
+
+# PullPush.io — Reddit mirror, no auth required, works from cloud IPs
+PULLPUSH_URL = "https://api.pullpush.io/reddit/search/submission/"
+
+# ─────────────────────────────────────────────
+# Reddit OAuth token cache
+# ─────────────────────────────────────────────
+_reddit_token: dict = {"access_token": None, "expires_at": 0}
+
+
+def _get_reddit_token():
+    """
+    Fetch (or return cached) a Reddit app-only OAuth token.
+    Requires REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET env vars.
+    Returns the token string, or None if credentials are not configured.
+    """
+    client_id     = os.getenv("REDDIT_CLIENT_ID", "")
+    client_secret = os.getenv("REDDIT_CLIENT_SECRET", "")
+    if not client_id or not client_secret:
+        return None
+
+    # Return cached token if still valid (with 60 s buffer)
+    if _reddit_token["access_token"] and time.time() < _reddit_token["expires_at"] - 60:
+        return _reddit_token["access_token"]
+
+    try:
+        resp = http.post(
+            "https://www.reddit.com/api/v1/access_token",
+            auth=(client_id, client_secret),
+            data={"grant_type": "client_credentials"},
+            headers={"User-Agent": _UA},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        _reddit_token["access_token"] = data["access_token"]
+        _reddit_token["expires_at"]   = time.time() + data.get("expires_in", 3600)
+        return _reddit_token["access_token"]
+    except Exception as e:
+        print(f"Reddit OAuth token fetch failed: {e}")
+        return None
 
 BANGALORE_AREAS = [
     "indiranagar", "whitefield", "koramangala", "hsr layout", "hsr",
@@ -645,39 +691,96 @@ def quality_score(post: dict) -> int:
     return score
 
 
+def _normalise_reddit_post(p: dict) -> dict:
+    """Normalise a raw Reddit post dict (works for both API and PullPush responses)."""
+    text = p.get("title", "") + " " + p.get("selftext", "")
+    permalink = p.get("permalink", "")
+    url = (
+        permalink if permalink.startswith("http")
+        else f"https://reddit.com{permalink}"
+    )
+    post = {
+        "id":        p.get("id"),
+        "source":    "reddit",
+        "title":     p.get("title", ""),
+        "subreddit": p.get("subreddit", ""),
+        "author":    p.get("author", "[deleted]"),
+        "url":       url,
+        "selftext":  p.get("selftext", "")[:500],
+        "score":     p.get("score", 0),
+        "comments":  p.get("num_comments", 0),
+        "created":   p.get("created_utc", 0),
+        "flair":     p.get("link_flair_text") or "",
+        "price":     extract_price(text),
+        "contact":   extract_contact(text),
+    }
+    post["quality_score"] = quality_score(post)
+    return post
+
+
+def _fetch_via_pullpush(query: str, limit: int):
+    """
+    Fetch Reddit posts via PullPush.io — no auth required, works from cloud IPs.
+    Returns (raw_posts_list, error_string_or_None).
+    """
+    params = {
+        "q":         query,
+        "subreddit": ",".join(SUBREDDITS),
+        "size":      min(limit, 100),
+        "sort":      "desc",
+        "sort_type": "created_utc",
+        "after":     int(time.time()) - 30 * 86400,  # last 30 days
+    }
+    try:
+        resp = http.get(PULLPUSH_URL, headers=HEADERS, params=params, timeout=15)
+        resp.raise_for_status()
+        return resp.json().get("data", []), None
+    except Exception as e:
+        return [], str(e)
+
+
 def fetch_listings(area="", bhk="any", budget="", keywords="", limit=30):
-    """Shared fetch logic used by /api/search and alert checker."""
-    query  = build_query(area, bhk, budget, keywords)
+    """
+    Fetch Reddit listings with a three-tier fallback:
+      1. Reddit OAuth API  — when REDDIT_CLIENT_ID / SECRET are set (most reliable)
+      2. PullPush.io       — no-auth Reddit mirror, works from cloud IPs
+      3. Reddit public API — last resort, works on local/residential IPs
+    """
+    query = build_query(area, bhk, budget, keywords)
+
+    # ── Tier 1: Reddit OAuth ──────────────────────────────────────────────────
+    token = _get_reddit_token()
+    if token:
+        params  = {"q": query, "sort": "new", "limit": limit, "t": "month", "restrict_sr": "1"}
+        headers = {**HEADERS, "Authorization": f"bearer {token}"}
+        try:
+            resp = http.get(SEARCH_URL_OAUTH, headers=headers, params=params, timeout=10)
+            resp.raise_for_status()
+            raw = [item["data"] for item in resp.json().get("data", {}).get("children", [])]
+            posts = [_normalise_reddit_post(p) for p in raw]
+            posts = [p for p in posts if is_listing(p)]
+            return posts, query, None
+        except Exception as e:
+            print(f"Reddit OAuth fetch failed, trying PullPush: {e}")
+
+    # ── Tier 2: PullPush.io ───────────────────────────────────────────────────
+    raw, err = _fetch_via_pullpush(query, limit)
+    if raw:
+        posts = [_normalise_reddit_post(p) for p in raw]
+        posts = [p for p in posts if is_listing(p)]
+        return posts, query, None
+    print(f"PullPush fetch failed ({err}), trying public Reddit API")
+
+    # ── Tier 3: Public Reddit API (local dev fallback) ────────────────────────
     params = {"q": query, "sort": "new", "limit": limit, "t": "month", "restrict_sr": "1"}
     try:
-        resp = http.get(SEARCH_URL, headers=HEADERS, params=params, timeout=10)
+        resp = http.get(SEARCH_URL_PUBLIC, headers=HEADERS, params=params, timeout=10)
         resp.raise_for_status()
-        data = resp.json()
+        raw = [item["data"] for item in resp.json().get("data", {}).get("children", [])]
     except Exception as e:
         return [], query, str(e)
 
-    posts = []
-    for item in data.get("data", {}).get("children", []):
-        p    = item.get("data", {})
-        text = p.get("title", "") + " " + p.get("selftext", "")
-        post = {
-            "id":        p.get("id"),
-            "source":    "reddit",
-            "title":     p.get("title", ""),
-            "subreddit": p.get("subreddit", ""),
-            "author":    p.get("author", "[deleted]"),
-            "url":       f"https://reddit.com{p.get('permalink', '')}",
-            "selftext":  p.get("selftext", "")[:500],
-            "score":     p.get("score", 0),
-            "comments":  p.get("num_comments", 0),
-            "created":   p.get("created_utc", 0),
-            "flair":     p.get("link_flair_text") or "",
-            "price":     extract_price(text),
-            "contact":   extract_contact(text),
-        }
-        post["quality_score"] = quality_score(post)
-        posts.append(post)
-
+    posts = [_normalise_reddit_post(p) for p in raw]
     posts = [p for p in posts if is_listing(p)]
     return posts, query, None
 
