@@ -718,13 +718,29 @@ def _normalise_reddit_post(p: dict) -> dict:
     return post
 
 
-def _fetch_via_pullpush(query: str, limit: int):
+def _build_pullpush_query(area: str, bhk: str, keywords: str) -> str:
+    """
+    PullPush rejects long boolean queries — build a short keyword string instead.
+    """
+    parts = ["bangalore", "rent"]
+    if area:
+        parts.append(area)
+    if bhk and bhk != "any":
+        # e.g. "2BHK" → "2bhk"
+        parts.append(bhk.lower().replace(" ", ""))
+    if keywords:
+        parts.extend(keywords.split()[:3])   # max 3 extra keywords
+    return " ".join(parts)
+
+
+def _fetch_via_pullpush(area: str, bhk: str, keywords: str, limit: int):
     """
     Fetch Reddit posts via PullPush.io — no auth required, works from cloud IPs.
+    Uses a simplified query (PullPush rejects long OR-chains).
     Returns (raw_posts_list, error_string_or_None).
     """
     params = {
-        "q":         query,
+        "q":         _build_pullpush_query(area, bhk, keywords),
         "subreddit": ",".join(SUBREDDITS),
         "size":      min(limit, 100),
         "sort":      "desc",
@@ -741,12 +757,14 @@ def _fetch_via_pullpush(query: str, limit: int):
 
 def fetch_listings(area="", bhk="any", budget="", keywords="", limit=30):
     """
-    Fetch Reddit listings with a three-tier fallback:
+    Fetch Reddit listings with a two-tier approach:
       1. Reddit OAuth API  — when REDDIT_CLIENT_ID / SECRET are set (most reliable)
       2. PullPush.io       — no-auth Reddit mirror, works from cloud IPs
-      3. Reddit public API — last resort, works on local/residential IPs
+         Uses a simplified keyword query (PullPush rejects long OR-chains).
+    Falls back gracefully to empty results on total failure so the rest of the
+    app (Telegram, NoBroker) keeps working.
     """
-    query = build_query(area, bhk, budget, keywords)
+    query = build_query(area, bhk, budget, keywords)  # kept for display/alerts
 
     # ── Tier 1: Reddit OAuth ──────────────────────────────────────────────────
     token = _get_reddit_token()
@@ -756,7 +774,7 @@ def fetch_listings(area="", bhk="any", budget="", keywords="", limit=30):
         try:
             resp = http.get(SEARCH_URL_OAUTH, headers=headers, params=params, timeout=10)
             resp.raise_for_status()
-            raw = [item["data"] for item in resp.json().get("data", {}).get("children", [])]
+            raw   = [item["data"] for item in resp.json().get("data", {}).get("children", [])]
             posts = [_normalise_reddit_post(p) for p in raw]
             posts = [p for p in posts if is_listing(p)]
             return posts, query, None
@@ -764,27 +782,15 @@ def fetch_listings(area="", bhk="any", budget="", keywords="", limit=30):
             print(f"Reddit OAuth fetch failed, trying PullPush: {e}")
 
     # ── Tier 2: PullPush.io ───────────────────────────────────────────────────
-    raw, err = _fetch_via_pullpush(query, limit)
+    raw, err = _fetch_via_pullpush(area, bhk, keywords, limit)
     if err is None:
-        # PullPush succeeded — return even if 0 results (avoids falling through
-        # to the public Reddit API which is blocked on cloud IPs)
         posts = [_normalise_reddit_post(p) for p in raw]
         posts = [p for p in posts if is_listing(p)]
         return posts, query, None
-    print(f"PullPush fetch failed ({err}), trying public Reddit API")
 
-    # ── Tier 3: Public Reddit API (local dev fallback only) ───────────────────
-    params = {"q": query, "sort": "new", "limit": limit, "t": "month", "restrict_sr": "1"}
-    try:
-        resp = http.get(SEARCH_URL_PUBLIC, headers=HEADERS, params=params, timeout=10)
-        resp.raise_for_status()
-        raw = [item["data"] for item in resp.json().get("data", {}).get("children", [])]
-    except Exception as e:
-        return [], query, str(e)
-
-    posts = [_normalise_reddit_post(p) for p in raw]
-    posts = [p for p in posts if is_listing(p)]
-    return posts, query, None
+    # Both sources failed — return empty gracefully so Telegram/NoBroker still work
+    print(f"All Reddit sources failed: {err}")
+    return [], query, None
 
 
 # ─────────────────────────────────────────────
