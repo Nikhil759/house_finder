@@ -1476,7 +1476,7 @@ export default function App() {
               animation: "pulse 2s infinite",
             }} />
             <span style={{ fontSize: "9px", color: "#f5a623", letterSpacing: "0.2em", opacity: 0.7 }}>
-              REDDIT HOUSING SCANNER
+              BANGALORE HOUSING SCANNER
             </span>
           </div>
           <h1 className="app-title" style={{
@@ -1486,7 +1486,7 @@ export default function App() {
             Find Your Next Place in Bangalore
           </h1>
           <p style={{ color: "#444", fontSize: "12px", margin: 0 }}>
-            Searches {SUBREDDITS.join(", ")} live. No API keys required.
+            Aggregates listings from Reddit, Telegram, and NoBroker in real time.
           </p>
         </div>
 
@@ -1848,25 +1848,6 @@ export default function App() {
         {/* Results tab */}
         {!loading && searched && activeTab === "results" && (
           <>
-            {meta && meta.query && (
-              <div style={{
-                background: "rgba(255,255,255,0.015)", border: "1px solid #1a1a24",
-                borderRadius: "4px", padding: "10px 14px", marginBottom: "16px",
-                fontSize: "10px", color: "#444",
-              }}>
-                <span style={{ color: "#555" }}>query:</span>{" "}
-                <span style={{ fontStyle: "italic", color: "#666" }}>{meta.query}</span>
-                {sources.reddit && meta.subreddits && meta.subreddits.length > 0 && (
-                  <>
-                    <br />
-                    <span style={{ color: "#555" }}>subreddits: </span>
-                    {meta.subreddits.map(s => (
-                      <span key={s} style={{ color: "#555", marginRight: "8px" }}>r/{s}</span>
-                    ))}
-                  </>
-                )}
-              </div>
-            )}
 
             {posts.length > 0 ? (() => {
               const sorted   = sortedPosts(posts, sortBy).filter(p => !hiddenPosts.has(p.id));
