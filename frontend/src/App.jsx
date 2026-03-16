@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
+import { useTheme } from "./ThemeContext";
+import { BackgroundPattern } from "./components/BackgroundPattern";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 const SUBREDDITS = ["r/bangalore", "r/bengaluru", "r/indianrealestate", "r/bangalorerentals", "r/FlatandFlatmatesBLR", "r/FlatmatesinBangalore"];
@@ -118,6 +120,8 @@ function Pill({ icon, label, bg, color, extra }) {
       display: "inline-flex", alignItems: "center", gap: "4px",
       background: bg, color, fontSize: "10px", fontFamily: "monospace",
       padding: "3px 8px", borderRadius: "20px", whiteSpace: "nowrap",
+      border: `1px solid ${color}33`,
+      backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
     }}>
       {icon} {label}{extra}
     </span>
@@ -180,11 +184,12 @@ function SourceBadge({ source }) {
   return (
     <span style={{
       display: "inline-flex", alignItems: "center", gap: "3px",
-      background: `${def.color}22`,
+      background: `${def.color}20`,
       color: def.color,
-      border: `1px solid ${def.color}44`,
+      border: `1px solid ${def.color}40`,
+      backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
       fontSize: "9px", fontFamily: "monospace",
-      padding: "2px 7px", borderRadius: "4px",
+      padding: "2px 7px", borderRadius: "5px",
       letterSpacing: "0.05em", flexShrink: 0,
     }}>
       {def.icon} {def.label.toUpperCase()}
@@ -279,25 +284,28 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
       style={{
         display: "block",
         textDecoration: "none",
-        background: isNewSinceVisit ? "rgba(74,222,128,0.03)" : "rgba(255,255,255,0.025)",
-        border: `1px solid ${isNewSinceVisit ? "rgba(74,222,128,0.15)" : "rgba(245,166,35,0.1)"}`,
-        borderLeft: `3px solid ${isNewSinceVisit ? "#4ade80" : isTop ? "#f5a623" : "#2a2a3a"}`,
-        borderRadius: "6px",
+        background: isNewSinceVisit ? "rgba(74,222,128,0.05)" : "rgba(255,255,255,0.04)",
+        backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
+        border: `1px solid ${isNewSinceVisit ? "rgba(74,222,128,0.2)" : "rgba(255,255,255,0.08)"}`,
+        borderLeft: `3px solid ${isNewSinceVisit ? "#4ade80" : isTop ? "#f5a623" : "rgba(255,255,255,0.12)"}`,
+        borderRadius: "10px",
         padding: "16px 18px",
         marginBottom: "10px",
-        transition: "all 0.18s ease",
+        transition: "all 0.2s ease",
       }}
       onMouseEnter={e => {
         setHovered(true);
-        e.currentTarget.style.background = isNewSinceVisit ? "rgba(74,222,128,0.07)" : "rgba(245,166,35,0.05)";
+        e.currentTarget.style.background = isNewSinceVisit ? "rgba(74,222,128,0.08)" : "rgba(255,255,255,0.07)";
         e.currentTarget.style.borderLeftColor = isNewSinceVisit ? "#4ade80" : "#f5a623";
         e.currentTarget.style.transform = "translateX(3px)";
+        e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.2)";
       }}
       onMouseLeave={e => {
         setHovered(false);
-        e.currentTarget.style.background = isNewSinceVisit ? "rgba(74,222,128,0.03)" : "rgba(255,255,255,0.025)";
-        e.currentTarget.style.borderLeftColor = isNewSinceVisit ? "#4ade80" : isTop ? "#f5a623" : "#2a2a3a";
+        e.currentTarget.style.background = isNewSinceVisit ? "rgba(74,222,128,0.05)" : "rgba(255,255,255,0.04)";
+        e.currentTarget.style.borderLeftColor = isNewSinceVisit ? "#4ade80" : isTop ? "#f5a623" : "rgba(255,255,255,0.12)";
         e.currentTarget.style.transform = "translateX(0)";
+        e.currentTarget.style.boxShadow = "none";
       }}
     >
       {/* NoBroker thumbnail */}
@@ -316,7 +324,7 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
 
       {/* Title row */}
       <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", marginBottom: isTelegram && post.subtitle ? "4px" : "7px" }}>
-        <div style={{ color: "#e8e4d8", fontSize: "14px", fontFamily: "'Georgia', serif", lineHeight: "1.5", flex: 1 }}>
+        <div className="post-title" style={{ color: "#e8e4d8", fontSize: "14px", fontFamily: "'Georgia', serif", lineHeight: "1.5", flex: 1 }}>
           {isNewSinceVisit && (
             <span style={{
               background: "rgba(74,222,128,0.2)", color: "#4ade80", fontSize: "8px",
@@ -337,7 +345,7 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "5px", flexShrink: 0 }}>
           <SourceBadge source={post.source || "reddit"} />
           {post.quality_score != null && <ScoreBadge score={post.quality_score} post={post} />}
-          <span style={{ color: "#3a3a4a", fontSize: "10px", fontFamily: "monospace", whiteSpace: "nowrap" }}>
+          <span className="post-time" style={{ color: "#3a3a4a", fontSize: "10px", fontFamily: "monospace", whiteSpace: "nowrap" }}>
             {isNoBroker && post.last_update_string ? post.last_update_string : timeAgo(post.created)}
           </span>
         </div>
@@ -346,7 +354,7 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
       {/* Telegram subtitle — only when it adds info beyond the title */}
       {isTelegram && post.subtitle &&
        post.subtitle.toLowerCase().trim() !== post.title.toLowerCase().trim() && (
-        <div style={{
+        <div className="post-subtitle" style={{
           color: "#666", fontSize: "11px", fontFamily: "monospace",
           lineHeight: "1.4", marginBottom: "8px", fontStyle: "italic",
         }}>
@@ -360,17 +368,17 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
           {displayBhk && (isNoBroker && post.area_sqft)
             ? <Pill icon="🏠" label={`${displayBhk} · ${post.area_sqft} sqft`} bg="rgba(59,130,246,0.15)" color="#7eb8f7" />
             : displayBhk && <Pill icon="🏠" label={displayBhk} bg="rgba(59,130,246,0.15)" color="#7eb8f7" />}
-          {displayLocality && <Pill icon="📍" label={displayLocality} bg="rgba(255,255,255,0.06)" color="#999" />}
+          {displayLocality && <Pill icon="📍" label={displayLocality} bg="rgba(120,120,140,0.12)" color="#9a9ab0" />}
           {displayPrice    && <Pill icon="💰" label={String(displayPrice)} bg="rgba(34,197,94,0.15)" color="#6ee09a" />}
           {displayFurnished && <Pill icon="🛋️" label={displayFurnished} bg="rgba(168,85,247,0.15)" color="#c084fc" />}
           {isNoBroker && post.deposit_formatted && (
-            <Pill icon="🔒" label={`Deposit: ${post.deposit_formatted}`} bg="rgba(255,255,255,0.04)" color="#777" />
+            <Pill icon="🔒" label={`Deposit: ${post.deposit_formatted}`} bg="rgba(120,120,140,0.1)" color="#8a8a9a" />
           )}
           {isNoBroker && post.lease_type && post.lease_type !== "ANYONE" && (
-            <Pill icon="👤" label={post.lease_type.charAt(0) + post.lease_type.slice(1).toLowerCase()} bg="rgba(255,255,255,0.04)" color="#666" />
+            <Pill icon="👤" label={post.lease_type.charAt(0) + post.lease_type.slice(1).toLowerCase()} bg="rgba(120,120,140,0.1)" color="#8a8a9a" />
           )}
           {isTelegram && post.deposit_text && (
-            <Pill icon="🔒" label={`Deposit: ₹${post.deposit_text}`} bg="rgba(255,255,255,0.04)" color="#777" />
+            <Pill icon="🔒" label={`Deposit: ₹${post.deposit_text}`} bg="rgba(120,120,140,0.1)" color="#8a8a9a" />
           )}
           {isTelegram && post.no_brokerage && (
             <Pill icon="✅" label="No Brokerage" bg="rgba(34,197,94,0.12)" color="#4ade80" />
@@ -386,19 +394,19 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
       {isTelegram && post.amenities && post.amenities.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "8px" }}>
           {post.amenities.slice(0, 4).map(a => (
-            <span key={a} style={{
-              background: "rgba(255,255,255,0.04)", color: "#555",
+            <span key={a} className="amenity-tag" style={{
+              background: "rgba(255,255,255,0.06)", color: "#666",
               fontSize: "9px", fontFamily: "monospace",
               padding: "2px 7px", borderRadius: "10px",
-              border: "1px solid #1e1e2e",
+              border: "1px solid rgba(255,255,255,0.1)",
             }}>{a}</span>
           ))}
           {post.amenities.length > 4 && (
-            <span style={{
-              background: "rgba(255,255,255,0.04)", color: "#444",
+            <span className="amenity-tag" style={{
+              background: "rgba(255,255,255,0.06)", color: "#666",
               fontSize: "9px", fontFamily: "monospace",
               padding: "2px 7px", borderRadius: "10px",
-              border: "1px solid #1e1e2e",
+              border: "1px solid rgba(255,255,255,0.1)",
             }}>+{post.amenities.length - 4} more</span>
           )}
         </div>
@@ -414,12 +422,12 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
               </span>
             )}
             {post.owner_name && (
-              <span style={{ color: "#555", fontSize: "10px", fontFamily: "monospace" }}>
+              <span className="post-meta-text" style={{ color: "#666", fontSize: "10px", fontFamily: "monospace" }}>
                 Owner: {post.owner_name}
               </span>
             )}
             {post.amenities && post.amenities.length > 0 && (
-              <span style={{ color: "#444", fontSize: "10px", fontFamily: "monospace" }}>
+              <span className="post-meta-text" style={{ color: "#666", fontSize: "10px", fontFamily: "monospace" }}>
                 {post.amenities.join(" · ")}
               </span>
             )}
@@ -430,19 +438,17 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
               {post.group}
             </span>
             {post.maps_url && (
-              <a
-                href={post.maps_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={stop}
+              <button
+                onClick={e => { stop(e); window.open(post.maps_url, "_blank", "noopener,noreferrer"); }}
                 style={{
                   color: "#6ee09a", fontSize: "10px", fontFamily: "monospace",
-                  textDecoration: "none", opacity: 0.85,
+                  opacity: 0.85, background: "none", border: "none",
+                  padding: 0, cursor: "pointer",
                   display: "inline-flex", alignItems: "center", gap: "3px",
                 }}
               >
                 📍 View on Maps
-              </a>
+              </button>
             )}
           </>
         ) : (
@@ -450,18 +456,19 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
             <span style={{ color: "#f5a623", fontSize: "10px", fontFamily: "monospace", opacity: 0.7 }}>
               r/{post.subreddit}
             </span>
-            <span style={{ color: "#3a3a4a", fontSize: "10px", fontFamily: "monospace" }}>
+            <span className="post-meta-text" style={{ color: "#666", fontSize: "10px", fontFamily: "monospace" }}>
               u/{post.author}
             </span>
             {post.flair && (
-              <span style={{
+              <span className="amenity-tag" style={{
                 color: "#888", fontSize: "9px", fontFamily: "monospace",
-                background: "rgba(255,255,255,0.04)", padding: "1px 6px", borderRadius: "3px",
+                background: "rgba(255,255,255,0.06)", padding: "1px 6px", borderRadius: "3px",
+                border: "1px solid rgba(255,255,255,0.1)",
               }}>
                 {post.flair}
               </span>
             )}
-            <span style={{ color: "#333", fontSize: "10px", fontFamily: "monospace", marginLeft: "auto" }}>
+            <span className="post-stats" style={{ color: "#666", fontSize: "10px", fontFamily: "monospace", marginLeft: "auto" }}>
               ↑ {post.score} · 💬 {post.comments}
             </span>
           </>
@@ -543,21 +550,18 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
             actionBtn("📋", displayContact ? "Copy Number" : "No Number", handleCopy, { disabled: !displayContact })
           )}
           {isTelegram && post.maps_url && (
-            <a
-              href={post.maps_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={stop}
+            <button
+              onClick={e => { stop(e); window.open(post.maps_url, "_blank", "noopener,noreferrer"); }}
               style={{
                 display: "inline-flex", alignItems: "center", gap: "5px",
                 background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)",
                 borderRadius: "5px", padding: "5px 11px",
                 color: "#4ade80", fontSize: "10px", fontFamily: "monospace",
-                textDecoration: "none", whiteSpace: "nowrap",
+                cursor: "pointer", whiteSpace: "nowrap",
               }}
             >
               📍 Maps
-            </a>
+            </button>
           )}
           {actionBtn(isSaved ? "💾" : "💾", isSaved ? "Saved ✓" : "Save", handleSave, { active: isSaved })}
           {actionBtn("🚫", "Hide", handleHide)}
@@ -645,23 +649,31 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
       style={{
         display: "flex", flexDirection: "column",
         textDecoration: "none", position: "relative",
-        background: "rgba(255,255,255,0.025)",
-        border: `1px solid ${isNewSinceVisit ? "rgba(74,222,128,0.18)" : "rgba(255,255,255,0.06)"}`,
-        borderTop: `3px solid ${isNewSinceVisit ? "#4ade80" : accentColor}`,
-        borderRadius: "8px", padding: "14px",
-        minHeight: "210px", transition: "transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease",
+        background: "rgba(255,255,255,0.04)",
+        backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
+        border: `1px solid ${isNewSinceVisit ? "rgba(74,222,128,0.2)" : "rgba(255,255,255,0.08)"}`,
+        borderTop: `2px solid ${isNewSinceVisit ? "#4ade80" : accentColor}`,
+        borderRadius: "16px", padding: "14px",
+        minHeight: "210px", transition: "transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease",
       }}
       onMouseEnter={e => {
         setHovered(true);
         e.currentTarget.style.transform = "translateY(-3px)";
-        e.currentTarget.style.boxShadow = "0 10px 30px rgba(0,0,0,0.45)";
-        e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+        e.currentTarget.style.boxShadow = "0 12px 40px rgba(0,0,0,0.3), 0 0 0 1px rgba(245,166,35,0.1), inset 0 1px 0 rgba(255,255,255,0.08)";
+        e.currentTarget.style.background = "rgba(255,255,255,0.07)";
+        // Only change the three non-accent sides; leave borderTop alone
+        e.currentTarget.style.borderLeftColor   = isNewSinceVisit ? "rgba(74,222,128,0.3)" : "rgba(245,166,35,0.25)";
+        e.currentTarget.style.borderRightColor  = isNewSinceVisit ? "rgba(74,222,128,0.3)" : "rgba(245,166,35,0.25)";
+        e.currentTarget.style.borderBottomColor = isNewSinceVisit ? "rgba(74,222,128,0.3)" : "rgba(245,166,35,0.25)";
       }}
       onMouseLeave={e => {
         setHovered(false);
         e.currentTarget.style.transform = "translateY(0)";
         e.currentTarget.style.boxShadow = "none";
-        e.currentTarget.style.background = "rgba(255,255,255,0.025)";
+        e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+        e.currentTarget.style.borderLeftColor   = isNewSinceVisit ? "rgba(74,222,128,0.2)" : "rgba(255,255,255,0.08)";
+        e.currentTarget.style.borderRightColor  = isNewSinceVisit ? "rgba(74,222,128,0.2)" : "rgba(255,255,255,0.08)";
+        e.currentTarget.style.borderBottomColor = isNewSinceVisit ? "rgba(74,222,128,0.2)" : "rgba(255,255,255,0.08)";
       }}
     >
       {/* Top row: source + NEW badge | score + time */}
@@ -681,22 +693,22 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
             const c = post.quality_score >= 70 ? "#4ade80" : post.quality_score >= 40 ? "#facc15" : "#6b7280";
             return (
               <span style={{
-                background: "rgba(0,0,0,0.3)", color: c, fontSize: "10px",
+                background: `${c}18`, color: c, fontSize: "10px",
                 fontFamily: "monospace", fontWeight: 700,
-                padding: "1px 5px", borderRadius: "4px",
-                border: `1px solid ${c}44`,
-                title: "Hover card to see breakdown",
+                padding: "2px 6px", borderRadius: "5px",
+                border: `1px solid ${c}33`,
+                backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
               }}>{post.quality_score}</span>
             );
           })()}
-          <span style={{ color: "#3a3a4a", fontSize: "9px", fontFamily: "monospace", whiteSpace: "nowrap" }}>
+          <span className="post-time" style={{ color: "#3a3a4a", fontSize: "9px", fontFamily: "monospace", whiteSpace: "nowrap" }}>
             {timeAgo(post.created)}
           </span>
         </div>
       </div>
 
       {/* Title — 3 lines max */}
-      <div style={{
+      <div className="post-title" style={{
         color: "#e8e4d8", fontSize: "13px", fontFamily: "'Georgia', serif",
         lineHeight: "1.5", marginBottom: "10px", flex: 1,
         display: "-webkit-box", WebkitLineClamp: 3,
@@ -712,7 +724,7 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
           : displayBhk && <Pill icon="🏠" label={displayBhk} bg="rgba(59,130,246,0.15)" color="#7eb8f7" />}
         {displayPrice && <Pill icon="💰" label={String(displayPrice)} bg="rgba(34,197,94,0.15)" color="#6ee09a" />}
         {displayLocality
-          ? <Pill icon="📍" label={displayLocality} bg="rgba(255,255,255,0.06)" color="#999" />
+          ? <Pill icon="📍" label={displayLocality} bg="rgba(120,120,140,0.12)" color="#9a9ab0" />
           : displayFurnished && <Pill icon="🛋️" label={displayFurnished} bg="rgba(168,85,247,0.15)" color="#c084fc" />}
         {isTelegram && post.no_brokerage && (
           <Pill icon="✅" label="No Brokerage" bg="rgba(34,197,94,0.12)" color="#4ade80" />
@@ -741,7 +753,7 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
           )}
           {displayContact && <span style={{ fontSize: "9px", opacity: 0.5 }}>📞</span>}
           {!isTelegram && !isNoBroker && (
-            <span style={{ color: "#333", fontSize: "9px", fontFamily: "monospace" }}>
+            <span className="post-stats" style={{ color: "#666", fontSize: "9px", fontFamily: "monospace" }}>
               ↑{post.score} 💬{post.comments}
             </span>
           )}
@@ -750,9 +762,9 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
 
       {/* Hover action overlay */}
       {hovered && (
-        <div style={{
-          position: "absolute", inset: 0, borderRadius: "7px",
-          background: "rgba(10,10,18,0.92)", backdropFilter: "blur(3px)",
+        <div className="card-hover-overlay" style={{
+          position: "absolute", inset: 0, borderRadius: "15px",
+          background: "rgba(10,10,20,0.97)",
           display: "flex", flexDirection: "column",
           alignItems: "center", justifyContent: "center", gap: "7px",
           padding: "12px", overflow: "hidden",
@@ -772,7 +784,7 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
                   <span style={{ color: scoreColor, fontSize: "22px", fontFamily: "monospace", fontWeight: 800, lineHeight: 1 }}>
                     {post.quality_score}
                   </span>
-                  <span style={{ color: "#444", fontSize: "7px", letterSpacing: "0.1em" }}>SCORE</span>
+                  <span className="overlay-score-label" style={{ color: "#444", fontSize: "7px", letterSpacing: "0.1em" }}>SCORE</span>
                 </div>
                 {/* Signal pills */}
                 <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "3px", maxWidth: "200px" }}>
@@ -793,7 +805,7 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
                     }}>{r.pts} {r.label}</span>
                   ))}
                 </div>
-                <div style={{ width: "50%", borderTop: "1px solid #222230" }} />
+                <div className="overlay-divider" style={{ width: "50%", borderTop: "1px solid #222230" }} />
               </>
             );
           })()}
@@ -941,6 +953,114 @@ function MapView({ posts }) {
       </div>
       <div ref={containerRef} className="map-container" />
     </div>
+  );
+}
+
+function ScoreInfoModal({ onClose }) {
+  const POSITIVE = [
+    ["+20", "Has a price listed"],
+    ["+20", "Has a contact number"],
+    ["+20", "Posted today"],
+    ["+15", "Bangalore locality detected"],
+    ["+15", "BHK type mentioned (1BHK, 2BHK…)"],
+    ["+15", "NoBroker trust bonus"],
+    ["+10", "Posted this week"],
+    ["+10", "Detailed Telegram message (>200 chars)"],
+    ["+10", "Reddit upvotes > 10"],
+    [" +5", "Furnished status mentioned"],
+    [" +5", "Deposit info mentioned"],
+    [" +5", "Reddit comments > 5"],
+  ];
+  const NEGATIVE = [
+    ["−10", "One broker signal detected"],
+    ["−15", "Spam signal detected"],
+    ["−20", "Two or more broker signals"],
+  ];
+
+  const row = (pts, label) => (
+    <div key={label} style={{
+      display: "flex", alignItems: "baseline", gap: "14px",
+      padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.04)",
+    }}>
+      <span style={{
+        fontFamily: "monospace", fontSize: "12px", fontWeight: 700,
+        width: "28px", textAlign: "right", flexShrink: 0,
+        color: pts.startsWith("+") ? "#4ade80" : "#f87171",
+      }}>{pts}</span>
+      <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.65)", lineHeight: 1.5 }}>{label}</span>
+    </div>
+  );
+
+  return createPortal(
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 10000,
+        background: "rgba(0,0,0,0.75)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "20px",
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: "#0d0d1e", border: "1px solid #2a2a3a",
+          borderRadius: "14px", padding: "28px 32px",
+          maxWidth: "600px", width: "100%",
+          boxShadow: "0 8px 48px rgba(0,0,0,0.8)",
+          maxHeight: "90vh", overflowY: "auto",
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px" }}>
+          <div>
+            <p style={{ color: "#f5a623", fontSize: "9px", letterSpacing: "0.2em", margin: "0 0 6px 0" }}>QUALITY SCORING</p>
+            <h2 style={{ color: "#e8e4d8", fontFamily: "'Georgia',serif", fontWeight: "normal", fontSize: "20px", margin: 0 }}>
+              How listings are scored
+            </h2>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "#444", fontSize: "18px", cursor: "pointer", padding: 0, lineHeight: 1 }}>✕</button>
+        </div>
+
+        {/* Philosophy */}
+        <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.45)", lineHeight: 1.7, marginBottom: "24px", borderBottom: "1px solid #1a1a24", paddingBottom: "20px" }}>
+          Every listing is scored 0–100 based on how useful it is to someone actively searching for a flat.
+          We reward completeness, freshness, and owner-direct signals — and penalise broker language and spam patterns.
+        </p>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1px 1fr", gap: "0 28px" }}>
+          {/* Positive */}
+          <div>
+            <div style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.18em", color: "#4ade80", marginBottom: "12px", paddingBottom: "8px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+              POSITIVE SIGNALS
+            </div>
+            {POSITIVE.map(([pts, label]) => row(pts, label))}
+          </div>
+
+          {/* Vertical divider */}
+          <div style={{ background: "rgba(255,255,255,0.07)", alignSelf: "stretch" }} />
+
+          {/* Negative + notes */}
+          <div>
+            <div style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.18em", color: "#f87171", marginBottom: "12px", paddingBottom: "8px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+              PENALTIES
+            </div>
+            {NEGATIVE.map(([pts, label]) => row(pts, label))}
+
+            <div style={{ marginTop: "20px", fontSize: "11px", color: "rgba(255,255,255,0.25)", lineHeight: 1.7 }}>
+              <p style={{ marginBottom: "8px" }}>
+                Broker signals include: "brokerage", "site visit", "schedule a visit", "multiple options available", "agent", etc.
+              </p>
+              <p style={{ marginBottom: "8px" }}>
+                Spam signals include: "forward this", "join our group", "visit our website", etc.
+              </p>
+              <p>Score is clamped between 0 and 100. Use the quality filter slider to hide posts below a threshold.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1346,8 +1466,10 @@ export default function App() {
   const [page,           setPage]           = useState(1);
   const [toast,          setToast]          = useState(null);
   const [alertModal,     setAlertModal]     = useState(null); // saved-search object | null
+  const [showScoreInfo,  setShowScoreInfo]  = useState(false);
   const toastTimer                          = useRef(null);
   const didAutoSearch                       = useRef(false);
+  const { theme, toggleTheme }              = useTheme();
 
   // Reset to page 1 whenever new search results arrive
   useEffect(() => { setPage(1); }, [posts]);
@@ -1472,58 +1594,54 @@ export default function App() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0d0d14", color: "#e8e4d8", fontFamily: "monospace" }}>
-      <div style={{
-        position: "fixed", inset: 0,
-        backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.04) 2px, rgba(0,0,0,0.04) 4px)",
-        pointerEvents: "none", zIndex: 0,
-      }} />
+    <div className="app-page">
+      <BackgroundPattern theme={theme} />
 
-      <div className="main-container" style={{ position: "relative", zIndex: 1, maxWidth: "1380px", margin: "0 auto" }}>
+      <div style={{ position: 'relative', zIndex: 1 }}>
 
-        {/* Header */}
-        <div style={{ marginBottom: "36px" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <div style={{
-                width: "7px", height: "7px", borderRadius: "50%",
-                background: "#f5a623", boxShadow: "0 0 8px #f5a623",
-                animation: "pulse 2s infinite",
-              }} />
-              <span style={{ fontSize: "9px", color: "#f5a623", letterSpacing: "0.2em", opacity: 0.7 }}>
-                BANGALORE RENTAL RADAR
-              </span>
-            </div>
-            <Link
-              to="/"
-              style={{
-                display: "inline-flex", alignItems: "center", gap: "5px",
-                color: "#444", fontSize: "11px", fontFamily: "monospace",
-                textDecoration: "none", transition: "color 0.15s",
-                letterSpacing: "0.05em",
-              }}
-              onMouseEnter={e => e.currentTarget.style.color = "#f5a623"}
-              onMouseLeave={e => e.currentTarget.style.color = "#444"}
-            >
-              ← Home
-            </Link>
-          </div>
-          <h1 className="app-title" style={{
-            fontSize: "30px", fontFamily: "'Georgia', serif",
-            fontWeight: "normal", color: "#e8e4d8", margin: "0 0 6px 0",
-          }}>
-            FlatRadar
-          </h1>
-          <p style={{ color: "#444", fontSize: "12px", margin: 0 }}>
-            Aggregates listings from Reddit, Telegram, and NoBroker in real time.
-          </p>
+      {/* ── Sticky navbar ── */}
+      <nav className="app-nav">
+        <Link to="/" className="app-nav-logo">
+          <svg width="24" height="24" viewBox="0 0 32 32">
+            <circle cx="16" cy="16" r="14" fill="none" stroke="#f5a623" strokeWidth="2"/>
+            <circle cx="16" cy="16" r="8" fill="none" stroke="#f5a623" strokeWidth="1.5" opacity="0.6"/>
+            <circle cx="16" cy="16" r="3" fill="#f5a623"/>
+            <line x1="16" y1="16" x2="28" y2="6" stroke="#f5a623" strokeWidth="1.5" opacity="0.8"/>
+          </svg>
+          <span>FlatRadar</span>
+        </Link>
+        <div className="app-nav-right">
+          <span className="app-nav-sub">Bangalore Rental Aggregator</span>
+          <button className="app-theme-btn" onClick={toggleTheme} aria-label="Toggle theme">
+            {theme === "dark" ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <circle cx="12" cy="12" r="4"/>
+                <line x1="12" y1="2"  x2="12" y2="5"/>
+                <line x1="12" y1="19" x2="12" y2="22"/>
+                <line x1="2"  y1="12" x2="5"  y2="12"/>
+                <line x1="19" y1="12" x2="22" y2="12"/>
+                <line x1="4.22"  y1="4.22"  x2="6.34"  y2="6.34"/>
+                <line x1="17.66" y1="17.66" x2="19.78" y2="19.78"/>
+                <line x1="19.78" y1="4.22"  x2="17.66" y2="6.34"/>
+                <line x1="6.34"  y1="17.66" x2="4.22"  y2="19.78"/>
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+              </svg>
+            )}
+          </button>
         </div>
+      </nav>
+
+      <div className="main-container" style={{ maxWidth: "1380px", margin: "0 auto" }}>
 
         {/* Saved Searches Panel */}
         {savedSearches.length > 0 && (
           <div style={{ marginBottom: "16px" }}>
             <button
               onClick={() => setSavedPanelOpen(o => !o)}
+              className="saved-searches-btn"
               style={{
                 background: "none", border: "1px solid #2a2a3a",
                 borderRadius: "6px", color: "#f5a623",
@@ -1604,31 +1722,23 @@ export default function App() {
         )}
 
         {/* Form */}
-        <div style={{
-          background: "rgba(255,255,255,0.02)",
-          border: "1px solid rgba(245,166,35,0.15)",
-          borderRadius: "10px", padding: "24px", marginBottom: "28px",
-        }}>
+        <div className="search-form-container">
           {/* Row 1: Area | Type | Budget | Keywords — 4 columns */}
           <div className="search-fields-grid">
             <div>
-              <label style={{ display: "block", fontSize: "9px", color: "#f5a623", letterSpacing: "0.15em", marginBottom: "7px" }}>
-                AREA <span style={{ opacity: 0.4 }}>(optional)</span>
-              </label>
+              <label className="app-field-label">Area</label>
               <input
                 value={area}
                 onChange={e => setArea(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleSearch()}
                 placeholder="Koramangala, Indiranagar, Whitefield..."
-                style={inputStyle}
-                onFocus={e => e.target.style.borderColor = "#f5a623"}
-                onBlur={e => e.target.style.borderColor = "#2a2a3a"}
+                className="app-input"
               />
             </div>
             <div>
-              <label style={{ display: "block", fontSize: "9px", color: "#f5a623", letterSpacing: "0.15em", marginBottom: "7px" }}>TYPE</label>
+              <label className="app-field-label">Type</label>
               <select value={bhk} onChange={e => setBhk(e.target.value)}
-                style={{ ...inputStyle, background: "#0d0d14", cursor: "pointer" }}>
+                className="app-input app-select">
                 <option value="any">Any</option>
                 <option value="1BHK">1 BHK</option>
                 <option value="2BHK">2 BHK</option>
@@ -1640,22 +1750,18 @@ export default function App() {
               </select>
             </div>
             <div>
-              <label style={{ display: "block", fontSize: "9px", color: "#f5a623", letterSpacing: "0.15em", marginBottom: "7px" }}>BUDGET</label>
+              <label className="app-field-label">Budget</label>
               <input value={budget} onChange={e => setBudget(e.target.value)}
                 placeholder="20000, under 30k..."
-                style={inputStyle}
-                onFocus={e => e.target.style.borderColor = "#f5a623"}
-                onBlur={e => e.target.style.borderColor = "#2a2a3a"}
+                className="app-input"
               />
             </div>
             <div>
-              <label style={{ display: "block", fontSize: "9px", color: "#f5a623", letterSpacing: "0.15em", marginBottom: "7px" }}>KEYWORDS</label>
+              <label className="app-field-label">Keywords</label>
               <input value={keywords} onChange={e => setKeywords(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleSearch()}
                 placeholder="furnished, parking..."
-                style={inputStyle}
-                onFocus={e => e.target.style.borderColor = "#f5a623"}
-                onBlur={e => e.target.style.borderColor = "#2a2a3a"}
+                className="app-input"
               />
             </div>
           </div>
@@ -1663,11 +1769,11 @@ export default function App() {
           {/* Sort + Quality filter row */}
           <div className="sort-quality-grid">
             <div>
-              <label style={{ display: "block", fontSize: "9px", color: "#f5a623", letterSpacing: "0.15em", marginBottom: "7px" }}>SORT BY</label>
+              <label className="app-field-label">Sort by</label>
               <select
                 value={sortBy}
                 onChange={e => setSortBy(e.target.value)}
-                style={{ ...inputStyle, background: "#0d0d14", cursor: "pointer" }}
+                className="app-input app-select"
               >
                 {SORT_OPTIONS.map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -1675,59 +1781,40 @@ export default function App() {
               </select>
             </div>
             <div>
-              <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "9px", color: "#f5a623", letterSpacing: "0.15em", marginBottom: "7px" }}>
-                <span>QUALITY FILTER —{" "}
-                  <span style={{ color: minScore >= 40 ? "#22c55e" : minScore >= 20 ? "#f59e0b" : "#4b5563", fontWeight: 700 }}>
-                    {minScore >= 40 ? "High" : minScore >= 20 ? "Medium" : "Low"}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <label className="app-field-label quality-filter-label" style={{ marginBottom: 0 }}>
+                  Quality filter —{" "}
+                  <span style={{ color: minScore >= 60 ? "#22c55e" : minScore >= 40 ? "#f59e0b" : minScore > 0 ? "#9ca3af" : "rgba(255,255,255,0.3)", fontWeight: 700 }}>
+                    {minScore === 0 ? "Off" : minScore >= 60 ? "High" : minScore >= 40 ? "Medium" : "Low"}
                   </span>
-                  <span style={{ color: "#3a3a4a", marginLeft: "6px" }}>({minScore}+)</span>
-                </span>
-                <Tooltip maxWidth={300} content={
-                  <div>
-                    <div style={{ color: "#e8e4d8", fontWeight: 700, marginBottom: "8px" }}>How scores are calculated</div>
-                    {[
-                      ["Price found",              "+20"],
-                      ["Contact number",            "+20"],
-                      ["Recency (today)",           "+20"],
-                      ["Bangalore locality",        "+15"],
-                      ["BHK type mentioned",        "+15"],
-                      ["NoBroker trust bonus",      "+15"],
-                      ["Recency (this week)",       "+10"],
-                      ["Detailed TG message",       "+10"],
-                      ["Reddit upvotes >10",        "+10"],
-                      ["Furnished status",          "+5"],
-                      ["Deposit info",              "+5"],
-                      ["Reddit comments >5",        "+5"],
-                      ["Broker signals (×1)",       "−10"],
-                      ["Spam signals",              "−15"],
-                      ["Broker signals (×2+)",      "−20"],
-                    ].map(([label, pts]) => (
-                      <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: "20px", marginBottom: "2px" }}>
-                        <span style={{ color: "#777" }}>{label}</span>
-                        <span style={{ fontWeight: 700, flexShrink: 0, color: pts.startsWith("+") ? "#6ee09a" : "#f87171" }}>{pts}</span>
-                      </div>
-                    ))}
-                    <div style={{ borderTop: "1px solid #2a2a3a", marginTop: "8px", paddingTop: "6px", color: "#555", lineHeight: 1.6 }}>
-                      Score clamped 0–100. Filter hides posts below the threshold.
-                    </div>
-                  </div>
-                }>
-                  <span style={{
-                    display: "inline-flex", alignItems: "center", justifyContent: "center",
-                    width: "13px", height: "13px", borderRadius: "50%",
-                    border: "1px solid #3a3a4a", color: "#555",
-                    fontSize: "8px", cursor: "help", flexShrink: 0,
-                    fontWeight: 700, letterSpacing: 0,
-                  }}>i</span>
-                </Tooltip>
-              </label>
+                  {minScore > 0 && (
+                    <span style={{ color: "rgba(255,255,255,0.3)", fontWeight: 400, marginLeft: "4px" }}>({minScore}+)</span>
+                  )}
+                </label>
+                <button
+                  onClick={() => setShowScoreInfo(true)}
+                  style={{
+                    background: "rgba(245,166,35,0.1)",
+                    border: "1px solid rgba(245,166,35,0.25)",
+                    borderRadius: "6px",
+                    color: "#f5a623", fontSize: "11px", fontFamily: "inherit",
+                    cursor: "pointer", padding: "3px 10px",
+                    letterSpacing: "0.02em", transition: "all 0.15s",
+                    whiteSpace: "nowrap",
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(245,166,35,0.2)"; e.currentTarget.style.borderColor = "rgba(245,166,35,0.5)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "rgba(245,166,35,0.1)"; e.currentTarget.style.borderColor = "rgba(245,166,35,0.25)"; }}
+                >
+                  How scoring works →
+                </button>
+              </div>
               <input
                 type="range" min={0} max={60} step={10}
                 value={minScore}
                 onChange={e => setMinScore(Number(e.target.value))}
-                style={{ width: "100%", accentColor: "#f5a623", cursor: "pointer", marginTop: "6px" }}
+                style={{ width: "100%", accentColor: "#f5a623", cursor: "pointer" }}
               />
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "8px", color: "#3a3a4a", fontFamily: "monospace", marginTop: "3px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--text-secondary)", fontFamily: "monospace", marginTop: "4px" }}>
                 <span>Off</span><span>Low</span><span>Med</span><span>High</span>
               </div>
             </div>
@@ -1735,9 +1822,7 @@ export default function App() {
 
           {/* Source toggles */}
           <div style={{ marginBottom: "14px" }}>
-            <label style={{ display: "block", fontSize: "9px", color: "#f5a623", letterSpacing: "0.15em", marginBottom: "7px" }}>
-              SOURCES
-            </label>
+            <label className="app-field-label">Sources</label>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               {SOURCE_DEFS.map(s => {
                 const active = sources[s.id];
@@ -1745,6 +1830,7 @@ export default function App() {
                   <button
                     key={s.id}
                     onClick={() => setSources(prev => ({ ...prev, [s.id]: !prev[s.id] }))}
+                    className={`source-toggle-btn${active ? " active" : ""}`}
                     style={{
                       display: "inline-flex", alignItems: "center", gap: "6px",
                       padding: "7px 14px", borderRadius: "6px",
@@ -1776,28 +1862,21 @@ export default function App() {
             <button
               onClick={handleSearch}
               disabled={loading}
-              style={{
-                flex: 1, padding: "13px",
-                background: loading ? "#1a1a24" : "#f5a623",
-                color: loading ? "#555" : "#0d0d14",
-                border: "none", borderRadius: "6px",
-                fontSize: "11px", fontFamily: "monospace",
-                fontWeight: "800", letterSpacing: "0.15em",
-                cursor: loading ? "not-allowed" : "pointer",
-                transition: "all 0.2s",
-              }}
+              className="scan-button"
+              style={loading ? { background: "var(--bg-secondary)", color: "var(--text-muted)", cursor: "not-allowed", transform: "none", boxShadow: "none" } : undefined}
             >
-              {loading ? "⟳  SEARCHING..." : "▶  SCAN FOR LISTINGS"}
+              {loading ? "⟳  Searching..." : "▶  Scan for listings"}
             </button>
             <button
               onClick={handleSave}
               disabled={loading}
               title="Save this search"
+              className="save-search-btn"
               style={{
                 padding: "13px 18px",
-                background: justSaved ? "rgba(74,222,128,0.15)" : "rgba(255,255,255,0.04)",
+                background: justSaved ? "rgba(74,222,128,0.15)" : "rgba(255,255,255,0.06)",
                 color: justSaved ? "#4ade80" : "#f5a623",
-                border: `1px solid ${justSaved ? "rgba(74,222,128,0.4)" : "rgba(245,166,35,0.3)"}`,
+                border: `1px solid ${justSaved ? "rgba(74,222,128,0.4)" : "rgba(245,166,35,0.35)"}`,
                 borderRadius: "6px",
                 fontSize: "14px", fontFamily: "monospace",
                 cursor: loading ? "not-allowed" : "pointer",
@@ -1899,7 +1978,7 @@ export default function App() {
                       <span><strong>{newCount}</strong> new listing{newCount !== 1 ? "s" : ""} since your last visit</span>
                     </div>
                   )}
-                  <div className="results-header" style={{ marginBottom: "14px", paddingBottom: "10px", borderBottom: "1px solid #1a1a24" }}>
+                  <div className="results-header" style={{ marginBottom: "14px", paddingBottom: "10px", borderBottom: "1px solid var(--border)" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
                       <span className="results-count" style={{ color: "#f5a623", fontSize: "13px" }}>
                         {sorted.length} listing{sorted.length !== 1 ? "s" : ""}
@@ -1915,29 +1994,19 @@ export default function App() {
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                       {/* List / Map toggle */}
-                      <div style={{
-                        display: "flex", background: "#111118",
-                        border: "1px solid #2a2a3a", borderRadius: "6px", padding: "2px",
-                      }}>
+                      <div className="view-toggle-group">
                         {[["list", "☰ List"], ["grid", "▦ Grid"], ["map", "🗺 Map"]].map(([id, label]) => (
                           <button
                             key={id}
                             onClick={() => setViewMode(id)}
-                            style={{
-                              background: viewMode === id ? "#2a2a3a" : "none",
-                              border: "none",
-                              color: viewMode === id ? "#f5a623" : "#555",
-                              fontSize: "10px", fontFamily: "monospace",
-                              padding: "4px 11px", borderRadius: "4px",
-                              cursor: "pointer", transition: "all 0.15s",
-                            }}
+                            className={`view-toggle-btn${viewMode === id ? " active" : ""}`}
                           >
                             {label}
                           </button>
                         ))}
                       </div>
                       {viewMode !== "map" && (
-                        <span className="best-match-label" style={{ color: "#3a3a4a", fontSize: "9px", letterSpacing: "0.1em", fontFamily: "monospace" }}>
+                        <span className="best-match-label" style={{ color: "var(--text-muted)", fontSize: "9px", letterSpacing: "0.1em", fontFamily: "monospace" }}>
                           {SORT_OPTIONS.find(o => o.value === sortBy)?.label.toUpperCase()}
                         </span>
                       )}
@@ -2047,23 +2116,221 @@ export default function App() {
         />
       )}
 
+      {showScoreInfo && (
+        <ScoreInfoModal onClose={() => setShowScoreInfo(false)} />
+      )}
+
+      </div>{/* end relative content wrapper */}
+
       <style>{`
         @keyframes spin    { to { transform: rotate(360deg); } }
         @keyframes pulse   { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         * { box-sizing: border-box; }
-        select option { background: #0d0d14; }
-        input::placeholder { color: #2a2a3a; }
 
-        /* ── Global mobile reset ─────────────────────────────────────── */
+        /* ── CSS custom properties ───────────────────────────────────── */
+        :root, [data-theme="dark"] {
+          --bg-primary:    #0d0d14;
+          --bg-secondary:  #13131f;
+          --border:        rgba(255,255,255,0.08);
+          --border-accent: rgba(245,166,35,0.2);
+          --input-bg:      rgba(255,255,255,0.05);
+          --input-border:  #2a2a3a;
+          --input-text:    #e8e4d8;
+          --text-primary:  #e8e4d8;
+          --text-secondary:#888;
+          --text-muted:    #444;
+          --bg-card:       #13131f;
+          --pill-bg:       rgba(255,255,255,0.06);
+          --select-bg:     #0d0d14;
+        }
+        [data-theme="light"] {
+          --bg-primary:    #f6f8fa;
+          --bg-secondary:  #ffffff;
+          --border:        #e5e7eb;
+          --border-accent: rgba(245,166,35,0.3);
+          --input-bg:      #ffffff;
+          --input-border:  #d1d5db;
+          --input-text:    #111827;
+          --text-primary:  #111827;
+          --text-secondary:#374151;
+          --text-muted:    #6b7280;
+          --bg-card:       #ffffff;
+          --pill-bg:       rgba(0,0,0,0.05);
+          --select-bg:     #ffffff;
+        }
+
+        /* ── Global ──────────────────────────────────────────────────── */
         html, body { overflow-x: hidden; }
+        body { transition: background 0.25s ease, color 0.25s ease; }
+
+        select option { background: var(--select-bg); color: var(--input-text); }
+
+        /* ── Page background ─────────────────────────────────────────── */
+        .app-page {
+          min-height: 100vh;
+          background-color: var(--bg-primary);
+          color: var(--text-primary);
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+          position: relative;
+        }
+
+        [data-theme="dark"] .app-page {
+          background-color: #0d0d14;
+          min-height: 100vh;
+        }
+
+        /* ── Sticky navbar ───────────────────────────────────────────── */
+        .app-nav {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 14px 32px;
+          border-bottom: 1px solid var(--border);
+          background: var(--bg-primary);
+          position: sticky;
+          top: 0;
+          z-index: 100;
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+        }
+        .app-nav-logo {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 20px;
+          font-weight: 700;
+          color: #f5a623;
+          text-decoration: none;
+          letter-spacing: 0.3px;
+        }
+        .app-nav-right {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+        }
+        .app-nav-sub {
+          font-size: 12px;
+          color: var(--text-muted);
+          letter-spacing: 0.3px;
+        }
+        .app-theme-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 34px;
+          height: 34px;
+          background: var(--bg-secondary);
+          border: 1px solid var(--border);
+          border-radius: 50%;
+          color: var(--text-muted);
+          cursor: pointer;
+          transition: border-color 0.2s, color 0.2s, background 0.2s;
+        }
+        .app-theme-btn:hover {
+          border-color: #f5a623;
+          color: #f5a623;
+        }
+        @media (max-width: 600px) {
+          .app-nav { padding: 12px 16px; }
+          .app-nav-sub { display: none; }
+        }
 
         /* ── Main content container ──────────────────────────────────── */
-        .main-container { padding: 40px 32px; }
+        .main-container { padding: 28px 32px 40px; }
         @media (max-width: 768px) { .main-container { padding: 16px; } }
 
-        /* ── App title ───────────────────────────────────────────────── */
-        @media (max-width: 768px) { .app-title { font-size: 22px !important; } }
+        /* ── Field labels ────────────────────────────────────────────── */
+        .app-field-label {
+          display: block;
+          font-size: 11px;
+          font-weight: 500;
+          letter-spacing: 0.6px;
+          text-transform: uppercase;
+          color: var(--text-muted);
+          margin-bottom: 7px;
+        }
+
+        /* ── Input / select fields ───────────────────────────────────── */
+        .app-input {
+          width: 100%;
+          padding: 12px 14px;
+          background: rgba(255,255,255,0.06);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 10px;
+          color: var(--input-text);
+          font-size: 13px;
+          font-family: inherit;
+          outline: none;
+          box-sizing: border-box;
+          transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .app-input:focus {
+          border-color: rgba(245,166,35,0.5);
+          box-shadow: 0 0 0 3px rgba(245,166,35,0.08), inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+        .app-input::placeholder { color: rgba(255,255,255,0.3); }
+        .app-select { background: rgba(20,20,30,0.8); cursor: pointer; }
+        [data-theme="light"] .app-input {
+          background: rgba(255,255,255,0.75);
+          border-color: rgba(0,0,0,0.1);
+        }
+        [data-theme="light"] .app-input:focus {
+          border-color: rgba(245,166,35,0.5);
+          box-shadow: 0 0 0 3px rgba(245,166,35,0.1);
+        }
+        [data-theme="light"] .app-input::placeholder { color: rgba(0,0,0,0.35); }
+        [data-theme="light"] .app-select { background: rgba(255,255,255,0.85); }
+
+        /* ── Search form container ───────────────────────────────────── */
+        .search-form-container {
+          background: rgba(255,255,255,0.04);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 20px;
+          box-shadow:
+            0 8px 32px rgba(0,0,0,0.3),
+            inset 0 1px 0 rgba(255,255,255,0.08);
+          padding: 24px;
+          margin-bottom: 28px;
+          position: relative;
+          overflow: hidden;
+        }
+        .search-form-container::before {
+          content: '';
+          position: absolute;
+          top: 0; left: 0; right: 0;
+          height: 1px;
+          background: linear-gradient(to right, transparent, rgba(245,166,35,0.8), transparent);
+        }
+        @media (max-width: 768px) {
+          .search-form-container { padding: 16px; border-radius: 14px; }
+        }
+
+        /* ── Scan button ─────────────────────────────────────────────── */
+        .scan-button {
+          flex: 1;
+          padding: 15px;
+          background: linear-gradient(135deg, #f5a623 0%, #e09400 100%);
+          color: #000000;
+          border: none;
+          border-radius: 12px;
+          font-size: 13px;
+          font-family: inherit;
+          font-weight: 700;
+          letter-spacing: 0.6px;
+          cursor: pointer;
+          box-shadow: 0 4px 16px rgba(245,166,35,0.3), inset 0 1px 0 rgba(255,255,255,0.2);
+          transition: box-shadow 0.2s, transform 0.1s;
+        }
+        .scan-button:hover:not(:disabled) {
+          box-shadow: 0 6px 24px rgba(245,166,35,0.45), inset 0 1px 0 rgba(255,255,255,0.2);
+          transform: translateY(-1px);
+        }
+        .scan-button:active:not(:disabled) { transform: translateY(0); }
 
         /* ── Search fields: 4-col → 2-col → 1-col ───────────────────── */
         .search-fields-grid {
@@ -2098,6 +2365,9 @@ export default function App() {
           align-items: center;
           flex-wrap: wrap;
           gap: 8px;
+          margin-bottom: 14px;
+          padding-bottom: 10px;
+          border-bottom: 1px solid var(--border);
         }
         @media (max-width: 768px) { .results-count { font-size: 11px !important; } }
 
@@ -2120,6 +2390,15 @@ export default function App() {
 
         /* ── Post tile (grid view) ────────────────────────────────────── */
         .post-tile { overflow: hidden; word-break: break-word; box-sizing: border-box; }
+        .post-tile::before {
+          content: '';
+          position: absolute;
+          top: 0; left: 0; right: 0;
+          height: 1px;
+          background: linear-gradient(to right, transparent, rgba(255,255,255,0.15), transparent);
+          z-index: 1;
+          pointer-events: none;
+        }
         @media (max-width: 768px) {
           .post-tile { padding: 12px !important; min-height: unset !important; }
           .post-tile img { max-height: 140px !important; }
@@ -2133,7 +2412,7 @@ export default function App() {
         .map-container {
           height: 520px;
           border-radius: 8px;
-          border: 1px solid #2a2a3a;
+          border: 1px solid var(--border);
           overflow: hidden;
         }
         @media (max-width: 768px) { .map-container { height: 60vh; min-height: 300px; } }
@@ -2167,6 +2446,231 @@ export default function App() {
           background: #0d0d14;
           font-family: monospace;
         }
+
+        /* ═══════════════════════════════════════════════════════════════
+           LIGHT MODE OVERRIDES
+           ═══════════════════════════════════════════════════════════════ */
+
+        [data-theme="light"] .app-page {
+          background-color: #f3f4f6;
+          min-height: 100vh;
+        }
+
+        /* Navbar */
+        [data-theme="light"] .app-nav {
+          background: rgba(255,255,255,0.92);
+          border-bottom: 1px solid #e5e7eb;
+        }
+        [data-theme="light"] .app-nav-sub {
+          color: #9ca3af;
+        }
+
+        /* Search form — light glass */
+        [data-theme="light"] .search-form-container {
+          background: rgba(255,255,255,0.7);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          border: 1px solid rgba(255,255,255,0.9);
+          box-shadow:
+            0 8px 32px rgba(0,0,0,0.08),
+            inset 0 1px 0 rgba(255,255,255,0.9);
+        }
+
+        /* Input fields — light glass */
+        [data-theme="light"] .app-input {
+          background: rgba(255,255,255,0.8) !important;
+          border: 1px solid rgba(0,0,0,0.08) !important;
+          color: #111827 !important;
+        }
+        [data-theme="light"] .app-input:focus {
+          border-color: rgba(245,166,35,0.5) !important;
+          box-shadow: 0 0 0 3px rgba(245,166,35,0.1) !important;
+        }
+        [data-theme="light"] .app-input::placeholder {
+          color: rgba(0,0,0,0.35) !important;
+        }
+
+        /* Field labels */
+        [data-theme="light"] .app-field-label {
+          color: #6b7280;
+        }
+
+        /* Listing cards — light glass */
+        [data-theme="light"] .post-tile,
+        [data-theme="light"] .post-card {
+          background: rgba(255,255,255,0.75) !important;
+          /* Use inset shadow for left/right/bottom borders so borderTop accent stays untouched */
+          box-shadow:
+            inset  1px 0 0 rgba(0,0,0,0.09),
+            inset -1px 0 0 rgba(0,0,0,0.09),
+            inset  0 -1px 0 rgba(0,0,0,0.09),
+            0 2px 8px rgba(0,0,0,0.06);
+        }
+        [data-theme="light"] .post-tile:hover,
+        [data-theme="light"] .post-card:hover {
+          background: rgba(255,255,255,0.92) !important;
+          box-shadow:
+            inset  1px 0 0 rgba(245,166,35,0.2),
+            inset -1px 0 0 rgba(245,166,35,0.2),
+            inset  0 -1px 0 rgba(245,166,35,0.2),
+            0 8px 24px rgba(0,0,0,0.1) !important;
+        }
+
+        /* Source toggle buttons — glass style in light mode */
+        [data-theme="light"] .source-toggle-btn {
+          background: rgba(255,255,255,0.7) !important;
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+        }
+        /* Inactive buttons get a neutral colour; active keeps its brand colour inline */
+        [data-theme="light"] .source-toggle-btn:not(.active) {
+          border: 1px solid rgba(0,0,0,0.08) !important;
+          color: #374151 !important;
+        }
+        [data-theme="light"] .source-toggle-btn.active {
+          background: rgba(255,255,255,0.9) !important;
+        }
+        [data-theme="light"] .source-toggle-btn:hover {
+          background: rgba(255,255,255,0.92) !important;
+        }
+
+        /* Quality filter slider */
+        input[type="range"]::-webkit-slider-runnable-track {
+          height: 4px; border-radius: 2px;
+          background: rgba(255,255,255,0.12);
+        }
+        input[type="range"]::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          width: 16px; height: 16px;
+          border-radius: 50%;
+          background: #f5a623;
+          border: 2px solid rgba(255,255,255,0.3);
+          margin-top: -6px;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+        }
+        [data-theme="light"] input[type="range"] {
+          accent-color: #f5a623;
+        }
+        [data-theme="light"] input[type="range"]::-webkit-slider-runnable-track {
+          background: #e2e8f0;
+        }
+        [data-theme="light"] input[type="range"]::-webkit-slider-thumb {
+          background: #f5a623;
+          border: 2px solid #ffffff;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+        }
+
+        /* Saved searches toggle button */
+        [data-theme="light"] .saved-searches-btn {
+          background: #ffffff !important;
+          border: 1px solid #e5e7eb !important;
+          color: #374151 !important;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        /* ★ Save-search button */
+        [data-theme="light"] .save-search-btn {
+          background: rgba(245,166,35,0.06) !important;
+          border-color: rgba(245,166,35,0.35) !important;
+        }
+
+        /* Scan button — light loading state */
+        [data-theme="light"] .scan-button:disabled {
+          background: #e5e7eb !important;
+          color: #9ca3af !important;
+          box-shadow: none !important;
+        }
+
+        /* Select option background in light mode */
+        [data-theme="light"] select option {
+          background: #ffffff;
+          color: #111827;
+        }
+
+        /* ── View toggle (List / Grid / Map) ────────────────────────── */
+        .view-toggle-group {
+          display: flex;
+          background: rgba(255,255,255,0.06);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 8px;
+          padding: 3px;
+          gap: 2px;
+        }
+        .view-toggle-btn {
+          background: none;
+          border: none;
+          color: var(--text-secondary);
+          font-size: 10px;
+          font-family: monospace;
+          padding: 4px 11px;
+          border-radius: 5px;
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+        .view-toggle-btn.active {
+          background: rgba(245,166,35,0.15);
+          color: #f5a623;
+        }
+        .view-toggle-btn:hover:not(.active) {
+          background: rgba(255,255,255,0.07);
+          color: var(--text-primary);
+        }
+        [data-theme="light"] .view-toggle-group {
+          background: rgba(0,0,0,0.04);
+          border-color: rgba(0,0,0,0.1);
+        }
+        [data-theme="light"] .view-toggle-btn { color: #374151; }
+        [data-theme="light"] .view-toggle-btn.active {
+          background: rgba(245,166,35,0.15);
+          color: #b45309;
+        }
+        [data-theme="light"] .view-toggle-btn:hover:not(.active) {
+          background: rgba(0,0,0,0.06);
+          color: #111827;
+        }
+
+        /* ── Post card/tile typography ───────────────────────────────── */
+        [data-theme="light"] .post-title     { color: #111827 !important; }
+        [data-theme="light"] .post-subtitle  { color: #6b7280 !important; }
+        [data-theme="light"] .post-time      { color: #9ca3af !important; }
+        [data-theme="light"] .post-meta-text { color: #6b7280 !important; }
+        [data-theme="light"] .post-stats     { color: #6b7280 !important; }
+
+        /* Amenity tags */
+        [data-theme="light"] .amenity-tag {
+          background: rgba(0,0,0,0.05) !important;
+          color: #6b7280 !important;
+          border-color: rgba(0,0,0,0.1) !important;
+        }
+
+        /* ── Card hover overlay ──────────────────────────────────────── */
+        [data-theme="light"] .card-hover-overlay {
+          background: rgba(248,249,252,0.97) !important;
+        }
+        [data-theme="light"] .card-hover-overlay button {
+          background: rgba(0,0,0,0.05) !important;
+          border-color: rgba(0,0,0,0.12) !important;
+          color: #374151 !important;
+        }
+        [data-theme="light"] .overlay-score-label { color: #9ca3af !important; }
+        [data-theme="light"] .overlay-divider { border-top-color: #e5e7eb !important; }
+
+        /* ── Pagination ──────────────────────────────────────────────── */
+        [data-theme="light"] .pagination-btn {
+          background: rgba(0,0,0,0.04);
+          border-color: #e5e7eb;
+          color: #374151;
+        }
+
+        /* ── Quality filter label ────────────────────────────────────── */
+        [data-theme="light"] .quality-filter-label { color: #374151 !important; }
+
+        /* ── Results header ──────────────────────────────────────────── */
+        [data-theme="light"] .results-header { border-bottom-color: #e5e7eb; }
+
+        /* ── Tab bar ─────────────────────────────────────────────────── */
+        [data-theme="light"] .tab-bar button { color: #6b7280; border-color: #e5e7eb; }
+        [data-theme="light"] .tab-bar button[style*="color: #f5a623"] { color: #d97706 !important; }
       `}</style>
     </div>
   );
