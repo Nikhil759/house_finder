@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 const SUBREDDITS = ["r/bangalore", "r/bengaluru", "r/indianrealestate", "r/bangalorerentals", "r/FlatandFlatmatesBLR", "r/FlatmatesinBangalore"];
@@ -1318,7 +1319,10 @@ function Toast({ message }) {
 }
 
 export default function App() {
-  const [area,           setArea]           = useState("");
+  const [searchParams]                      = useSearchParams();
+  const locationParam                       = searchParams.get("location");
+
+  const [area,           setArea]           = useState(locationParam || "");
   const [bhk,            setBhk]            = useState("any");
   const [budget,         setBudget]         = useState("");
   const [keywords,       setKeywords]       = useState("");
@@ -1343,9 +1347,19 @@ export default function App() {
   const [toast,          setToast]          = useState(null);
   const [alertModal,     setAlertModal]     = useState(null); // saved-search object | null
   const toastTimer                          = useRef(null);
+  const didAutoSearch                       = useRef(false);
 
   // Reset to page 1 whenever new search results arrive
   useEffect(() => { setPage(1); }, [posts]);
+
+  // Auto-trigger search when arriving from landing page with a location param
+  useEffect(() => {
+    if (locationParam && !didAutoSearch.current) {
+      didAutoSearch.current = true;
+      doSearch({ area: locationParam, bhk: "any", budget: "", keywords: "", sort: "score", minScore: 20 });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -1469,21 +1483,36 @@ export default function App() {
 
         {/* Header */}
         <div style={{ marginBottom: "36px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
-            <div style={{
-              width: "7px", height: "7px", borderRadius: "50%",
-              background: "#f5a623", boxShadow: "0 0 8px #f5a623",
-              animation: "pulse 2s infinite",
-            }} />
-            <span style={{ fontSize: "9px", color: "#f5a623", letterSpacing: "0.2em", opacity: 0.7 }}>
-              BANGALORE HOUSING SCANNER
-            </span>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={{
+                width: "7px", height: "7px", borderRadius: "50%",
+                background: "#f5a623", boxShadow: "0 0 8px #f5a623",
+                animation: "pulse 2s infinite",
+              }} />
+              <span style={{ fontSize: "9px", color: "#f5a623", letterSpacing: "0.2em", opacity: 0.7 }}>
+                BANGALORE RENTAL RADAR
+              </span>
+            </div>
+            <Link
+              to="/"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "5px",
+                color: "#444", fontSize: "11px", fontFamily: "monospace",
+                textDecoration: "none", transition: "color 0.15s",
+                letterSpacing: "0.05em",
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = "#f5a623"}
+              onMouseLeave={e => e.currentTarget.style.color = "#444"}
+            >
+              ← Home
+            </Link>
           </div>
           <h1 className="app-title" style={{
             fontSize: "30px", fontFamily: "'Georgia', serif",
             fontWeight: "normal", color: "#e8e4d8", margin: "0 0 6px 0",
           }}>
-            Find Your Next Place in Bangalore
+            FlatRadar
           </h1>
           <p style={{ color: "#444", fontSize: "12px", margin: 0 }}>
             Aggregates listings from Reddit, Telegram, and NoBroker in real time.
