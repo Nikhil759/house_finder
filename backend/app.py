@@ -1099,15 +1099,18 @@ def search():
     reddit_warning = False
     from_db        = False
 
-    # ── Try DB first ──
+    # ── Try DB first (per-source so no single source crowds out another) ──
     db_localities = target_localities if canonical_area else None
-    db_posts = query_listings(
-        localities=db_localities,
-        sources=source_list,
-        bhk=bhk,
-        budget=budget,
-        limit=limit,
-    )
+    db_posts = []
+    for src in source_list:
+        src_posts = query_listings(
+            localities=db_localities,
+            sources=[src],
+            bhk=bhk,
+            budget=budget,
+            limit=limit,
+        )
+        db_posts.extend(src_posts)
 
     if db_posts:
         all_posts = db_posts
