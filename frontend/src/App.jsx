@@ -8,9 +8,10 @@ const API_BASE = import.meta.env.VITE_API_URL || "";
 const SUBREDDITS = ["r/bangalore", "r/bengaluru", "r/indianrealestate", "r/bangalorerentals", "r/FlatandFlatmatesBLR", "r/FlatmatesinBangalore"];
 
 const SOURCE_DEFS = [
-  { id: "reddit",   label: "Reddit",   icon: "🟠", color: "#ff4500" },
-  { id: "telegram", label: "Telegram", icon: "✈️",  color: "#229ed9" },
-  { id: "nobroker", label: "NoBroker", icon: "🔴", color: "#e63946" },
+  { id: "reddit",   label: "Reddit",      icon: "🟠", color: "#ff4500" },
+  { id: "telegram", label: "Telegram",    icon: "✈️",  color: "#229ed9" },
+  { id: "nobroker", label: "NoBroker",    icon: "🔴", color: "#e63946" },
+  { id: "housing",  label: "Housing.com", icon: "🏠", color: "#7c3aed" },
 ];
 
 const BANGALORE_AREAS = [

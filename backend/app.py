@@ -19,6 +19,10 @@ from nobroker import (
     _nobroker_cache,
     _cache_lock,
 )
+from housing import (
+    start_background_refresh as start_housing_refresh,
+    warm_hash_cache,
+)
 from localities import (
     normalize_locality,
     extract_locality,
@@ -632,9 +636,9 @@ def score_post(post):
         if post.get("no_brokerage"):
             score += 15
 
-    # NoBroker listings are guaranteed no-brokerage — skip broker penalty and
-    # give a baseline trust bonus instead.
-    if post.get("source") == "nobroker":
+    # NoBroker and Housing.com listings are verified owner/direct listings —
+    # skip broker penalty and give a baseline trust bonus.
+    if post.get("source") in ("nobroker", "housing"):
         return max(0, min(100, score + 15))
 
     broker_hits = sum(1 for s in _BROKER_SIGNALS if s in text)
@@ -778,6 +782,8 @@ def init_db():
 init_db()
 init_listings_table()
 start_telegram_ingestion()  # Telegram: every 3 hours
+start_housing_refresh()     # Housing.com: every 3 hours (staggered 3 min after startup)
+warm_hash_cache()           # Pre-resolve Housing.com locality hashes in background
 
 
 # ─────────────────────────────────────────────
