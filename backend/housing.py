@@ -302,6 +302,16 @@ def normalize_housing_listing(item: dict, locality_name: str) -> dict:
     posted_str = item.get("postedDate") or item.get("addedOn") or ""
     body       = " | ".join(filter(None, [bhk_str, area_str, furnishing, address]))
 
+    # Parse ISO date string → Unix timestamp; fall back to now if absent
+    created_ts = time.time()
+    if posted_str:
+        try:
+            from datetime import datetime, timezone
+            dt = datetime.fromisoformat(posted_str.replace("Z", "+00:00"))
+            created_ts = dt.timestamp()
+        except Exception:
+            pass
+
     return {
         "id":              f"hc_{listing_id}",
         "source":          "housing",
@@ -318,9 +328,7 @@ def normalize_housing_listing(item: dict, locality_name: str) -> dict:
         "url":             detail_url,
         "thumbnail":       cover,
         "amenities":       [],
-        # Housing.com API rarely returns post dates — use ingestion time so
-        # listings appear fresh and score correctly on age bonus.
-        "created":         time.time(),
+        "created":         created_ts,
         "posted_date":     posted_str,
     }
 

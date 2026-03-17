@@ -636,9 +636,17 @@ def score_post(post):
         if post.get("no_brokerage"):
             score += 15
 
-    # NoBroker and Housing.com listings are verified owner/direct listings —
-    # skip broker penalty and give a baseline trust bonus.
-    if post.get("source") in ("nobroker", "housing"):
+    # NoBroker listings — trust bonus, skip broker penalty
+    if post.get("source") == "nobroker":
+        return max(0, min(100, score + 15))
+
+    # Housing.com — trust bonus + furnishing bonus for variation
+    if post.get("source") == "housing":
+        furnishing = (post.get("furnishing") or "").lower()
+        if "fully" in furnishing:
+            score += 5
+        elif "semi" in furnishing:
+            score += 2
         return max(0, min(100, score + 15))
 
     broker_hits = sum(1 for s in _BROKER_SIGNALS if s in text)
