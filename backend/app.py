@@ -9,6 +9,7 @@ import os
 import asyncio
 import logging
 import random
+import threading
 from dotenv import load_dotenv
 from nobroker import (
     start_background_refresh,
@@ -18,6 +19,24 @@ from nobroker import (
     _nobroker_cache,
     _cache_lock,
 )
+from localities import (
+    normalize_locality,
+    extract_locality,
+    expand_locality,
+    get_all_locality_names_lower,
+    get_locality_api_data,
+    LOCALITY_COORDS,
+    ALL_LOCALITY_NAMES,
+)
+from listing_store import (
+    init_listings_table,
+    upsert_listings_batch,
+    query_listings,
+    get_listing_counts,
+    get_locality_counts,
+    purge_old_listings,
+    total_listing_count,
+)
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
@@ -26,8 +45,8 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
-# Start NoBroker background cache refresh
-start_background_refresh()
+# Start background ingestion workers
+start_background_refresh()   # NoBroker: every 3 hours
 
 _UA = "python:bangalore-housing-finder:v1.0 (by /u/nikhil7599)"
 HEADERS = {"User-Agent": _UA}
@@ -173,16 +192,7 @@ def get_reddit_cached(query, subreddits, limit=50):
     return results
 
 
-BANGALORE_AREAS = [
-    "indiranagar", "whitefield", "koramangala", "hsr layout", "hsr",
-    "bellandur", "marathahalli", "sarjapur", "btm layout", "btm",
-    "jayanagar", "hebbal", "yelahanka", "electronic city", "bannerghatta",
-    "cunningham", "mg road", "frazer town", "banaswadi", "hoodi",
-    "kr puram", "domlur", "madiwala", "bommanahalli", "brookefield",
-    "kadubeesanahalli", "panathur", "varthur", "thubarahalli", "kadugodi",
-    "jp nagar", "banashankari", "rajajinagar", "malleshwaram", "yeshwanthpur",
-    "nagawara", "hbr layout", "cv raman nagar", "old airport road",
-]
+BANGALORE_AREAS = list(get_all_locality_names_lower())
 
 # ─────────────────────────────────────────────
 # Telegram groups
@@ -453,6 +463,11 @@ async def fetch_telegram_async(bhk, keywords, limit=25):
                         else raw_price
                     )
 
+                    tg_locality = (
+                        normalize_locality(parsed.get("location_text", ""))
+                        or extract_locality(text)
+                    )
+
                     post = {
                         "id":      str(msg.id),
                         "source":  "telegram",
@@ -472,7 +487,7 @@ async def fetch_telegram_async(bhk, keywords, limit=25):
                         # structured fields from parser
                         "bhk":          parsed.get("bhk"),
                         "furnishing":   parsed.get("furnishing"),
-                        "locality":     parsed.get("location_text"),
+                        "locality":     tg_locality,
                         "deposit_text": parsed.get("deposit_text"),
                         "maps_url":     parsed.get("maps_url"),
                         "amenities":    parsed.get("amenities", []),
@@ -510,17 +525,51 @@ def fetch_telegram(bhk, keywords, limit=25):
 
 
 # ─────────────────────────────────────────────
+# Telegram ingestion worker
+# ─────────────────────────────────────────────
+TELEGRAM_INGESTION_INTERVAL = 3 * 3600  # 3 hours
+TELEGRAM_TTL_SECONDS = 4 * 3600         # listings expire after 4 hours
+
+
+def _run_telegram_ingestion():
+    """Fetch all Telegram listings (no filters) and persist to DB."""
+    try:
+        posts = fetch_telegram(bhk="any", keywords="", limit=50)
+        if posts:
+            upsert_listings_batch(posts, ttl_seconds=TELEGRAM_TTL_SECONDS)
+            logger.info(f"Telegram ingestion: stored {len(posts)} listings")
+        else:
+            logger.info("Telegram ingestion: no posts fetched")
+        return len(posts)
+    except Exception as e:
+        logger.error(f"Telegram ingestion failed: {e}")
+        return 0
+
+
+def start_telegram_ingestion():
+    """Start a daemon thread that ingests Telegram listings every 3 hours."""
+    def worker():
+        time.sleep(60)  # wait 1 min after startup before first run
+        while True:
+            try:
+                count = _run_telegram_ingestion()
+                logger.info(
+                    f"Telegram ingestion done — {count} listings, "
+                    f"sleeping {TELEGRAM_INGESTION_INTERVAL // 3600}h"
+                )
+            except Exception as e:
+                logger.error(f"Telegram ingestion worker error: {e}")
+            time.sleep(TELEGRAM_INGESTION_INTERVAL)
+
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+    logger.info("Telegram ingestion thread started (every 3h)")
+
+
+# ─────────────────────────────────────────────
 # Quality scoring
 # ─────────────────────────────────────────────
-_SCORE_LOCALITIES = [
-    "indiranagar", "whitefield", "koramangala", "hsr", "bellandur",
-    "marathahalli", "sarjapur", "btm", "jayanagar", "hebbal",
-    "electronic city", "bannerghatta", "mg road", "frazer town",
-    "hoodi", "kr puram", "domlur", "madiwala", "yelahanka",
-    "cunningham", "banaswadi", "jp nagar", "rajajinagar", "malleswaram",
-    "yeshwanthpur", "panathur", "varthur", "brookefield", "itpl",
-    "manyata", "thanisandra", "hennur", "kalyan nagar", "rt nagar",
-]
+_SCORE_LOCALITIES = list(get_all_locality_names_lower())
 _BROKER_SIGNALS = [
     "brokerage", "broker fee", "commission", "site visit",
     "schedule a visit", "book now", "contact for details",
@@ -727,6 +776,8 @@ def init_db():
 
 
 init_db()
+init_listings_table()
+start_telegram_ingestion()  # Telegram: every 3 hours
 
 
 # ─────────────────────────────────────────────
@@ -807,6 +858,7 @@ def _normalise_reddit_post(p: dict) -> dict:
         "flair":     p.get("link_flair_text") or "",
         "price":     extract_price(text),
         "contact":   extract_contact(text),
+        "locality":  extract_locality(text),
     }
     post["quality_score"] = quality_score(post)
     return post
@@ -1037,47 +1089,95 @@ def search():
     sources_param = request.args.get("sources", "reddit,telegram,nobroker")
     source_list   = [s.strip() for s in sources_param.split(",") if s.strip()]
 
+    # Resolve locality expansion upfront
+    canonical_area = normalize_locality(area) if area else None
+    target_localities = expand_locality(area) if canonical_area else []
+    target_set = {loc.lower() for loc in target_localities}
+
     all_posts      = []
     query          = None
     reddit_warning = False
+    from_db        = False
 
-    if "reddit" in source_list:
-        try:
-            reddit_posts, query, _ = fetch_listings(area, bhk, budget, keywords, limit)
-            all_posts += reddit_posts
-        except Exception as e:
-            logger.error(f"Reddit fetch failed: {e}")
-            reddit_warning = True
+    # ── Try DB first ──
+    db_localities = target_localities if canonical_area else None
+    db_posts = query_listings(
+        localities=db_localities,
+        sources=source_list,
+        bhk=bhk,
+        budget=budget,
+        limit=limit,
+    )
 
-    if "telegram" in source_list:
-        all_posts += fetch_telegram(bhk, keywords, limit)
-
-    if "nobroker" in source_list:
-        nb_listings = get_cached_listings()
-
-        if area:
-            area_lower = area.lower()
-            nb_listings = [
-                p for p in nb_listings
-                if area_lower in p.get("locality", "").lower()
-                or area_lower in p.get("address", "").lower()
-            ]
-
-        if bhk and bhk != "any":
-            bhk_norm = bhk.lower().replace(" ", "")
-            nb_listings = [
-                p for p in nb_listings
-                if bhk_norm in p.get("bhk", "").lower().replace(" ", "")
-            ]
-
-        if budget:
+    if db_posts:
+        all_posts = db_posts
+        from_db = True
+        query = build_query(area, bhk, budget, keywords) if area else ""
+    else:
+        # ── Fallback: live fetch (DB empty or no matches) ──
+        if "reddit" in source_list:
             try:
-                budget_val = int(budget)
-                nb_listings = [p for p in nb_listings if (p.get("price") or 0) <= budget_val]
-            except ValueError:
-                pass
+                reddit_posts, query, _ = fetch_listings(area, bhk, budget, keywords, limit)
+                all_posts += reddit_posts
+            except Exception as e:
+                logger.error(f"Reddit fetch failed: {e}")
+                reddit_warning = True
 
-        all_posts += nb_listings
+        if "telegram" in source_list:
+            all_posts += fetch_telegram(bhk, keywords, limit)
+
+        if "nobroker" in source_list:
+            nb_listings = get_cached_listings()
+
+            if bhk and bhk != "any":
+                bhk_norm = bhk.lower().replace(" ", "")
+                nb_listings = [
+                    p for p in nb_listings
+                    if bhk_norm in p.get("bhk", "").lower().replace(" ", "")
+                ]
+
+            if budget:
+                try:
+                    budget_val = int(budget)
+                    nb_listings = [p for p in nb_listings if (p.get("price") or 0) <= budget_val]
+                except ValueError:
+                    pass
+
+            all_posts += nb_listings
+
+        # ── Strict locality filter (applied across ALL sources for live fetch) ──
+        if canonical_area and target_set:
+            all_posts = [
+                p for p in all_posts
+                if (p.get("locality") or "").lower() in target_set
+            ]
+        elif area:
+            area_lower = area.lower()
+            all_posts = [
+                p for p in all_posts
+                if area_lower in (
+                    p.get("title", "") + " " +
+                    p.get("selftext", "") + " " +
+                    p.get("body", "") + " " +
+                    p.get("locality", "") + " " +
+                    p.get("address", "")
+                ).lower()
+            ]
+
+    # ── Keyword filter (applied regardless of DB or live) ──
+    if keywords and all_posts:
+        kw_lower = keywords.lower().split()
+        all_posts = [
+            p for p in all_posts
+            if all(
+                kw in (
+                    p.get("title", "") + " " +
+                    p.get("selftext", "") + " " +
+                    p.get("body", "")
+                ).lower()
+                for kw in kw_lower
+            )
+        ]
 
     # Score every post
     for post in all_posts:
@@ -1088,18 +1188,20 @@ def search():
 
     # Sort
     if sort == "newest":
-        all_posts.sort(key=lambda x: x["created"], reverse=True)
+        all_posts.sort(key=lambda x: x.get("created", x.get("created_utc", 0)), reverse=True)
     elif sort == "upvotes":
         all_posts.sort(key=lambda x: x.get("score", 0), reverse=True)
     else:
         all_posts.sort(key=lambda x: x["quality_score"], reverse=True)
 
     return jsonify({
-        "posts":          all_posts,
-        "total":          len(all_posts),
-        "query":          query or "",
-        "subreddits":     SUBREDDITS,
-        "reddit_warning": reddit_warning,
+        "posts":              all_posts,
+        "total":              len(all_posts),
+        "query":              query or "",
+        "subreddits":         SUBREDDITS,
+        "reddit_warning":     reddit_warning,
+        "locality_expanded":  target_localities if canonical_area else [],
+        "from_db":            from_db,
     })
 
 
@@ -1186,6 +1288,33 @@ def nobroker_status():
             for locality in NOBROKER_LOCALITIES
         }
     return jsonify(status)
+
+
+@app.route("/api/ingestion/status")
+def ingestion_status():
+    """Show DB listing counts by source, locality breakdown, and total."""
+    source_counts = get_listing_counts()
+    locality_breakdown = get_locality_counts()
+    total = total_listing_count()
+    return jsonify({
+        "total_listings": total,
+        "by_source": source_counts,
+        "by_locality": locality_breakdown,
+    })
+
+
+@app.route("/api/localities")
+def localities_endpoint():
+    """Return all locality data for the frontend (coords, radius, aliases)."""
+    area = request.args.get("area", "").strip()
+    data = get_locality_api_data()
+    response = {"localities": data, "names": ALL_LOCALITY_NAMES}
+    if area:
+        expanded = expand_locality(area)
+        response["expanded"] = expanded
+        canonical = normalize_locality(area)
+        response["canonical"] = canonical
+    return jsonify(response)
 
 
 if __name__ == "__main__":

@@ -1,27 +1,15 @@
 import base64
 import json
 import logging
+import random
 import threading
 import time
 
 import requests
 
-logger = logging.getLogger(__name__)
+from localities import get_nobroker_localities, extract_locality
 
-NOBROKER_LOCALITIES = [
-    {"name": "Whitefield",     "lat": 12.9698,  "lon": 77.7499,  "placeId": "ChIJg_wNXfMRrjsR-RUB2BKlzzA"},
-    {"name": "HSR Layout",     "lat": 12.9116,  "lon": 77.6389,  "placeId": "ChIJFdMEbNQUrjsRKxbFsNELMFU"},
-    {"name": "Koramangala",    "lat": 12.9279,  "lon": 77.6271,  "placeId": "ChIJlx7OQXoWrjsRfDZTyYYJFGI"},
-    {"name": "Indiranagar",    "lat": 12.9784,  "lon": 77.6408,  "placeId": "ChIJJzaa72YWrjsRxj7HHaTiAnI"},
-    {"name": "Marathahalli",   "lat": 12.9591,  "lon": 77.7010,  "placeId": "ChIJFQHYCugTrjsRkpFeMJnhioQ"},
-    {"name": "Bellandur",      "lat": 12.9237,  "lon": 77.6766,  "placeId": "ChIJy3gRZdIUrjsRhxk_jAL0Zq8"},
-    {"name": "BTM Layout",     "lat": 12.9166,  "lon": 77.6101,  "placeId": "ChIJZ5LnVXIWrjsRxk17ItDfT04"},
-    {"name": "Hebbal",         "lat": 13.0354,  "lon": 77.5970,  "placeId": "ChIJE47r0bMTrjsRqFrJhQvvz3A"},
-    {"name": "Electronic City","lat": 12.8399,  "lon": 77.6770,  "placeId": "ChIJCxUQnPkUrjsRXSVTBFHbSPE"},
-    {"name": "Sarjapur Road",  "lat": 12.9087,  "lon": 77.6950,  "placeId": "ChIJt7R_qS8UrjsRF4ULF9l7VaQ"},
-    {"name": "Hoodi",          "lat": 12.9888,  "lon": 77.7113,  "placeId": "ChIJCyddpJARrjsRKnXrc3LZVNk"},
-    {"name": "Yelahanka",      "lat": 13.1005,  "lon": 77.5963,  "placeId": "ChIJzWmM2nQTrjsR0vYmrPCQMwA"},
-]
+logger = logging.getLogger(__name__)
 
 HEADERS = {
     "User-Agent": (
@@ -35,9 +23,12 @@ HEADERS = {
 
 BASE_URL = "https://www.nobroker.in/api/v3/multi/property/RENT/filter"
 
-CACHE_TTL_SECONDS = 1800  # 30 minutes
+NOBROKER_LOCALITIES = get_nobroker_localities()
 
-_nobroker_cache: dict = {}     # {locality_name: [listings]}
+INGESTION_INTERVAL_SECONDS = 3 * 3600  # 3 hours
+NOBROKER_TTL_SECONDS = 4 * 3600        # listings expire after 4 hours
+
+_nobroker_cache: dict = {}     # {locality_name: [listings]}  — kept for live fallback
 _cache_updated_at: dict = {}   # {locality_name: timestamp}
 _cache_lock = threading.Lock()
 
@@ -46,15 +37,15 @@ _cache_lock = threading.Lock()
 # Fetch
 # ─────────────────────────────────────────────
 
-def build_search_param(lat, lon, place_id, place_name):
-    payload = [{"lat": lat, "lon": lon, "placeId": place_id, "placeName": place_name}]
+def build_search_param(lat, lon, place_name):
+    payload = [{"lat": lat, "lon": lon, "placeName": place_name}]
     return base64.b64encode(json.dumps(payload).encode()).decode()
 
 
 def fetch_nobroker_locality(locality, page=1, limit=30):
     """Fetch listings for one locality from the NoBroker API."""
     search_param = build_search_param(
-        locality["lat"], locality["lon"], locality["placeId"], locality["name"]
+        locality["lat"], locality["lon"], locality["name"]
     )
     params = {
         "city": "bangalore",
@@ -113,6 +104,9 @@ def normalize_nobroker_listing(item, locality_name):
     if amenities_map.get("LIFT"):     amenity_labels.append("Lift")
     if amenities_map.get("PARK"):     amenity_labels.append("Parking")
 
+    raw_locality = (item.get("locality") or locality_name).strip()
+    canonical_locality = extract_locality(raw_locality) or raw_locality
+
     return {
         "id":               f"nb_{item.get('id', '')}",
         "source":           "nobroker",
@@ -130,12 +124,12 @@ def normalize_nobroker_listing(item, locality_name):
         "deposit_formatted": item.get("formattedDeposit", ""),
         "bhk":              item.get("typeDesc", ""),
         "area_sqft":        item.get("propertySize"),
-        "locality":         item.get("locality", locality_name).strip(),
+        "locality":         canonical_locality,
         "address":          item.get("address", ""),
         "society":          item.get("society", ""),
         "furnishing":       furnishing,
         "owner_name":       item.get("ownerName", ""),
-        "contact":          None,  # hidden behind NoBroker paywall
+        "contact":          None,
         "url":              detail_url,
         "thumbnail":        item.get("thumbnailImage", ""),
         "amenities":        amenity_labels,
@@ -151,41 +145,66 @@ def normalize_nobroker_listing(item, locality_name):
 
 
 # ─────────────────────────────────────────────
-# Cache + background refresh
+# In-memory cache (kept for live-fetch fallback)
 # ─────────────────────────────────────────────
 
 def refresh_locality_cache(locality):
-    """Fetch and cache listings for one locality."""
+    """Fetch, normalize, cache in-memory, and persist to DB."""
     name = locality["name"]
-    logger.info(f"NoBroker: refreshing cache for {name}")
+    logger.info(f"NoBroker: refreshing {name}")
     raw = fetch_nobroker_locality(locality)
     normalized = [normalize_nobroker_listing(item, name) for item in raw]
+
     with _cache_lock:
         _nobroker_cache[name] = normalized
         _cache_updated_at[name] = time.time()
-    logger.info(f"NoBroker: cached {len(normalized)} listings for {name}")
+
+    # Persist to DB
+    try:
+        from listing_store import upsert_listings_batch
+        upsert_listings_batch(normalized, ttl_seconds=NOBROKER_TTL_SECONDS)
+    except Exception as e:
+        logger.error(f"NoBroker: DB upsert failed for {name}: {e}")
+
+    logger.info(f"NoBroker: {len(normalized)} listings for {name}")
+    return len(normalized)
 
 
 def start_background_refresh():
-    """Start a daemon thread that refreshes all localities every 30 minutes."""
+    """Start a daemon thread that refreshes all NoBroker localities every 3 hours."""
     def worker():
         while True:
-            for locality in NOBROKER_LOCALITIES:
+            total = 0
+            localities = NOBROKER_LOCALITIES
+            for locality in localities:
                 try:
-                    refresh_locality_cache(locality)
-                    time.sleep(2)  # small delay between localities
+                    count = refresh_locality_cache(locality)
+                    total += count
+                    delay = random.uniform(2, 5)
+                    time.sleep(delay)
                 except Exception as e:
-                    logger.error(f"NoBroker background refresh error: {e}")
-            logger.info("NoBroker: full refresh complete, sleeping 30 min")
-            time.sleep(CACHE_TTL_SECONDS)
+                    logger.error(f"NoBroker refresh error for {locality['name']}: {e}")
+
+            # Purge old listings once per cycle
+            try:
+                from listing_store import purge_old_listings
+                purge_old_listings(max_age_hours=72)
+            except Exception as e:
+                logger.error(f"NoBroker: purge failed: {e}")
+
+            logger.info(
+                f"NoBroker: full refresh done — {total} listings "
+                f"from {len(localities)} localities, sleeping {INGESTION_INTERVAL_SECONDS // 3600}h"
+            )
+            time.sleep(INGESTION_INTERVAL_SECONDS)
 
     t = threading.Thread(target=worker, daemon=True)
     t.start()
-    logger.info("NoBroker background refresh thread started")
+    logger.info(f"NoBroker ingestion thread started ({len(NOBROKER_LOCALITIES)} localities, every {INGESTION_INTERVAL_SECONDS // 3600}h)")
 
 
 def get_cached_listings(localities=None):
-    """Return cached listings, optionally filtered by locality list."""
+    """Return in-memory cached listings, optionally filtered by locality list."""
     with _cache_lock:
         all_listings = []
         for name, listings in _nobroker_cache.items():

@@ -15,13 +15,15 @@ const SOURCE_DEFS = [
 
 const BANGALORE_AREAS = [
   "Indiranagar", "Whitefield", "Koramangala", "HSR Layout", "HSR",
-  "Bellandur", "Marathahalli", "Sarjapur", "BTM Layout", "BTM",
+  "Bellandur", "Marathahalli", "Sarjapur Road", "Sarjapur", "BTM Layout", "BTM",
   "Jayanagar", "Hebbal", "Yelahanka", "Electronic City", "Bannerghatta",
-  "Cunningham", "MG Road", "Frazer Town", "Banaswadi", "Hoodi",
+  "Cunningham Road", "MG Road", "Frazer Town", "Banaswadi", "Hoodi",
   "KR Puram", "Domlur", "Madiwala", "Bommanahalli", "Brookefield",
   "Kadubeesanahalli", "Panathur", "Varthur", "Thubarahalli", "Kadugodi",
   "JP Nagar", "Banashankari", "Rajajinagar", "Malleshwaram", "Yeshwanthpur",
   "Nagawara", "HBR Layout", "CV Raman Nagar", "Old Airport Road",
+  "ITPL", "Manyata", "Thanisandra", "Hennur", "Kalyan Nagar", "RT Nagar",
+  "Ejipura", "Ulsoor", "Basavanagudi", "Sadashivanagar", "Vijayanagar", "Kengeri",
 ];
 
 const LOCALITY_COORDS = {
@@ -32,7 +34,8 @@ const LOCALITY_COORDS = {
   "HSR":              [12.9116, 77.6389],
   "Bellandur":        [12.9257, 77.6761],
   "Marathahalli":     [12.9591, 77.6974],
-  "Sarjapur":         [12.8604, 77.7090],
+  "Sarjapur Road":    [12.9087, 77.6950],
+  "Sarjapur":         [12.9087, 77.6950],
   "BTM Layout":       [12.9165, 77.6101],
   "BTM":              [12.9165, 77.6101],
   "Jayanagar":        [12.9299, 77.5820],
@@ -40,7 +43,7 @@ const LOCALITY_COORDS = {
   "Yelahanka":        [13.1007, 77.5963],
   "Electronic City":  [12.8399, 77.6770],
   "Bannerghatta":     [12.8634, 77.5855],
-  "Cunningham":       [12.9812, 77.5958],
+  "Cunningham Road":  [12.9812, 77.5958],
   "MG Road":          [12.9756, 77.6099],
   "Frazer Town":      [12.9854, 77.6146],
   "Banaswadi":        [13.0109, 77.6553],
@@ -64,6 +67,18 @@ const LOCALITY_COORDS = {
   "HBR Layout":       [13.0277, 77.6384],
   "CV Raman Nagar":   [12.9848, 77.6618],
   "Old Airport Road": [12.9592, 77.6484],
+  "ITPL":             [12.9854, 77.7308],
+  "Manyata":          [13.0467, 77.6210],
+  "Thanisandra":      [13.0590, 77.6350],
+  "Hennur":           [13.0440, 77.6480],
+  "Kalyan Nagar":     [13.0254, 77.6400],
+  "RT Nagar":         [13.0210, 77.5970],
+  "Ejipura":          [12.9420, 77.6220],
+  "Ulsoor":           [12.9810, 77.6200],
+  "Basavanagudi":     [12.9420, 77.5730],
+  "Sadashivanagar":   [13.0060, 77.5810],
+  "Vijayanagar":      [12.9710, 77.5330],
+  "Kengeri":          [12.9070, 77.4850],
 };
 
 function extractListingInfo(title, body) {
@@ -873,7 +888,10 @@ function MapView({ posts }) {
     const coordCount = {};
 
     posts.forEach(post => {
-      const { locality, price, bhk } = extractListingInfo(post.title, post.selftext);
+      const extracted = extractListingInfo(post.title, post.selftext || post.body || "");
+      const locality = post.locality || extracted.locality;
+      const price = extracted.price;
+      const bhk = extracted.bhk;
       if (!locality) return;
       const base = LOCALITY_COORDS[locality];
       if (!base) return;
@@ -929,8 +947,8 @@ function MapView({ posts }) {
   }, [posts]);
 
   const mappableCount = posts.filter(p => {
-    const { locality } = extractListingInfo(p.title, p.selftext);
-    return locality && LOCALITY_COORDS[locality];
+    const loc = p.locality || extractListingInfo(p.title, p.selftext || p.body || "").locality;
+    return loc && LOCALITY_COORDS[loc];
   }).length;
 
   return (
@@ -1308,7 +1326,9 @@ const _BK_LOCALITIES = [
   "mg road","frazer town","hoodi","kr puram","domlur","madiwala","yelahanka",
   "cunningham","banaswadi","jp nagar","rajajinagar","malleswaram","yeshwanthpur",
   "panathur","varthur","brookefield","itpl","manyata","thanisandra","hennur",
-  "kalyan nagar","rt nagar",
+  "kalyan nagar","rt nagar","kadubeesanahalli","thubarahalli","kadugodi",
+  "bommanahalli","nagawara","hbr layout","cv raman nagar","old airport road",
+  "ejipura","ulsoor","basavanagudi","sadashivanagar","vijayanagar","kengeri",
 ];
 const _BK_BROKER = [
   "brokerage","broker fee","commission","site visit","schedule a visit",
@@ -1544,7 +1564,10 @@ export default function App() {
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
 
       setPosts(data.posts);
-      setMeta({ query: data.query, subreddits: data.subreddits, total: data.total });
+      setMeta({
+        query: data.query, subreddits: data.subreddits, total: data.total,
+        localityExpanded: data.locality_expanded || [],
+      });
       setRedditWarning(!!data.reddit_warning);
       localStorage.setItem(LAST_VISIT_KEY, Math.floor(Date.now() / 1000));
     } catch (err) {
@@ -1976,6 +1999,24 @@ export default function App() {
                     }}>
                       <span>✨</span>
                       <span><strong>{newCount}</strong> new listing{newCount !== 1 ? "s" : ""} since your last visit</span>
+                    </div>
+                  )}
+                  {meta?.localityExpanded?.length > 1 && (
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap",
+                      background: "rgba(59,130,246,0.06)",
+                      border: "1px solid rgba(59,130,246,0.15)",
+                      borderRadius: "6px", padding: "8px 14px", marginBottom: "14px",
+                      color: "#7eb8f7", fontSize: "10px", fontFamily: "monospace",
+                    }}>
+                      <span>📍</span>
+                      <span>Searching {meta.localityExpanded.length} areas:</span>
+                      {meta.localityExpanded.map(loc => (
+                        <span key={loc} style={{
+                          background: "rgba(59,130,246,0.12)", padding: "2px 8px",
+                          borderRadius: "12px", fontSize: "9px",
+                        }}>{loc}</span>
+                      ))}
                     </div>
                   )}
                   <div className="results-header" style={{ marginBottom: "14px", paddingBottom: "10px", borderBottom: "1px solid var(--border)" }}>
