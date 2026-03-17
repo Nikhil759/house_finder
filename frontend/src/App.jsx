@@ -782,13 +782,16 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
 
       {/* Pills — priority: BHK > price > locality > furnished > badges */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "10px" }}>
-        {displayBhk && (isNoBroker && post.area_sqft)
+        {displayBhk && ((isNoBroker || isHousing) && post.area_sqft)
           ? <Pill icon="🏠" label={`${displayBhk} · ${post.area_sqft} sqft`} bg="rgba(59,130,246,0.15)" color="#7eb8f7" />
           : displayBhk && <Pill icon="🏠" label={displayBhk} bg="rgba(59,130,246,0.15)" color="#7eb8f7" />}
         {displayPrice && <Pill icon="💰" label={String(displayPrice)} bg="rgba(34,197,94,0.15)" color="#6ee09a" />}
         {displayLocality
           ? <Pill icon="📍" label={displayLocality} bg="rgba(120,120,140,0.12)" color="#9a9ab0" />
           : displayFurnished && <Pill icon="🛋️" label={displayFurnished} bg="rgba(168,85,247,0.15)" color="#c084fc" />}
+        {isHousing && displayFurnished && (
+          <Pill icon="🛋️" label={displayFurnished} bg="rgba(168,85,247,0.15)" color="#c084fc" />
+        )}
         {isTelegram && post.no_brokerage && (
           <Pill icon="✅" label="No Brokerage" bg="rgba(34,197,94,0.12)" color="#4ade80" />
         )}
@@ -805,7 +808,7 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "65%",
         }}>
           {isHousing
-            ? (post.owner_name ? `Owner: ${post.owner_name}` : "housing.com")
+            ? (post.address ? post.address.split(",").slice(0, 2).join(",") : "housing.com")
             : isNoBroker
             ? (post.society || post.owner_name
                 ? `${post.society || ""}${post.society && post.owner_name ? " · " : ""}${post.owner_name ? "Owner: " + post.owner_name : ""}`

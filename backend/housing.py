@@ -318,7 +318,9 @@ def normalize_housing_listing(item: dict, locality_name: str) -> dict:
         "url":             detail_url,
         "thumbnail":       cover,
         "amenities":       [],
-        "created":         0,
+        # Housing.com API rarely returns post dates — use ingestion time so
+        # listings appear fresh and score correctly on age bonus.
+        "created":         time.time(),
         "posted_date":     posted_str,
     }
 
