@@ -220,19 +220,20 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
   const isNewSinceVisit = post.created > lastVisit;
   const isTelegram      = post.source === "telegram";
   const isNoBroker      = post.source === "nobroker";
+  const isHousing       = post.source === "housing";
 
-  // For Reddit: extract from text. For Telegram/NoBroker: prefer server-provided fields.
-  const bodyText = (isTelegram || isNoBroker) ? (post.body || "") : (post.selftext || "");
+  // For Reddit: extract from text. For Telegram/NoBroker/Housing: prefer server-provided fields.
+  const bodyText = (isTelegram || isNoBroker || isHousing) ? (post.body || "") : (post.selftext || "");
   const { bhk: clientBhk, locality: clientLocality, price: clientPrice, furnished: clientFurnished, phone: clientPhone } =
     extractListingInfo(post.title, bodyText);
 
-  const displayPrice = (isTelegram || isNoBroker)
+  const displayPrice = (isTelegram || isNoBroker || isHousing)
     ? formatPriceValue(post.price, post.price_formatted)
     : (clientPrice || post.price);
-  const displayContact  = isNoBroker ? null : (isTelegram ? post.contact : (clientPhone || post.contact));
-  const displayBhk      = isNoBroker ? post.bhk      : (isTelegram ? (post.bhk      || clientBhk)      : clientBhk);
-  const displayLocality = isNoBroker ? post.locality  : (isTelegram ? (post.locality || clientLocality) : clientLocality);
-  const displayFurnished = isNoBroker ? post.furnishing : (isTelegram ? (post.furnishing || clientFurnished) : clientFurnished);
+  const displayContact  = (isNoBroker || isHousing) ? null : (isTelegram ? post.contact : (clientPhone || post.contact));
+  const displayBhk      = (isNoBroker || isHousing) ? post.bhk      : (isTelegram ? (post.bhk      || clientBhk)      : clientBhk);
+  const displayLocality = (isNoBroker || isHousing) ? post.locality  : (isTelegram ? (post.locality || clientLocality) : clientLocality);
+  const displayFurnished = (isNoBroker || isHousing) ? post.furnishing : (isTelegram ? (post.furnishing || clientFurnished) : clientFurnished);
 
   const hasPills = displayBhk || displayLocality || displayPrice || displayFurnished || displayContact
     || (isNoBroker && (post.area_sqft || post.deposit_formatted))
@@ -430,7 +431,20 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
 
       {/* Meta — differs by source */}
       <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "8px", flexWrap: "wrap" }}>
-        {isNoBroker ? (
+        {isHousing ? (
+          <>
+            {post.owner_name && (
+              <span style={{ color: "#7c3aed", fontSize: "10px", fontFamily: "monospace", opacity: 0.8 }}>
+                Owner: {post.owner_name}
+              </span>
+            )}
+            {post.available_from && (
+              <span className="post-meta-text" style={{ color: "#666", fontSize: "10px", fontFamily: "monospace" }}>
+                Available: {post.available_from}
+              </span>
+            )}
+          </>
+        ) : isNoBroker ? (
           <>
             {post.society && (
               <span style={{ color: "#e63946", fontSize: "10px", fontFamily: "monospace", opacity: 0.8 }}>
@@ -523,7 +537,23 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
             borderTop: "1px solid #1a1a24",
           }}
         >
-          {isNoBroker ? (
+          {isHousing ? (
+            <a
+              href={post.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={stop}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "5px",
+                background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.3)",
+                borderRadius: "5px", padding: "5px 11px",
+                color: "#7c3aed", fontSize: "10px", fontFamily: "monospace",
+                textDecoration: "none", whiteSpace: "nowrap",
+              }}
+            >
+              🏠 View on Housing.com
+            </a>
+          ) : isNoBroker ? (
             <a
               href={post.url}
               target="_blank"
@@ -542,7 +572,23 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
           ) : (
             actionBtn("🔗", isTelegram ? "Open in Telegram" : "Open Post", handleOpen)
           )}
-          {isNoBroker ? (
+          {isHousing ? (
+            <a
+              href={post.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={stop}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "5px",
+                background: "rgba(255,255,255,0.04)", border: "1px solid #2a2a3a",
+                borderRadius: "5px", padding: "5px 11px",
+                color: "#555", fontSize: "10px", fontFamily: "monospace",
+                textDecoration: "none", whiteSpace: "nowrap",
+              }}
+            >
+              📞 Contact via Housing.com ↗
+            </a>
+          ) : isNoBroker ? (
             <a
               href={post.url}
               target="_blank"
@@ -633,18 +679,19 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
   const isNewSinceVisit = post.created > lastVisit;
   const isTelegram      = post.source === "telegram";
   const isNoBroker      = post.source === "nobroker";
-  const accentColor     = isNoBroker ? "#e63946" : isTelegram ? "#229ed9" : "#ff4500";
+  const isHousing       = post.source === "housing";
+  const accentColor     = isHousing ? "#7c3aed" : isNoBroker ? "#e63946" : isTelegram ? "#229ed9" : "#ff4500";
 
-  const bodyText = (isTelegram || isNoBroker) ? (post.body || "") : (post.selftext || "");
+  const bodyText = (isTelegram || isNoBroker || isHousing) ? (post.body || "") : (post.selftext || "");
   const { bhk: clientBhk, locality: clientLocality, price: clientPrice, furnished: clientFurnished, phone: clientPhone } =
     extractListingInfo(post.title, bodyText);
-  const displayPrice = (isTelegram || isNoBroker)
+  const displayPrice = (isTelegram || isNoBroker || isHousing)
     ? formatPriceValue(post.price, post.price_formatted)
     : (clientPrice || post.price);
-  const displayContact   = isNoBroker ? null : (isTelegram ? post.contact : (clientPhone || post.contact));
-  const displayBhk       = isNoBroker ? post.bhk       : (isTelegram ? (post.bhk       || clientBhk)       : clientBhk);
-  const displayLocality  = isNoBroker ? post.locality   : (isTelegram ? (post.locality  || clientLocality)  : clientLocality);
-  const displayFurnished = isNoBroker ? post.furnishing : (isTelegram ? (post.furnishing || clientFurnished) : clientFurnished);
+  const displayContact   = (isNoBroker || isHousing) ? null : (isTelegram ? post.contact : (clientPhone || post.contact));
+  const displayBhk       = (isNoBroker || isHousing) ? post.bhk       : (isTelegram ? (post.bhk       || clientBhk)       : clientBhk);
+  const displayLocality  = (isNoBroker || isHousing) ? post.locality   : (isTelegram ? (post.locality  || clientLocality)  : clientLocality);
+  const displayFurnished = (isNoBroker || isHousing) ? post.furnishing : (isTelegram ? (post.furnishing || clientFurnished) : clientFurnished);
 
   const stop       = (e) => { e.preventDefault(); e.stopPropagation(); };
   const handleOpen = (e) => { stop(e); window.open(post.url, "_blank", "noopener,noreferrer"); };
@@ -757,7 +804,9 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
           fontSize: "9px", fontFamily: "monospace", opacity: 0.65,
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "65%",
         }}>
-          {isNoBroker
+          {isHousing
+            ? (post.owner_name ? `Owner: ${post.owner_name}` : "housing.com")
+            : isNoBroker
             ? (post.society || post.owner_name
                 ? `${post.society || ""}${post.society && post.owner_name ? " · " : ""}${post.owner_name ? "Owner: " + post.owner_name : ""}`
                 : "nobroker.in")
@@ -1379,6 +1428,11 @@ function buildScoreBreakdown(post) {
     return rows;
   }
 
+  if (post.source === "housing") {
+    rows.push({ pts: +15, label: "Housing.com trust bonus (verified listing)" });
+    return rows;
+  }
+
   const brokerHits = _BK_BROKER.filter(s => text.includes(s));
   if (brokerHits.length >= 2)      rows.push({ pts: -20, label: `Broker signals (${brokerHits.slice(0,2).join(", ")})` });
   else if (brokerHits.length === 1) rows.push({ pts: -10, label: `Broker signal ("${brokerHits[0]}")` });
@@ -1469,7 +1523,7 @@ export default function App() {
   const [keywords,       setKeywords]       = useState("");
   const [sortBy,         setSortBy]         = useState("score");
   const [minScore,       setMinScore]       = useState(20);
-  const [sources,        setSources]        = useState({ reddit: true, telegram: true, nobroker: true });
+  const [sources,        setSources]        = useState({ reddit: true, telegram: true, nobroker: true, housing: true });
   const [posts,          setPosts]          = useState([]);
   const [loading,        setLoading]        = useState(false);
   const [error,          setError]          = useState("");
@@ -1987,7 +2041,8 @@ export default function App() {
               const redditCount   = sorted.filter(p => (p.source || "reddit") === "reddit").length;
               const telegramCount = sorted.filter(p => p.source === "telegram").length;
               const nobrokerCount = sorted.filter(p => p.source === "nobroker").length;
-              const multiSource   = (redditCount > 0 ? 1 : 0) + (telegramCount > 0 ? 1 : 0) + (nobrokerCount > 0 ? 1 : 0) > 1;
+              const housingCount  = sorted.filter(p => p.source === "housing").length;
+              const multiSource   = (redditCount > 0 ? 1 : 0) + (telegramCount > 0 ? 1 : 0) + (nobrokerCount > 0 ? 1 : 0) + (housingCount > 0 ? 1 : 0) > 1;
               return (
                 <>
                   {newCount > 0 && viewMode !== "map" && (
@@ -2030,7 +2085,8 @@ export default function App() {
                           —{" "}
                           {redditCount > 0 && <span style={{ color: "#ff4500" }}>🟠 {redditCount} Reddit{"  "}</span>}
                           {telegramCount > 0 && <span style={{ color: "#229ed9" }}>✈️ {telegramCount} Telegram{"  "}</span>}
-                          {nobrokerCount > 0 && <span style={{ color: "#e63946" }}>🔴 {nobrokerCount} NoBroker</span>}
+                          {nobrokerCount > 0 && <span style={{ color: "#e63946" }}>🔴 {nobrokerCount} NoBroker{"  "}</span>}
+                          {housingCount > 0 && <span style={{ color: "#7c3aed" }}>🏠 {housingCount} Housing.com</span>}
                         </span>
                       )}
                     </div>

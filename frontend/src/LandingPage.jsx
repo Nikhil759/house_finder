@@ -123,6 +123,11 @@ export default function LandingPage() {
           <div className="lp-source-item lp-housing-source">
             <span className="lp-source-dot"/>
             Housing.com
+          </div>
+          <div className="lp-source-divider"/>
+          <div className="lp-source-item lp-99acres-source">
+            <span className="lp-source-dot"/>
+            99acres
             <span className="lp-coming-soon">soon</span>
           </div>
         </div>
@@ -491,6 +496,7 @@ export default function LandingPage() {
         .lp-telegram-source { color: #229ed9; }
         .lp-nobroker-source { color: #e63946; }
         .lp-housing-source  { color: #7c3aed; }
+        .lp-99acres-source  { color: #f59e0b; }
 
         .lp-source-dot {
           width: 8px;
