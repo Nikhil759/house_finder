@@ -121,7 +121,8 @@ function LocalityTable({ byLocality, isDark }) {
 }
 
 export default function HealthPage() {
-  const { isDark } = useTheme();
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
