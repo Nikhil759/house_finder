@@ -1114,8 +1114,6 @@ def search():
     from_db        = False
 
     db_localities = target_localities if canonical_area else None
-    # How old Reddit DB data can be before we fall back to live fetch (8 hours)
-    REDDIT_STALENESS_THRESHOLD = 8 * 3600
 
     # ── Each source is fetched independently and merged ──
     # DB-backed sources first; fall back to live fetch if DB is empty for that source.
@@ -1127,15 +1125,6 @@ def search():
             budget=budget,
             limit=limit,
         )
-
-        if src_db_posts:
-            # For Reddit, check freshness — if all results are stale, do a live fetch instead
-            if src == "reddit":
-                newest_ts = max((p.get("created") or p.get("created_utc") or 0) for p in src_db_posts)
-                age = time.time() - newest_ts if newest_ts else float("inf")
-                if age > REDDIT_STALENESS_THRESHOLD:
-                    logger.info(f"Reddit DB data is {age/3600:.1f}h old — falling back to live fetch")
-                    src_db_posts = []
 
         if src_db_posts:
             all_posts += src_db_posts
