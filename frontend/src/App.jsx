@@ -2122,7 +2122,8 @@ export default function App() {
                       >
                         {meta.localitySuggestion}
                       </button>
-                      ?
+                      ?{" "}
+                      <span style={{ color: "rgba(245,166,35,0.6)", fontStyle: "italic" }}>Click to search.</span>
                     </>
                   ) : (
                     <>
@@ -2259,8 +2260,35 @@ export default function App() {
                 </>
               );
             })() : (
-              <div style={{ textAlign: "center", padding: "50px 0", color: "#333", fontSize: "13px" }}>
-                No listings found. Try a different area or remove some filters.
+              <div style={{ textAlign: "center", padding: "50px 0", fontSize: "13px" }}>
+                {meta?.localityWarning && meta?.localitySuggestion ? (
+                  <>
+                    <div style={{ color: "var(--text-secondary)", marginBottom: 12 }}>
+                      No results for <strong>&ldquo;{meta.searchedArea}&rdquo;</strong>.
+                    </div>
+                    <button
+                      onClick={() => {
+                        setArea(meta.localitySuggestion);
+                        setAreaSuggestions([]);
+                        setShowSuggestions(false);
+                        doSearch({ area: meta.localitySuggestion, bhk, budget, keywords, sort: sortBy, minScore });
+                      }}
+                      style={{
+                        background: "rgba(245,166,35,0.15)",
+                        border: "1px solid rgba(245,166,35,0.4)",
+                        borderRadius: 8, padding: "8px 18px",
+                        color: "#f5a623", fontWeight: 700, cursor: "pointer",
+                        fontSize: 13, fontFamily: "inherit",
+                      }}
+                    >
+                      Search &ldquo;{meta.localitySuggestion}&rdquo; instead →
+                    </button>
+                  </>
+                ) : (
+                  <span style={{ color: "var(--text-secondary)" }}>
+                    No listings found. Try a different area or remove some filters.
+                  </span>
+                )}
               </div>
             )}
           </>
