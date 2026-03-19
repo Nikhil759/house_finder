@@ -1546,6 +1546,10 @@ export default function App() {
   const [toast,          setToast]          = useState(null);
   const [alertModal,     setAlertModal]     = useState(null); // saved-search object | null
   const [showScoreInfo,  setShowScoreInfo]  = useState(false);
+  const [areaSuggestions, setAreaSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeSuggestion, setActiveSuggestion] = useState(-1);
+  const areaInputRef = useRef(null);
   const toastTimer                          = useRef(null);
   const didAutoSearch                       = useRef(false);
   const { theme, toggleTheme }              = useTheme();
@@ -1626,6 +1630,9 @@ export default function App() {
       setMeta({
         query: data.query, subreddits: data.subreddits, total: data.total,
         localityExpanded: data.locality_expanded || [],
+        localityWarning: !!data.locality_warning,
+        localitySuggestion: data.locality_suggestion || null,
+        searchedArea: area,
       });
       setRedditWarning(!!data.reddit_warning);
       localStorage.setItem(LAST_VISIT_KEY, Math.floor(Date.now() / 1000));
@@ -1775,15 +1782,88 @@ export default function App() {
         <div className="search-form-container">
           {/* Row 1: Area | Type | Budget | Keywords — 4 columns */}
           <div className="search-fields-grid">
-            <div>
+            <div style={{ position: "relative" }}>
               <label className="app-field-label">Area</label>
               <input
+                ref={areaInputRef}
                 value={area}
-                onChange={e => setArea(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleSearch()}
+                onChange={e => {
+                  const val = e.target.value;
+                  setArea(val);
+                  setActiveSuggestion(-1);
+                  if (val.trim().length >= 2) {
+                    const lower = val.toLowerCase();
+                    const matches = BANGALORE_AREAS.filter(a =>
+                      a.toLowerCase().includes(lower)
+                    ).slice(0, 8);
+                    setAreaSuggestions(matches);
+                    setShowSuggestions(matches.length > 0);
+                  } else {
+                    setAreaSuggestions([]);
+                    setShowSuggestions(false);
+                  }
+                }}
+                onKeyDown={e => {
+                  if (showSuggestions) {
+                    if (e.key === "ArrowDown") {
+                      e.preventDefault();
+                      setActiveSuggestion(i => Math.min(i + 1, areaSuggestions.length - 1));
+                    } else if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      setActiveSuggestion(i => Math.max(i - 1, -1));
+                    } else if (e.key === "Enter" && activeSuggestion >= 0) {
+                      e.preventDefault();
+                      setArea(areaSuggestions[activeSuggestion]);
+                      setShowSuggestions(false);
+                      setActiveSuggestion(-1);
+                    } else if (e.key === "Escape") {
+                      setShowSuggestions(false);
+                    } else if (e.key === "Enter") {
+                      setShowSuggestions(false);
+                      handleSearch();
+                    }
+                  } else if (e.key === "Enter") {
+                    handleSearch();
+                  }
+                }}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                onFocus={() => {
+                  if (areaSuggestions.length > 0) setShowSuggestions(true);
+                }}
                 placeholder="Koramangala, Indiranagar, Whitefield..."
                 className="app-input"
+                autoComplete="off"
               />
+              {showSuggestions && (
+                <ul style={{
+                  position: "absolute", top: "100%", left: 0, right: 0, zIndex: 200,
+                  margin: "4px 0 0", padding: 0, listStyle: "none",
+                  background: "var(--bg-primary)",
+                  border: "1px solid rgba(245,166,35,0.3)",
+                  borderRadius: 10, overflow: "hidden",
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.3)",
+                }}>
+                  {areaSuggestions.map((s, i) => (
+                    <li
+                      key={s}
+                      onMouseDown={() => {
+                        setArea(s);
+                        setShowSuggestions(false);
+                        setActiveSuggestion(-1);
+                      }}
+                      style={{
+                        padding: "10px 14px", fontSize: 13, cursor: "pointer",
+                        background: i === activeSuggestion ? "rgba(245,166,35,0.12)" : "transparent",
+                        color: i === activeSuggestion ? "#f5a623" : "var(--text-primary)",
+                        borderBottom: i < areaSuggestions.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
+                      }}
+                      onMouseEnter={() => setActiveSuggestion(i)}
+                    >
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
             <div>
               <label className="app-field-label">Type</label>
@@ -2006,6 +2086,65 @@ export default function App() {
         {/* Results tab */}
         {!loading && searched && activeTab === "results" && (
           <>
+
+            {/* Locality warning — shown even when 0 results so user sees the suggestion */}
+            {meta?.localityWarning && meta?.searchedArea && (
+              <div style={{
+                display: "flex", alignItems: "flex-start", gap: "8px",
+                background: "rgba(245,166,35,0.08)",
+                border: "1px solid rgba(245,166,35,0.3)",
+                borderRadius: 8, padding: "10px 12px", marginBottom: 12,
+                fontSize: 12, color: "#f5a623",
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, marginTop: 1 }}>
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <span>
+                  {meta.localitySuggestion ? (
+                    <>
+                      <strong>&ldquo;{meta.searchedArea}&rdquo;</strong> wasn&apos;t recognised.{" "}
+                      Did you mean{" "}
+                      <button
+                        onClick={() => {
+                          setArea(meta.localitySuggestion);
+                          setAreaSuggestions([]);
+                          setShowSuggestions(false);
+                          doSearch({ area: meta.localitySuggestion, bhk, budget, keywords, sort: sortBy, minScore });
+                        }}
+                        style={{
+                          background: "rgba(245,166,35,0.15)",
+                          border: "1px solid rgba(245,166,35,0.4)",
+                          borderRadius: 4, padding: "1px 7px",
+                          color: "#f5a623", fontWeight: 700, cursor: "pointer",
+                          fontSize: "inherit", fontFamily: "inherit",
+                        }}
+                      >
+                        {meta.localitySuggestion}
+                      </button>
+                      ?
+                    </>
+                  ) : (
+                    <>
+                      <strong>&ldquo;{meta.searchedArea}&rdquo;</strong> is not a recognised Bangalore locality — showing all results.{" "}
+                      <button
+                        onClick={() => {
+                          setArea("");
+                          setAreaSuggestions([]);
+                          setShowSuggestions(false);
+                          areaInputRef.current?.focus();
+                        }}
+                        style={{
+                          background: "none", border: "none", padding: 0,
+                          color: "#f5a623", fontWeight: 700, cursor: "pointer",
+                          textDecoration: "underline", fontSize: "inherit",
+                        }}
+                      >Clear and pick from dropdown</button>.
+                    </>
+                  )}
+                </span>
+              </div>
+            )}
 
             {posts.length > 0 ? (() => {
               const sorted   = sortedPosts(posts, sortBy).filter(p => !hiddenPosts.has(p.id));

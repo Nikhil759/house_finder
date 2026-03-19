@@ -25,6 +25,7 @@ from housing import (
 )
 from localities import (
     normalize_locality,
+    suggest_locality,
     extract_locality,
     expand_locality,
     get_all_locality_names_lower,
@@ -1174,11 +1175,11 @@ def search():
         all_posts = [
             p for p in all_posts
             if area_lower in (
-                p.get("title", "") + " " +
-                p.get("selftext", "") + " " +
-                p.get("body", "") + " " +
-                p.get("locality", "") + " " +
-                p.get("address", "")
+                (p.get("title") or "") + " " +
+                (p.get("selftext") or "") + " " +
+                (p.get("body") or "") + " " +
+                (p.get("locality") or "") + " " +
+                (p.get("address") or "")
             ).lower()
         ]
 
@@ -1189,9 +1190,9 @@ def search():
             p for p in all_posts
             if all(
                 kw in (
-                    p.get("title", "") + " " +
-                    p.get("selftext", "") + " " +
-                    p.get("body", "")
+                    (p.get("title") or "") + " " +
+                    (p.get("selftext") or "") + " " +
+                    (p.get("body") or "")
                 ).lower()
                 for kw in kw_lower
             )
@@ -1212,14 +1213,19 @@ def search():
     else:
         all_posts.sort(key=lambda x: x["quality_score"], reverse=True)
 
+    locality_warning    = bool(area and not canonical_area)
+    locality_suggestion = suggest_locality(area) if locality_warning else None
+
     return jsonify({
-        "posts":              all_posts,
-        "total":              len(all_posts),
-        "query":              query or "",
-        "subreddits":         SUBREDDITS,
-        "reddit_warning":     reddit_warning,
-        "locality_expanded":  target_localities if canonical_area else [],
-        "from_db":            from_db,
+        "posts":               all_posts,
+        "total":               len(all_posts),
+        "query":               query or "",
+        "subreddits":          SUBREDDITS,
+        "reddit_warning":      reddit_warning,
+        "locality_expanded":   target_localities if canonical_area else [],
+        "locality_warning":    locality_warning,
+        "locality_suggestion": locality_suggestion,
+        "from_db":             from_db,
     })
 
 

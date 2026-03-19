@@ -381,6 +381,58 @@ def normalize_locality(raw: str):
     return LOCALITY_ALIASES.get(raw.strip().lower())
 
 
+def _edit_distance(a: str, b: str) -> int:
+    """Standard Levenshtein edit distance between two strings."""
+    m, n = len(a), len(b)
+    dp = list(range(n + 1))
+    for i in range(1, m + 1):
+        prev = dp[:]
+        dp[0] = i
+        for j in range(1, n + 1):
+            dp[j] = prev[j - 1] if a[i - 1] == b[j - 1] else 1 + min(prev[j], dp[j - 1], prev[j - 1])
+    return dp[n]
+
+
+def suggest_locality(raw: str):
+    """
+    When normalize_locality() returns None, try to find the closest known locality.
+    Strategy:
+      1. Prefix match (user typed a prefix of a known alias, min 3 chars)
+      2. Substring match (alias contains the raw input, min 4 chars)
+      3. Edit-distance match (closest alias within distance 3)
+    Returns a canonical name string or None.
+    """
+    if not raw:
+        return None
+    lower = raw.strip().lower()
+    if len(lower) < 2:
+        return None
+
+    # 1. Prefix: "indi" → "Indiranagar"
+    if len(lower) >= 3:
+        for alias, canonical in LOCALITY_ALIASES.items():
+            if alias.startswith(lower):
+                return canonical
+
+    # 2. Substring: "nagar" contained in "koramangala" — skip (too broad);
+    #    only apply when raw is >= 4 chars and alias starts with raw or raw starts with alias root
+    if len(lower) >= 4:
+        for alias, canonical in LOCALITY_ALIASES.items():
+            if lower in alias:
+                return canonical
+
+    # 3. Edit distance: "koramanagla" → "Koramangala" (distance 2)
+    best_canonical, best_dist = None, 4  # threshold: max distance of 3
+    for alias, canonical in LOCALITY_ALIASES.items():
+        # Only compare against aliases of similar length (avoid e.g. "btm" vs "whitefield")
+        if abs(len(alias) - len(lower)) > 4:
+            continue
+        d = _edit_distance(lower, alias)
+        if d < best_dist:
+            best_canonical, best_dist = canonical, d
+    return best_canonical
+
+
 def extract_locality(text: str):
     """
     Scan text (title + body) and return the first matching canonical locality.
