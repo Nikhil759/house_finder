@@ -1534,7 +1534,6 @@ export default function App() {
   const [redditWarning,  setRedditWarning]  = useState(false);
   const [meta,           setMeta]           = useState(null);
   const [searched,       setSearched]       = useState(false);
-  const [sourceStatus,   setSourceStatus]   = useState(null);
   const [savedSearches,  setSavedSearches]  = useState(loadSaved);
   const [savedPanelOpen, setSavedPanelOpen] = useState(false);
   const [justSaved,      setJustSaved]      = useState(false);
@@ -1631,11 +1630,6 @@ export default function App() {
       setRedditWarning(!!data.reddit_warning);
       localStorage.setItem(LAST_VISIT_KEY, Math.floor(Date.now() / 1000));
 
-      // Fetch source health status in the background (non-blocking)
-      fetch(`${API_BASE}/api/ingestion/status`)
-        .then(r => r.ok ? r.json() : null)
-        .then(s => { if (s) setSourceStatus(s); })
-        .catch(() => {});
     } catch (err) {
       setError(err.message);
     }
@@ -2068,50 +2062,6 @@ export default function App() {
                         </span>
                       )}
                     </div>
-                    {/* Source health status — shown only when status data is available */}
-                    {sourceStatus && (() => {
-                      const enabledSources = Object.entries(sources).filter(([, on]) => on).map(([id]) => id);
-                      const sourceDefs = [
-                        { id: "reddit",   label: "Reddit",      icon: "🟠", color: "#ff4500", ttlHours: 7 },
-                        { id: "telegram", label: "Telegram",    icon: "✈️",  color: "#229ed9", ttlHours: 4 },
-                        { id: "nobroker", label: "NoBroker",    icon: "🔴", color: "#e63946", ttlHours: 4 },
-                        { id: "housing",  label: "Housing.com", icon: "🏠", color: "#7c3aed", ttlHours: 4 },
-                      ].filter(s => enabledSources.includes(s.id));
-                      const anyDown = sourceDefs.some(s => {
-                        const info = sourceStatus.by_source?.[s.id];
-                        if (!info || info.count === 0) return true;
-                        return (info.newest_age_minutes ?? 0) > s.ttlHours * 60 * 0.75;
-                      });
-                      if (!anyDown) return null;
-                      return (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 6, fontSize: 10, fontFamily: "monospace" }}>
-                          <span style={{ color: "var(--text-muted)", marginRight: 2 }}>Sources:</span>
-                          {sourceDefs.map(s => {
-                            const info = sourceStatus.by_source?.[s.id];
-                            const count = info?.count ?? 0;
-                            const age = info?.newest_age_minutes;
-                            const isStale = age != null && age > s.ttlHours * 60 * 0.75;
-                            const isDead = count === 0;
-                            const dotColor = isDead ? "#ef4444" : isStale ? "#f59e0b" : "#22c55e";
-                            const tip = isDead
-                              ? `${s.label} has no data — source may be down`
-                              : isStale
-                              ? `${s.label} data is ${Math.round((age ?? 0) / 60)}h old`
-                              : null;
-                            return (
-                              <span
-                                key={s.id}
-                                title={tip || ""}
-                                style={{ display: "inline-flex", alignItems: "center", gap: 4, cursor: tip ? "help" : "default" }}
-                              >
-                                <span style={{ width: 6, height: 6, borderRadius: "50%", background: dotColor, display: "inline-block", flexShrink: 0 }} />
-                                <span style={{ color: isDead || isStale ? dotColor : "var(--text-muted)" }}>{s.label}</span>
-                              </span>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
                     <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                       {/* List / Map toggle */}
                       <div className="view-toggle-group">
