@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Dark rounded background -->
+  <rect width="512" height="512" rx="100" fill="#0f0f13"/>
+  <!-- Orange "F" letterform -->
+  <!-- Vertical stem -->
+  <rect x="148" y="120" width="68" height="272" rx="8" fill="#f5a623"/>
+  <!-- Top horizontal bar -->
+  <rect x="148" y="120" width="220" height="68" rx="8" fill="#f5a623"/>
+  <!-- Mid horizontal bar -->
+  <rect x="148" y="222" width="170" height="60" rx="8" fill="#f5a623"/>
+  <!-- Radar dot accent -->
+  <circle cx="376" cy="372" r="20" fill="#f5a623" opacity="0.9"/>
+  <circle cx="376" cy="372" r="36" fill="none" stroke="#f5a623" stroke-width="8" opacity="0.5"/>
+  <circle cx="376" cy="372" r="56" fill="none" stroke="#f5a623" stroke-width="6" opacity="0.25"/>
+</svg>
