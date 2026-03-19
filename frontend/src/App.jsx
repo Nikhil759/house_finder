@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
 import { useTheme } from "./ThemeContext";
 import { BackgroundPattern } from "./components/BackgroundPattern";
+import Navbar from "./components/Navbar";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 const SUBREDDITS = ["r/bangalore", "r/bengaluru", "r/indianrealestate", "r/bangalorerentals", "r/FlatandFlatmatesBLR", "r/FlatmatesinBangalore"];
@@ -1533,6 +1534,7 @@ export default function App() {
   const [redditWarning,  setRedditWarning]  = useState(false);
   const [meta,           setMeta]           = useState(null);
   const [searched,       setSearched]       = useState(false);
+  const [sourceStatus,   setSourceStatus]   = useState(null);
   const [savedSearches,  setSavedSearches]  = useState(loadSaved);
   const [savedPanelOpen, setSavedPanelOpen] = useState(false);
   const [justSaved,      setJustSaved]      = useState(false);
@@ -1628,6 +1630,12 @@ export default function App() {
       });
       setRedditWarning(!!data.reddit_warning);
       localStorage.setItem(LAST_VISIT_KEY, Math.floor(Date.now() / 1000));
+
+      // Fetch source health status in the background (non-blocking)
+      fetch(`${API_BASE}/api/ingestion/status`)
+        .then(r => r.ok ? r.json() : null)
+        .then(s => { if (s) setSourceStatus(s); })
+        .catch(() => {});
     } catch (err) {
       setError(err.message);
     }
@@ -1680,40 +1688,7 @@ export default function App() {
 
       <div style={{ position: 'relative', zIndex: 1 }}>
 
-      {/* ── Sticky navbar ── */}
-      <nav className="app-nav">
-        <Link to="/" className="app-nav-logo">
-          <svg width="24" height="24" viewBox="0 0 32 32">
-            <circle cx="16" cy="16" r="14" fill="none" stroke="#f5a623" strokeWidth="2"/>
-            <circle cx="16" cy="16" r="8" fill="none" stroke="#f5a623" strokeWidth="1.5" opacity="0.6"/>
-            <circle cx="16" cy="16" r="3" fill="#f5a623"/>
-            <line x1="16" y1="16" x2="28" y2="6" stroke="#f5a623" strokeWidth="1.5" opacity="0.8"/>
-          </svg>
-          <span>FlatRadar</span>
-        </Link>
-        <div className="app-nav-right">
-          <span className="app-nav-sub">Bangalore Rental Aggregator</span>
-          <button className="app-theme-btn" onClick={toggleTheme} aria-label="Toggle theme">
-            {theme === "dark" ? (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <circle cx="12" cy="12" r="4"/>
-                <line x1="12" y1="2"  x2="12" y2="5"/>
-                <line x1="12" y1="19" x2="12" y2="22"/>
-                <line x1="2"  y1="12" x2="5"  y2="12"/>
-                <line x1="19" y1="12" x2="22" y2="12"/>
-                <line x1="4.22"  y1="4.22"  x2="6.34"  y2="6.34"/>
-                <line x1="17.66" y1="17.66" x2="19.78" y2="19.78"/>
-                <line x1="19.78" y1="4.22"  x2="17.66" y2="6.34"/>
-                <line x1="6.34"  y1="17.66" x2="4.22"  y2="19.78"/>
-              </svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-              </svg>
-            )}
-          </button>
-        </div>
-      </nav>
+      <Navbar subtitle="Bangalore Rental Aggregator" />
 
       <div className="main-container" style={{ maxWidth: "1380px", margin: "0 auto" }}>
 
@@ -2093,6 +2068,50 @@ export default function App() {
                         </span>
                       )}
                     </div>
+                    {/* Source health status — shown only when status data is available */}
+                    {sourceStatus && (() => {
+                      const enabledSources = Object.entries(sources).filter(([, on]) => on).map(([id]) => id);
+                      const sourceDefs = [
+                        { id: "reddit",   label: "Reddit",      icon: "🟠", color: "#ff4500", ttlHours: 7 },
+                        { id: "telegram", label: "Telegram",    icon: "✈️",  color: "#229ed9", ttlHours: 4 },
+                        { id: "nobroker", label: "NoBroker",    icon: "🔴", color: "#e63946", ttlHours: 4 },
+                        { id: "housing",  label: "Housing.com", icon: "🏠", color: "#7c3aed", ttlHours: 4 },
+                      ].filter(s => enabledSources.includes(s.id));
+                      const anyDown = sourceDefs.some(s => {
+                        const info = sourceStatus.by_source?.[s.id];
+                        if (!info || info.count === 0) return true;
+                        return (info.newest_age_minutes ?? 0) > s.ttlHours * 60 * 0.75;
+                      });
+                      if (!anyDown) return null;
+                      return (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 6, fontSize: 10, fontFamily: "monospace" }}>
+                          <span style={{ color: "var(--text-muted)", marginRight: 2 }}>Sources:</span>
+                          {sourceDefs.map(s => {
+                            const info = sourceStatus.by_source?.[s.id];
+                            const count = info?.count ?? 0;
+                            const age = info?.newest_age_minutes;
+                            const isStale = age != null && age > s.ttlHours * 60 * 0.75;
+                            const isDead = count === 0;
+                            const dotColor = isDead ? "#ef4444" : isStale ? "#f59e0b" : "#22c55e";
+                            const tip = isDead
+                              ? `${s.label} has no data — source may be down`
+                              : isStale
+                              ? `${s.label} data is ${Math.round((age ?? 0) / 60)}h old`
+                              : null;
+                            return (
+                              <span
+                                key={s.id}
+                                title={tip || ""}
+                                style={{ display: "inline-flex", alignItems: "center", gap: 4, cursor: tip ? "help" : "default" }}
+                              >
+                                <span style={{ width: 6, height: 6, borderRadius: "50%", background: dotColor, display: "inline-block", flexShrink: 0 }} />
+                                <span style={{ color: isDead || isStale ? dotColor : "var(--text-muted)" }}>{s.label}</span>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                     <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                       {/* List / Map toggle */}
                       <div className="view-toggle-group">
@@ -2281,61 +2300,7 @@ export default function App() {
           min-height: 100vh;
         }
 
-        /* ── Sticky navbar ───────────────────────────────────────────── */
-        .app-nav {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 14px 32px;
-          border-bottom: 1px solid var(--border);
-          background: var(--bg-primary);
-          position: sticky;
-          top: 0;
-          z-index: 100;
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-        }
-        .app-nav-logo {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          font-size: 20px;
-          font-weight: 700;
-          color: #f5a623;
-          text-decoration: none;
-          letter-spacing: 0.3px;
-        }
-        .app-nav-right {
-          display: flex;
-          align-items: center;
-          gap: 16px;
-        }
-        .app-nav-sub {
-          font-size: 12px;
-          color: var(--text-muted);
-          letter-spacing: 0.3px;
-        }
-        .app-theme-btn {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 34px;
-          height: 34px;
-          background: var(--bg-secondary);
-          border: 1px solid var(--border);
-          border-radius: 50%;
-          color: var(--text-muted);
-          cursor: pointer;
-          transition: border-color 0.2s, color 0.2s, background 0.2s;
-        }
-        .app-theme-btn:hover {
-          border-color: #f5a623;
-          color: #f5a623;
-        }
-        @media (max-width: 600px) {
-          .app-nav { padding: 12px 16px; }
-          .app-nav-sub { display: none; }
-        }
+        /* ── Sticky navbar — see components/Navbar.jsx ───────────────── */
 
         /* ── Main content container ──────────────────────────────────── */
         .main-container { padding: 28px 32px 40px; }

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.reddit-housing.ingest</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/nikhilbansal/Downloads/reddit-housing/scripts/run_ingestion.sh</string>
+    </array>
+
+    <!-- Run every 6 hours -->
+    <key>StartInterval</key>
+    <integer>21600</integer>
+
+    <!-- Run missed jobs when Mac wakes from sleep -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/nikhilbansal/Downloads/reddit-housing/logs/reddit_ingest.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/nikhilbansal/Downloads/reddit-housing/logs/reddit_ingest_error.log</string>
+
+    <!-- Restart if it crashes -->
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>

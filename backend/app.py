@@ -1113,73 +1113,85 @@ def search():
     reddit_warning = False
     from_db        = False
 
-    # ── Try DB first (per-source so no single source crowds out another) ──
     db_localities = target_localities if canonical_area else None
-    db_posts = []
+    # How old Reddit DB data can be before we fall back to live fetch (8 hours)
+    REDDIT_STALENESS_THRESHOLD = 8 * 3600
+
+    # ── Each source is fetched independently and merged ──
+    # DB-backed sources first; fall back to live fetch if DB is empty for that source.
     for src in source_list:
-        src_posts = query_listings(
+        src_db_posts = query_listings(
             localities=db_localities,
             sources=[src],
             bhk=bhk,
             budget=budget,
             limit=limit,
         )
-        db_posts.extend(src_posts)
 
-    if db_posts:
-        all_posts = db_posts
-        from_db = True
-        query = build_query(area, bhk, budget, keywords) if area else ""
-    else:
-        # ── Fallback: live fetch (DB empty or no matches) ──
-        if "reddit" in source_list:
-            try:
-                reddit_posts, query, _ = fetch_listings(area, bhk, budget, keywords, limit)
-                all_posts += reddit_posts
-            except Exception as e:
-                logger.error(f"Reddit fetch failed: {e}")
-                reddit_warning = True
+        if src_db_posts:
+            # For Reddit, check freshness — if all results are stale, do a live fetch instead
+            if src == "reddit":
+                newest_ts = max((p.get("created") or p.get("created_utc") or 0) for p in src_db_posts)
+                age = time.time() - newest_ts if newest_ts else float("inf")
+                if age > REDDIT_STALENESS_THRESHOLD:
+                    logger.info(f"Reddit DB data is {age/3600:.1f}h old — falling back to live fetch")
+                    src_db_posts = []
 
-        if "telegram" in source_list:
-            all_posts += fetch_telegram(bhk, keywords, limit)
-
-        if "nobroker" in source_list:
-            nb_listings = get_cached_listings()
-
-            if bhk and bhk != "any":
-                bhk_norm = bhk.lower().replace(" ", "")
-                nb_listings = [
-                    p for p in nb_listings
-                    if bhk_norm in p.get("bhk", "").lower().replace(" ", "")
-                ]
-
-            if budget:
+        if src_db_posts:
+            all_posts += src_db_posts
+            from_db = True
+        else:
+            # Live fetch fallback for this source
+            if src == "reddit":
                 try:
-                    budget_val = int(budget)
-                    nb_listings = [p for p in nb_listings if (p.get("price") or 0) <= budget_val]
-                except ValueError:
-                    pass
+                    reddit_posts, query, _ = fetch_listings(area, bhk, budget, keywords, limit)
+                    all_posts += reddit_posts
+                    logger.info(f"Reddit live fetch returned {len(reddit_posts)} posts")
+                except Exception as e:
+                    logger.error(f"Reddit fetch failed: {e}")
+                    reddit_warning = True
 
-            all_posts += nb_listings
+            elif src == "telegram":
+                tg_posts = fetch_telegram(bhk, keywords, limit)
+                all_posts += tg_posts
+                logger.info(f"Telegram live fetch returned {len(tg_posts)} posts")
 
-        # ── Strict locality filter (applied across ALL sources for live fetch) ──
-        if canonical_area and target_set:
-            all_posts = [
-                p for p in all_posts
-                if (p.get("locality") or "").lower() in target_set
-            ]
-        elif area:
-            area_lower = area.lower()
-            all_posts = [
-                p for p in all_posts
-                if area_lower in (
-                    p.get("title", "") + " " +
-                    p.get("selftext", "") + " " +
-                    p.get("body", "") + " " +
-                    p.get("locality", "") + " " +
-                    p.get("address", "")
-                ).lower()
-            ]
+            elif src == "nobroker":
+                nb_listings = get_cached_listings()
+                if bhk and bhk != "any":
+                    bhk_norm = bhk.lower().replace(" ", "")
+                    nb_listings = [
+                        p for p in nb_listings
+                        if bhk_norm in p.get("bhk", "").lower().replace(" ", "")
+                    ]
+                if budget:
+                    try:
+                        budget_val = int(budget)
+                        nb_listings = [p for p in nb_listings if (p.get("price") or 0) <= budget_val]
+                    except ValueError:
+                        pass
+                all_posts += nb_listings
+
+    query = query or (build_query(area, bhk, budget, keywords) if area else "")
+
+    # ── Locality filter ──
+    if canonical_area and target_set:
+        all_posts = [
+            p for p in all_posts
+            if (p.get("locality") or "").lower() in target_set
+        ]
+    elif area:
+        area_lower = area.lower()
+        all_posts = [
+            p for p in all_posts
+            if area_lower in (
+                p.get("title", "") + " " +
+                p.get("selftext", "") + " " +
+                p.get("body", "") + " " +
+                p.get("locality", "") + " " +
+                p.get("address", "")
+            ).lower()
+        ]
 
     # ── Keyword filter (applied regardless of DB or live) ──
     if keywords and all_posts:
