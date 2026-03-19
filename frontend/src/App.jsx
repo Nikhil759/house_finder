@@ -83,6 +83,39 @@ const LOCALITY_COORDS = {
   "Kengeri":          [12.9070, 77.4850],
 };
 
+// Radius in degrees (radius_km / 111) for organic scatter
+const LOCALITY_RADIUS_DEG = {
+  "Whitefield": 0.045, "HSR Layout": 0.027, "HSR": 0.027,
+  "Koramangala": 0.027, "Indiranagar": 0.0225, "Marathahalli": 0.027,
+  "Bellandur": 0.0225, "BTM Layout": 0.0225, "BTM": 0.0225,
+  "Hebbal": 0.027, "Yelahanka": 0.027, "Electronic City": 0.036,
+  "Sarjapur Road": 0.032, "Sarjapur": 0.032, "Hoodi": 0.018,
+  "Jayanagar": 0.0225, "Bannerghatta": 0.027, "Cunningham Road": 0.018,
+  "MG Road": 0.018, "Frazer Town": 0.018, "Banaswadi": 0.0225,
+  "KR Puram": 0.0225, "Domlur": 0.018, "Madiwala": 0.018,
+  "Bommanahalli": 0.0225, "Brookefield": 0.018, "Kadubeesanahalli": 0.018,
+  "Panathur": 0.018, "Varthur": 0.0225, "Thubarahalli": 0.018,
+  "Kadugodi": 0.018, "JP Nagar": 0.0225, "Banashankari": 0.0225,
+  "Rajajinagar": 0.0225, "Malleshwaram": 0.0225, "Yeshwanthpur": 0.0225,
+  "Nagawara": 0.0225, "HBR Layout": 0.0225, "CV Raman Nagar": 0.018,
+  "Old Airport Road": 0.018, "ITPL": 0.018, "Manyata": 0.018,
+  "Thanisandra": 0.018, "Hennur": 0.0225, "Kalyan Nagar": 0.018,
+  "RT Nagar": 0.018, "Ejipura": 0.0135, "Ulsoor": 0.0135,
+  "Basavanagudi": 0.018, "Sadashivanagar": 0.018, "Vijayanagar": 0.018,
+  "Kengeri": 0.027,
+};
+
+// Deterministic hash of a string/id → stable scatter per listing across renders
+function idHash(id) {
+  const s = String(id);
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = Math.imul(h, 31) + s.charCodeAt(i);
+    h |= 0;
+  }
+  return Math.abs(h);
+}
+
 function extractListingInfo(title, body) {
   const text = `${title} ${body}`;
   const lower = text.toLowerCase();
@@ -900,10 +933,18 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
   );
 }
 
+const DARK_TILE  = "https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png";
+const LIGHT_TILE = "https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png";
+
 function MapView({ posts }) {
-  const containerRef = useRef(null);
-  const mapRef       = useRef(null);
-  const markersRef   = useRef([]);
+  const containerRef  = useRef(null);
+  const mapRef        = useRef(null);
+  const tileLayerRef  = useRef(null);
+  const markersRef    = useRef([]);
+  const { theme }     = useTheme();
+  // Keep a ref so the [] init effect can read the initial theme without stale closure
+  const themeRef      = useRef(theme);
+  themeRef.current    = theme;
 
   // Init Leaflet map once on mount
   useEffect(() => {
@@ -916,8 +957,9 @@ function MapView({ posts }) {
       preferCanvas: true,
     });
 
-    L.tileLayer(
-      "https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png",
+    const initialTile = themeRef.current === "light" ? LIGHT_TILE : DARK_TILE;
+    tileLayerRef.current = L.tileLayer(
+      initialTile,
       { attribution: "© OSM contributors © CartoDB", maxZoom: 19 }
     ).addTo(map);
 
@@ -925,11 +967,18 @@ function MapView({ posts }) {
 
     return () => {
       map.remove();
-      mapRef.current = null;
+      mapRef.current   = null;
+      tileLayerRef.current = null;
     };
   }, []);
 
-  // Sync markers whenever posts change
+  // Swap tile layer when theme changes (without recreating the map)
+  useEffect(() => {
+    if (!tileLayerRef.current) return;
+    tileLayerRef.current.setUrl(theme === "light" ? LIGHT_TILE : DARK_TILE);
+  }, [theme]);
+
+  // Sync markers whenever posts or theme change
   useEffect(() => {
     const L   = window.L;
     const map = mapRef.current;
@@ -938,22 +987,35 @@ function MapView({ posts }) {
     markersRef.current.forEach(m => m.remove());
     markersRef.current = [];
 
-    // Jitter identical coords so pins in the same area don't stack
-    const coordCount = {};
+    const isDark       = theme === "dark";
+    const popupClass   = isDark ? "dark-popup" : "light-popup";
+    const titleColor   = isDark ? "#e8e4d8" : "#111827";
+    const localityBg   = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
+    const localityColor = isDark ? "#888" : "#6b7280";
 
     posts.forEach(post => {
       const extracted = extractListingInfo(post.title, post.selftext || post.body || "");
-      const locality = post.locality || extracted.locality;
-      const price = extracted.price;
-      const bhk = extracted.bhk;
-      if (!locality) return;
-      const base = LOCALITY_COORDS[locality];
-      if (!base) return;
+      const locality  = post.locality || extracted.locality;
+      const price     = extracted.price || post.price_formatted;
+      const bhk       = extracted.bhk   || post.bhk;
 
-      const key = locality;
-      coordCount[key] = (coordCount[key] || 0) + 1;
-      const jitter = (coordCount[key] - 1) * 0.0008;
-      const coords = [base[0] + jitter, base[1] + jitter];
+      let coords;
+
+      // Use real per-property coordinates when available (NoBroker)
+      if (post.latitude && post.longitude) {
+        coords = [post.latitude, post.longitude];
+      } else {
+        if (!locality) return;
+        const base = LOCALITY_COORDS[locality];
+        if (!base) return;
+
+        // Organic scatter: deterministic angle+distance derived from post.id
+        const h         = idHash(post.id || locality);
+        const angle     = (h % 1000) / 1000 * 2 * Math.PI;
+        const radiusDeg = LOCALITY_RADIUS_DEG[locality] || 0.02;
+        const dist      = ((h >> 8) % 1000) / 1000 * radiusDeg * 0.7;
+        coords = [base[0] + dist * Math.cos(angle), base[1] + dist * Math.sin(angle)];
+      }
 
       const color =
         post.quality_score >= 70 ? "#4ade80" :
@@ -977,13 +1039,13 @@ function MapView({ posts }) {
       const title = post.title.length > 90 ? post.title.slice(0, 90) + "…" : post.title;
       const popup = `
         <div style="font-family:monospace;max-width:240px;">
-          <div style="font-size:12px;color:#e8e4d8;line-height:1.4;margin-bottom:8px;font-family:'Georgia',serif;">
+          <div style="font-size:12px;color:${titleColor};line-height:1.4;margin-bottom:8px;font-family:'Georgia',serif;">
             ${title}
           </div>
           <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px;">
             ${bhk   ? `<span style="background:rgba(59,130,246,0.25);color:#7eb8f7;padding:2px 8px;border-radius:20px;font-size:10px;">🏠 ${bhk}</span>` : ""}
             ${price ? `<span style="background:rgba(34,197,94,0.25);color:#6ee09a;padding:2px 8px;border-radius:20px;font-size:10px;">💰 ${price}</span>` : ""}
-            <span style="background:rgba(255,255,255,0.06);color:#888;padding:2px 8px;border-radius:20px;font-size:10px;">📍 ${locality}</span>
+            ${locality ? `<span style="background:${localityBg};color:${localityColor};padding:2px 8px;border-radius:20px;font-size:10px;">📍 ${locality}</span>` : ""}
           </div>
           <a href="${post.url}" target="_blank" rel="noopener noreferrer"
              style="color:#f5a623;font-size:10px;text-decoration:none;">
@@ -993,17 +1055,20 @@ function MapView({ posts }) {
       `;
 
       const marker = L.marker(coords, { icon })
-        .bindPopup(popup, { maxWidth: 270, className: "dark-popup" })
+        .bindPopup(popup, { maxWidth: 270, className: popupClass })
         .addTo(map);
 
       markersRef.current.push(marker);
     });
-  }, [posts]);
+  }, [posts, theme]);
 
   const mappableCount = posts.filter(p => {
+    if (p.latitude && p.longitude) return true;
     const loc = p.locality || extractListingInfo(p.title, p.selftext || p.body || "").locality;
     return loc && LOCALITY_COORDS[loc];
   }).length;
+
+  const legendColor = theme === "dark" ? "#555" : "#6b7280";
 
   return (
     <div>
@@ -1011,12 +1076,12 @@ function MapView({ posts }) {
         display: "flex", alignItems: "center", justifyContent: "space-between",
         marginBottom: "10px",
       }}>
-        <span style={{ color: "#555", fontSize: "10px", fontFamily: "monospace" }}>
-          📍 {mappableCount} of {posts.length} listings have a matched locality
+        <span style={{ color: legendColor, fontSize: "10px", fontFamily: "monospace" }}>
+          📍 {mappableCount} of {posts.length} listings plotted
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "9px", fontFamily: "monospace" }}>
           {[["#4ade80", "70+ score"], ["#facc15", "40–69"], ["#f87171", "<40"]].map(([c, l]) => (
-            <span key={l} style={{ display: "flex", alignItems: "center", gap: "4px", color: "#555" }}>
+            <span key={l} style={{ display: "flex", alignItems: "center", gap: "4px", color: legendColor }}>
               <span style={{ width: 9, height: 9, borderRadius: "50%", background: c, display: "inline-block", boxShadow: `0 0 5px ${c}88` }} />
               {l}
             </span>
@@ -2628,6 +2693,48 @@ export default function App() {
         .leaflet-container {
           background: #0d0d14;
           font-family: monospace;
+        }
+
+        /* Light Leaflet popup */
+        .light-popup .leaflet-popup-content-wrapper {
+          background: #ffffff !important;
+          border: 1px solid #e5e7eb !important;
+          border-radius: 8px !important;
+          box-shadow: 0 4px 24px rgba(0,0,0,0.12) !important;
+          padding: 0 !important;
+        }
+        .light-popup .leaflet-popup-content {
+          margin: 12px 14px !important;
+        }
+        .light-popup .leaflet-popup-tip {
+          background: #ffffff !important;
+        }
+        .light-popup .leaflet-popup-close-button {
+          color: #9ca3af !important;
+          font-size: 16px !important;
+          padding: 5px 8px !important;
+          top: 2px !important;
+          right: 2px !important;
+        }
+        .light-popup .leaflet-popup-close-button:hover {
+          color: #374151 !important;
+          background: none !important;
+        }
+
+        [data-theme="light"] .leaflet-container {
+          background: #e8ecf0;
+        }
+        [data-theme="light"] .leaflet-control-zoom a {
+          background: #ffffff !important;
+          color: #374151 !important;
+          border-color: #e5e7eb !important;
+        }
+        [data-theme="light"] .leaflet-control-zoom a:hover {
+          background: #f3f4f6 !important;
+        }
+        [data-theme="light"] .leaflet-control-attribution {
+          background: rgba(255,255,255,0.8) !important;
+          color: #9ca3af !important;
         }
 
         /* ═══════════════════════════════════════════════════════════════
