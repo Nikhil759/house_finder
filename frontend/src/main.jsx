@@ -5,6 +5,14 @@ import { ThemeProvider } from "./ThemeContext";
 import LandingPage from "./LandingPage";
 import App from "./App";
 import HealthPage from "./HealthPage";
+import InstallBanner from "./components/InstallBanner";
+
+// Register service worker (enables Android PWA install prompt)
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
@@ -15,6 +23,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="/app" element={<App />} />
           <Route path="/health" element={<HealthPage />} />
         </Routes>
+        <InstallBanner />
       </BrowserRouter>
     </ThemeProvider>
   </React.StrictMode>

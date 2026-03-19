@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useTheme } from "../ThemeContext";
+import { usePWAInstall } from "../hooks/usePWAInstall";
 
 const SunIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -40,6 +42,8 @@ const RadarLogo = () => (
  */
 export default function Navbar({ subtitle, showAppCta = false, transparent = false }) {
   const { theme, toggleTheme } = useTheme();
+  const { canInstall, isIOS, triggerInstall } = usePWAInstall();
+  const [showIOSTip, setShowIOSTip] = useState(false);
 
   return (
     <>
@@ -165,11 +169,101 @@ export default function Navbar({ subtitle, showAppCta = false, transparent = fal
           border-color: rgba(245,166,35,0.5);
           background: rgba(0,0,0,0.2);
         }
+        .shared-nav-install {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 11px;
+          font-weight: 600;
+          color: #f5a623;
+          background: rgba(245,166,35,0.08);
+          border: 1px solid rgba(245,166,35,0.25);
+          border-radius: 6px;
+          padding: 5px 10px;
+          cursor: pointer;
+          white-space: nowrap;
+          transition: background 0.15s, border-color 0.15s;
+          flex-shrink: 0;
+        }
+        .shared-nav-install:hover {
+          background: rgba(245,166,35,0.15);
+          border-color: rgba(245,166,35,0.5);
+        }
+        .nav-ios-tip {
+          position: fixed;
+          top: 60px;
+          right: 16px;
+          z-index: 10000;
+          background: #1a1a2a;
+          border: 1px solid rgba(245,166,35,0.3);
+          border-radius: 14px;
+          padding: 16px 18px;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+          width: min(320px, calc(100vw - 32px));
+        }
+        .nav-ios-tip-title {
+          font-size: 13px;
+          font-weight: 700;
+          color: #fff;
+          margin-bottom: 10px;
+        }
+        .nav-ios-tip-step {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 12px;
+          color: rgba(255,255,255,0.65);
+          margin-bottom: 8px;
+        }
+        .nav-ios-tip-num {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: rgba(245,166,35,0.15);
+          border: 1px solid rgba(245,166,35,0.3);
+          color: #f5a623;
+          font-size: 10px;
+          font-weight: 700;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+        .nav-ios-tip-close {
+          margin-top: 12px;
+          width: 100%;
+          padding: 7px;
+          background: rgba(255,255,255,0.06);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 8px;
+          color: rgba(255,255,255,0.5);
+          font-size: 12px;
+          cursor: pointer;
+        }
         @media (max-width: 600px) {
           .shared-nav { padding: 12px 16px; }
           .shared-nav-sub { display: none; }
         }
       `}</style>
+
+      {showIOSTip && (
+        <div className="nav-ios-tip">
+          <div className="nav-ios-tip-title">Add to Home Screen</div>
+          <div className="nav-ios-tip-step">
+            <span className="nav-ios-tip-num">1</span>
+            <span>Tap the <strong style={{color:"#fff"}}>Share</strong> button at the bottom of Safari</span>
+          </div>
+          <div className="nav-ios-tip-step">
+            <span className="nav-ios-tip-num">2</span>
+            <span>Scroll down and tap <strong style={{color:"#fff"}}>"Add to Home Screen"</strong></span>
+          </div>
+          <div className="nav-ios-tip-step">
+            <span className="nav-ios-tip-num">3</span>
+            <span>Tap <strong style={{color:"#fff"}}>Add</strong> — done!</span>
+          </div>
+          <button className="nav-ios-tip-close" onClick={() => setShowIOSTip(false)}>Got it</button>
+        </div>
+      )}
 
       <nav className={`shared-nav${transparent ? " transparent" : ""}`}>
         <Link to="/" className="shared-nav-logo">
@@ -187,6 +281,21 @@ export default function Navbar({ subtitle, showAppCta = false, transparent = fal
                 <polyline points="12 5 19 12 12 19"/>
               </svg>
             </Link>
+          )}
+          {canInstall && (
+            <button
+              className="shared-nav-install"
+              onClick={async () => {
+                const result = await triggerInstall();
+                if (result === "ios") setShowIOSTip(v => !v);
+              }}
+              title="Add to home screen"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2v13M8 11l4 4 4-4"/><rect x="3" y="17" width="18" height="4" rx="1"/>
+              </svg>
+              Install
+            </button>
           )}
           <Link to="/health" className="shared-nav-health" title="System health">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

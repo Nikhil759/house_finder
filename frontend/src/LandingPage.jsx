@@ -4,12 +4,15 @@ import { useTheme } from "./ThemeContext";
 import cityscapeDark from "./assets/cityscape.png";
 import cityscapeLight from "./assets/cityscape_day.jpg";
 import Navbar from "./components/Navbar";
+import { usePWAInstall } from "./hooks/usePWAInstall";
 
 export default function LandingPage() {
   const [location, setLocation] = useState("");
   const navigate = useNavigate();
   const { theme } = useTheme();
   const heroImage = theme === "light" ? cityscapeLight : cityscapeDark;
+  const { canInstall, isInstalled, isIOS, triggerInstall } = usePWAInstall();
+  const [showIOSTip, setShowIOSTip] = useState(false);
 
   const handleSearch = () => {
     navigate(`/app${location ? `?location=${encodeURIComponent(location)}` : ""}`);
@@ -220,6 +223,58 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* ── Install nudge ────────────────────────────────────────────────── */}
+      {!isInstalled && (
+        <section className="lp-install-section">
+          <div className="lp-install-card">
+            <div className="lp-install-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f5a623" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="5" y="2" width="14" height="20" rx="2"/>
+                <line x1="9" y1="7" x2="15" y2="7" opacity="0.4"/>
+                <line x1="9" y1="11" x2="15" y2="11" opacity="0.4"/>
+                <circle cx="12" cy="17" r="1" fill="#f5a623" stroke="none"/>
+              </svg>
+            </div>
+            <div className="lp-install-text">
+              <h3>Install FlatRadar on your phone</h3>
+              <p>Add it to your home screen for one-tap access and a full-screen experience — no address bar, no browser tabs.</p>
+            </div>
+            <div className="lp-install-actions">
+              {canInstall ? (
+                <button
+                  className="lp-install-btn"
+                  onClick={async () => {
+                    const result = await triggerInstall();
+                    if (result === "ios") setShowIOSTip(true);
+                  }}
+                >
+                  {isIOS ? "How to install" : "Add to Home Screen"}
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {showIOSTip && (
+            <div className="lp-ios-tip">
+              <div className="lp-ios-tip-title">Add to Home Screen on iOS</div>
+              <div className="lp-ios-tip-steps">
+                {[
+                  "Tap the Share button at the bottom of Safari",
+                  'Scroll down and tap "Add to Home Screen"',
+                  "Tap Add — done!",
+                ].map((s, i) => (
+                  <div key={i} className="lp-ios-tip-step">
+                    <span className="lp-ios-tip-num">{i + 1}</span>
+                    <span>{s}</span>
+                  </div>
+                ))}
+              </div>
+              <button className="lp-ios-tip-close" onClick={() => setShowIOSTip(false)}>Got it</button>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* ── CTA footer ───────────────────────────────────────────────────── */}
       <section className="lp-cta-section">
@@ -558,6 +613,147 @@ export default function LandingPage() {
           padding-top: 24px;
           flex-shrink: 0;
         }
+
+        /* ── Install nudge ── */
+        .lp-install-section {
+          padding: 60px 24px;
+          background: #0d0d14;
+          border-top: 1px solid rgba(255,255,255,0.06);
+          display: none; /* hidden on desktop */
+        }
+        @media (max-width: 768px) {
+          .lp-install-section { display: block; }
+        }
+        .lp-install-card {
+          max-width: 760px;
+          margin: 0 auto;
+          display: flex;
+          align-items: center;
+          gap: 24px;
+          background: rgba(245,166,35,0.05);
+          border: 1px solid rgba(245,166,35,0.18);
+          border-radius: 18px;
+          padding: 28px 32px;
+        }
+        .lp-install-icon {
+          width: 56px;
+          height: 56px;
+          border-radius: 14px;
+          background: rgba(245,166,35,0.1);
+          border: 1px solid rgba(245,166,35,0.2);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+        .lp-install-text {
+          flex: 1;
+          min-width: 0;
+        }
+        .lp-install-text h3 {
+          font-size: 17px;
+          font-weight: 700;
+          color: #fff;
+          margin-bottom: 6px;
+        }
+        .lp-install-text p {
+          font-size: 13px;
+          color: rgba(255,255,255,0.5);
+          line-height: 1.6;
+        }
+        .lp-install-actions {
+          flex-shrink: 0;
+        }
+        .lp-install-btn {
+          padding: 11px 22px;
+          background: #f5a623;
+          border: none;
+          border-radius: 10px;
+          color: #000;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          white-space: nowrap;
+          transition: background 0.15s, transform 0.1s;
+        }
+        .lp-install-btn:hover { background: #e09400; transform: translateY(-1px); }
+        .lp-install-desktop-hint {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 12px;
+          color: rgba(255,255,255,0.3);
+          white-space: nowrap;
+        }
+        .lp-ios-tip {
+          max-width: 760px;
+          margin: 16px auto 0;
+          background: #1a1a2a;
+          border: 1px solid rgba(245,166,35,0.25);
+          border-radius: 14px;
+          padding: 18px 20px;
+        }
+        .lp-ios-tip-title {
+          font-size: 13px;
+          font-weight: 700;
+          color: #fff;
+          margin-bottom: 12px;
+        }
+        .lp-ios-tip-steps {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .lp-ios-tip-step {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 12px;
+          color: rgba(255,255,255,0.6);
+        }
+        .lp-ios-tip-num {
+          width: 20px; height: 20px;
+          border-radius: 50%;
+          background: rgba(245,166,35,0.12);
+          border: 1px solid rgba(245,166,35,0.25);
+          color: #f5a623;
+          font-size: 10px; font-weight: 700;
+          display: flex; align-items: center; justify-content: center;
+          flex-shrink: 0;
+        }
+        .lp-ios-tip-close {
+          margin-top: 14px;
+          width: 100%;
+          padding: 8px;
+          background: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 8px;
+          color: rgba(255,255,255,0.45);
+          font-size: 12px;
+          cursor: pointer;
+        }
+        @media (max-width: 600px) {
+          .lp-install-card {
+            flex-direction: column;
+            text-align: center;
+            padding: 24px 20px;
+            gap: 16px;
+          }
+          .lp-install-actions { width: 100%; }
+          .lp-install-btn { width: 100%; padding: 13px; font-size: 14px; }
+          .lp-install-desktop-hint { justify-content: center; }
+        }
+        [data-theme="light"] .lp-install-section {
+          background: #f6f8fa;
+          border-color: rgba(0,0,0,0.06);
+        }
+        [data-theme="light"] .lp-install-card {
+          background: rgba(245,166,35,0.04);
+          border-color: rgba(245,166,35,0.2);
+        }
+        [data-theme="light"] .lp-install-text h3 { color: #111827; }
+        [data-theme="light"] .lp-install-text p  { color: rgba(0,0,0,0.5); }
+        [data-theme="light"] .lp-install-desktop-hint { color: rgba(0,0,0,0.3); }
 
         /* ── CTA section ── */
         .lp-cta-section {
