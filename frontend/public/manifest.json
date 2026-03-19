@@ -1,7 +1,7 @@
 {
-  "name": "FlatRadar",
-  "short_name": "FlatRadar",
-  "description": "Bangalore Rental Aggregator",
+  "name": "NestIQ",
+  "short_name": "NestIQ",
+  "description": "Smart Home Search in Bangalore",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",

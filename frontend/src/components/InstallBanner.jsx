@@ -198,7 +198,7 @@ export default function InstallBanner() {
           </svg>
         </div>
         <div className="install-banner-text">
-          <div className="install-banner-title">Add FlatRadar to your home screen</div>
+          <div className="install-banner-title">Add NestIQ to your home screen</div>
           <div className="install-banner-sub">Instant access · full screen · no browser chrome</div>
         </div>
         <div className="install-banner-actions">

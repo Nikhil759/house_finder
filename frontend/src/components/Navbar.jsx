@@ -268,7 +268,7 @@ export default function Navbar({ subtitle, showAppCta = false, transparent = fal
       <nav className={`shared-nav${transparent ? " transparent" : ""}`}>
         <Link to="/" className="shared-nav-logo">
           <RadarLogo />
-          <span>FlatRadar</span>
+          <span>NestIQ</span>
         </Link>
 
         <div className="shared-nav-right">

@@ -1,4 +1,4 @@
-# Reddit Housing Finder
+# NestIQ — Smart Home Search
 
 Search Reddit for rental listings — flats, PGs, flatmates — filtered by location, type, and budget.
 No Reddit API credentials needed.

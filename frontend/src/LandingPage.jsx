@@ -44,19 +44,19 @@ export default function LandingPage() {
               <circle cx="16" cy="16" r="3" fill="#f5a623"/>
               <line x1="16" y1="16" x2="28" y2="6" stroke="#f5a623" strokeWidth="1.5" className="lp-radar-arm"/>
             </svg>
-            <span>FlatRadar</span>
+            <span>NestIQ</span>
           </div>
 
           <h1 className="lp-hero-headline">
-            Find your next flat in Bangalore.<br/>
-            <span>No brokers. No noise.</span>
+            Find your next home in Bangalore.<br/>
+            <span>Smarter search. Better homes.</span>
           </h1>
 
           <p className="lp-hero-sub">
-            Scans <span style={{ color: "#ff4500" }}>Reddit</span>,{" "}
+            NestIQ is a smart housing aggregator that scans <span style={{ color: "#ff4500" }}>Reddit</span>,{" "}
             <span style={{ color: "#229ed9" }}>Telegram</span>,{" "}
-            <span style={{ color: "#e63946" }}>NoBroker</span> and more — scored, filtered,
-            and ranked in real time.
+            <span style={{ color: "#e63946" }}>NoBroker</span>, Housing.com and more — scoring and
+            ranking every listing to make finding your next home effortless.
           </p>
 
           <div className="lp-hero-search">
@@ -68,7 +68,7 @@ export default function LandingPage() {
               onKeyDown={e => e.key === "Enter" && handleSearch()}
             />
             <button onClick={handleSearch}>
-              Scan Listings →
+              Search Homes →
             </button>
           </div>
         </div>
@@ -118,7 +118,7 @@ export default function LandingPage() {
 
       {/* ── How it works ─────────────────────────────────────────────────── */}
       <section className="lp-how-it-works">
-        <h2>How FlatRadar works</h2>
+        <h2>How NestIQ works</h2>
         <div className="lp-steps">
           <div className="lp-step">
             <div className="lp-step-number">01</div>
@@ -129,7 +129,7 @@ export default function LandingPage() {
           <div className="lp-step">
             <div className="lp-step-number">02</div>
             <h3>We scan everything</h3>
-            <p>FlatRadar pulls listings from Reddit, Telegram groups, NoBroker and more — simultaneously.</p>
+            <p>NestIQ pulls listings from Reddit, Telegram groups, NoBroker and more — simultaneously.</p>
           </div>
           <div className="lp-step-arrow">→</div>
           <div className="lp-step">
@@ -237,7 +237,7 @@ export default function LandingPage() {
               </svg>
             </div>
             <div className="lp-install-text">
-              <h3>Install FlatRadar on your phone</h3>
+              <h3>Install NestIQ on your phone</h3>
               <p>Add it to your home screen for one-tap access and a full-screen experience — no address bar, no browser tabs.</p>
             </div>
             <div className="lp-install-actions">
@@ -278,10 +278,10 @@ export default function LandingPage() {
 
       {/* ── CTA footer ───────────────────────────────────────────────────── */}
       <section className="lp-cta-section">
-        <h2>Start finding your flat</h2>
-        <p>Free, no sign-up required. Just search.</p>
+        <h2>Start your smartest home search</h2>
+        <p>Free, no sign-up required.</p>
         <button onClick={() => navigate("/app")}>
-          Open FlatRadar →
+          Open NestIQ →
         </button>
       </section>
 
@@ -365,8 +365,8 @@ export default function LandingPage() {
           align-items: center;
           gap: 10px;
           justify-content: center;
-          margin-bottom: 32px;
-          font-size: 22px;
+          margin-bottom: 28px;
+          font-size: 20px;
           font-weight: 700;
           letter-spacing: 0.5px;
           color: #f5a623;
@@ -420,27 +420,31 @@ export default function LandingPage() {
         }
 
         .lp-hero-headline {
-          font-size: clamp(32px, 5vw, 56px);
+          font-size: clamp(36px, 5vw, 56px);
           font-weight: 800;
           line-height: 1.15;
           color: #ffffff;
-          margin-bottom: 20px;
+          margin-bottom: 14px;
           letter-spacing: -0.5px;
           text-shadow: 0 2px 20px rgba(0,0,0,0.5);
         }
 
         .lp-hero-headline span {
+          font-size: clamp(28px, 3.5vw, 42px);
+          font-weight: 800;
+          line-height: 1.15;
+          white-space: nowrap;
           color: #f5a623;
         }
 
         .lp-hero-sub {
-          font-size: 17px;
+          font-size: clamp(14px, 1.5vw, 17px);
           font-weight: 400;
           color: rgba(255, 255, 255, 0.7);
           letter-spacing: 0.3px;
-          line-height: 1.7;
-          max-width: 480px;
-          margin: 0 auto 48px;
+          line-height: 1.65;
+          max-width: 500px;
+          margin: 0 auto 36px;
           text-shadow: 0 1px 12px rgba(0,0,0,0.8);
         }
 
@@ -1085,6 +1089,8 @@ export default function LandingPage() {
           }
           .lp-step-arrow { display: none; }
           .lp-steps { gap: 32px; }
+          .lp-hero-headline { white-space: normal; }
+          .lp-hero-headline span { white-space: normal; }
         }
       `}</style>
     </div>

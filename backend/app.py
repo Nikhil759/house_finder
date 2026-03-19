@@ -1050,7 +1050,7 @@ def build_email_html(label: str, posts: list) -> str:
     </table>
 
     <p style="color:#2a2a3a;font-size:10px;margin-top:28px;text-align:center;line-height:1.8;">
-      You're receiving this because you set up a housing alert on Reddit Housing Scanner.<br>
+      You're receiving this because you set up a housing alert on NestIQ.<br>
       To stop, delete the saved search from the app.
     </p>
   </div>

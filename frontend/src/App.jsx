@@ -1754,7 +1754,7 @@ export default function App() {
 
       <div style={{ position: 'relative', zIndex: 1 }}>
 
-      <Navbar subtitle="Bangalore Rental Aggregator" />
+      <Navbar subtitle="Smart Home Search · Bangalore" />
 
       <div className="main-container" style={{ maxWidth: "1380px", margin: "0 auto" }}>
 
@@ -1978,7 +1978,7 @@ export default function App() {
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                 <label className="app-field-label quality-filter-label" style={{ marginBottom: 0 }}>
-                  Quality filter —{" "}
+                  Smart Filter —{" "}
                   <span style={{ color: minScore >= 60 ? "#22c55e" : minScore >= 40 ? "#f59e0b" : minScore > 0 ? "#9ca3af" : "rgba(255,255,255,0.3)", fontWeight: 700 }}>
                     {minScore === 0 ? "Off" : minScore >= 60 ? "High" : minScore >= 40 ? "Medium" : "Low"}
                   </span>
@@ -2060,7 +2060,7 @@ export default function App() {
               className="scan-button"
               style={loading ? { background: "var(--bg-secondary)", color: "var(--text-muted)", cursor: "not-allowed", transform: "none", boxShadow: "none" } : undefined}
             >
-              {loading ? "⟳  Searching..." : "▶  Scan for listings"}
+              {loading ? "⟳  Searching..." : "▶  Search Homes"}
             </button>
             <button
               onClick={handleSave}
@@ -2231,7 +2231,7 @@ export default function App() {
                       color: "#4ade80", fontSize: "11px", fontFamily: "monospace",
                     }}>
                       <span>✨</span>
-                      <span><strong>{newCount}</strong> new listing{newCount !== 1 ? "s" : ""} since your last visit</span>
+                      <span><strong>{newCount}</strong> new home{newCount !== 1 ? "s" : ""} since your last visit</span>
                     </div>
                   )}
                   {meta?.localityExpanded?.length > 1 && (
@@ -2255,7 +2255,7 @@ export default function App() {
                   <div className="results-header" style={{ marginBottom: "14px", paddingBottom: "10px", borderBottom: "1px solid var(--border)" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
                       <span className="results-count" style={{ color: "#f5a623", fontSize: "13px" }}>
-                        {sorted.length} listing{sorted.length !== 1 ? "s" : ""}
+                        {sorted.length} home{sorted.length !== 1 ? "s" : ""} found
                       </span>
                       {multiSource && (
                         <span style={{ color: "#555", fontSize: "10px", fontFamily: "monospace" }}>
