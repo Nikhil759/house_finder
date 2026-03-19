@@ -1171,17 +1171,8 @@ def search():
             if (p.get("locality") or "").lower() in target_set
         ]
     elif area:
-        area_lower = area.lower()
-        all_posts = [
-            p for p in all_posts
-            if area_lower in (
-                (p.get("title") or "") + " " +
-                (p.get("selftext") or "") + " " +
-                (p.get("body") or "") + " " +
-                (p.get("locality") or "") + " " +
-                (p.get("address") or "")
-            ).lower()
-        ]
+        # Unrecognised locality — return no results so the "Did you mean?" banner is the only output
+        all_posts = []
 
     # ── Keyword filter (applied regardless of DB or live) ──
     if keywords and all_posts:
