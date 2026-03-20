@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Analytics } from "@vercel/analytics/react";
 import { ThemeProvider } from "./ThemeContext";
 import LandingPage from "./LandingPage";
 import App from "./App";
@@ -25,6 +26,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         </Routes>
         <InstallBanner />
       </BrowserRouter>
+      <Analytics />
     </ThemeProvider>
   </React.StrictMode>
 );
