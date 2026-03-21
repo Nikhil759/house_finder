@@ -1,7 +1,11 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useTheme } from "../ThemeContext";
 import { usePWAInstall } from "../hooks/usePWAInstall";
+import { AuthButton } from "./AuthButton";
+import { useAuth } from "../hooks/useAuth";
+import { useSavedSearches } from "../hooks/useSavedSearches";
+import { useNewListings } from "../hooks/useNewListings";
 
 const SunIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -40,10 +44,48 @@ const RadarLogo = () => (
  *   showAppCta — show an "Open App →" button linking to /app (for landing page)
  *   transparent — no background / border (for overlay on hero images)
  */
+function NotificationBell({ count, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      title="New listings for you"
+      className="shared-nav-theme-btn"
+      style={{ position: 'relative' }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = '#f5a623'; e.currentTarget.style.color = '#f5a623'; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.color = ''; }}
+    >
+      <i className={count > 0 ? 'fa-solid fa-bell' : 'fa-regular fa-bell'} style={{ fontSize: '14px' }} />
+      {count > 0 && (
+        <span style={{
+          position: 'absolute',
+          top: '-5px',
+          right: '-5px',
+          background: '#f5a623',
+          color: '#000',
+          borderRadius: '10px',
+          fontSize: '9px',
+          fontWeight: '700',
+          padding: '1px 5px',
+          minWidth: '15px',
+          textAlign: 'center',
+          lineHeight: '15px',
+          pointerEvents: 'none',
+        }}>
+          {count > 99 ? '99+' : count}
+        </span>
+      )}
+    </button>
+  );
+}
+
 export default function Navbar({ subtitle, showAppCta = false, transparent = false }) {
   const { theme, toggleTheme } = useTheme();
   const { canInstall, isIOS, triggerInstall } = usePWAInstall();
   const [showIOSTip, setShowIOSTip] = useState(false);
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { savedSearches } = useSavedSearches(user);
+  const { totalCount } = useNewListings(user, savedSearches);
 
   return (
     <>
@@ -243,6 +285,11 @@ export default function Navbar({ subtitle, showAppCta = false, transparent = fal
         @media (max-width: 600px) {
           .shared-nav { padding: 12px 16px; }
           .shared-nav-sub { display: none; }
+          .shared-nav-health { display: none; }
+          .shared-nav-install { display: none; }
+          .shared-nav-cta { display: none; }
+          .auth-user-name { display: none; }
+          .auth-sign-out { display: none; }
         }
       `}</style>
 
@@ -297,6 +344,12 @@ export default function Navbar({ subtitle, showAppCta = false, transparent = fal
               Install
             </button>
           )}
+          {user && (
+            <NotificationBell
+              count={totalCount}
+              onClick={() => navigate('/new')}
+            />
+          )}
           <Link to="/health" className="shared-nav-health" title="System health">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
@@ -305,6 +358,7 @@ export default function Navbar({ subtitle, showAppCta = false, transparent = fal
           <button className="shared-nav-theme-btn" onClick={toggleTheme} aria-label="Toggle theme">
             {theme === "dark" ? <SunIcon /> : <MoonIcon />}
           </button>
+          <AuthButton />
         </div>
       </nav>
     </>

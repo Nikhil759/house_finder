@@ -1,0 +1,49 @@
+/* ── CSS custom properties ─────────────────────────────────────────────────── */
+:root, [data-theme="dark"] {
+  --bg-primary:    #0d0d14;
+  --bg-secondary:  #13131f;
+  --border:        rgba(255,255,255,0.08);
+  --border-accent: rgba(245,166,35,0.2);
+  --input-bg:      rgba(255,255,255,0.05);
+  --input-border:  #2a2a3a;
+  --input-text:    #e8e4d8;
+  --text-primary:  #e8e4d8;
+  --text-secondary:#888;
+  --text-muted:    #444;
+  --bg-card:       #13131f;
+  --pill-bg:       rgba(255,255,255,0.06);
+  --select-bg:     #0d0d14;
+}
+
+[data-theme="light"] {
+  --bg-primary:    #f6f8fa;
+  --bg-secondary:  #ffffff;
+  --border:        #e5e7eb;
+  --border-accent: rgba(245,166,35,0.3);
+  --input-bg:      #ffffff;
+  --input-border:  #d1d5db;
+  --input-text:    #111827;
+  --text-primary:  #111827;
+  --text-secondary:#374151;
+  --text-muted:    #6b7280;
+  --bg-card:       #ffffff;
+  --pill-bg:       rgba(0,0,0,0.05);
+  --select-bg:     #ffffff;
+}
+
+/* ── Global ─────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { overflow-x: hidden; }
+body { transition: background 0.25s ease, color 0.25s ease; }
+
+/* ── Page wrapper ───────────────────────────────────────────────────────────── */
+.app-page {
+  min-height: 100vh;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  position: relative;
+}
+
+[data-theme="dark"]  .app-page { background-color: #0d0d14; }
+[data-theme="light"] .app-page { background-color: #f6f8fa; color: #111827; }

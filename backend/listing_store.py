@@ -196,6 +196,7 @@ def query_listings(
     budget=None,
     limit=50,
     include_expired=False,
+    since_utc=None,
 ):
     """
     Query listings from the DB.
@@ -235,6 +236,10 @@ def query_listings(
                 params.append(budget_val)
             except ValueError:
                 pass
+
+        if since_utc is not None:
+            conditions.append(f"created_utc > {ph}")
+            params.append(since_utc)
 
         where = " AND ".join(conditions) if conditions else "1=1"
         sql = f"""

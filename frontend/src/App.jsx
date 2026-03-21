@@ -4,6 +4,9 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useTheme } from "./ThemeContext";
 import { BackgroundPattern } from "./components/BackgroundPattern";
 import Navbar from "./components/Navbar";
+import { useAuth } from "./hooks/useAuth";
+import { useSavedSearches } from "./hooks/useSavedSearches";
+import { supabase } from "./lib/supabase";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 const SUBREDDITS = ["r/bangalore", "r/bengaluru", "r/indianrealestate", "r/bangalorerentals", "r/FlatandFlatmatesBLR", "r/FlatmatesinBangalore"];
@@ -1354,14 +1357,7 @@ const SORT_OPTIONS = [
   { value: "upvotes",  label: "Most upvoted"  },
 ];
 
-const LS_KEY         = "savedSearches";
 const LAST_VISIT_KEY = "lastVisit";
-const MAX_SAVED      = 10;
-
-function loadSaved() {
-  try { return JSON.parse(localStorage.getItem(LS_KEY) || "[]"); }
-  catch { return []; }
-}
 
 function loadFromLS(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
@@ -1599,9 +1595,11 @@ export default function App() {
   const [redditWarning,  setRedditWarning]  = useState(false);
   const [meta,           setMeta]           = useState(null);
   const [searched,       setSearched]       = useState(false);
-  const [savedSearches,  setSavedSearches]  = useState(loadSaved);
+  const { user }                            = useAuth();
+  const { savedSearches, saveSearch, deleteSearch, updateLastRun } = useSavedSearches(user);
   const [savedPanelOpen, setSavedPanelOpen] = useState(false);
   const [justSaved,      setJustSaved]      = useState(false);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [lastVisit]                         = useState(loadLastVisit);
   const [savedListings,  setSavedListings]  = useState(() => loadFromLS("savedListings", []));
   const [hiddenPosts,    setHiddenPosts]    = useState(() => new Set(loadFromLS("hiddenPosts", [])));
@@ -1630,6 +1628,23 @@ export default function App() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Load default preferences for logged-in users and pre-fill empty fields
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("user_preferences")
+      .select("*")
+      .eq("user_id", user.id)
+      .single()
+      .then(({ data }) => {
+        if (!data) return;
+        if (data.default_location && !area) setArea(data.default_location);
+        if (data.default_bhk      && bhk === "any") setBhk(data.default_bhk);
+        if (data.default_budget   && !budget) setBudget(data.default_budget.toString());
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -1711,33 +1726,49 @@ export default function App() {
 
   const handleSearch = () => doSearch({ area, bhk, budget, keywords, sort: sortBy, minScore });
 
-  const handleSave = () => {
-    const entry = {
-      id:      Date.now().toString(),
-      label:   generateLabel({ bhk, area, budget, keywords }),
-      bhk, area, budget, keywords,
-      savedAt: Date.now(),
-    };
-    const updated = [entry, ...savedSearches].slice(0, MAX_SAVED);
-    setSavedSearches(updated);
-    localStorage.setItem(LS_KEY, JSON.stringify(updated));
+  const handleSave = async () => {
+    if (!user) {
+      setShowLoginPrompt(true);
+      setTimeout(() => setShowLoginPrompt(false), 3000);
+    }
+    await saveSearch({
+      location: area,
+      bhk,
+      budget,
+      keywords,
+      sources: Object.entries(sources).filter(([, on]) => on).map(([id]) => id),
+      minQuality: minScore,
+    });
     setSavedPanelOpen(true);
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 1500);
   };
 
-  const handleDeleteSaved = (id) => {
-    const updated = savedSearches.filter(s => s.id !== id);
-    setSavedSearches(updated);
-    localStorage.setItem(LS_KEY, JSON.stringify(updated));
+  const handleDeleteSaved = async (id) => {
+    await deleteSearch(id);
   };
 
-  const handleRunSaved = (s) => {
-    setArea(s.area || "");
+  const handleRunSaved = async (s) => {
+    setArea(s.location || "");
     setBhk(s.bhk || "any");
-    setBudget(s.budget || "");
+    setBudget(s.budget?.toString() || "");
     setKeywords(s.keywords || "");
-    doSearch({ area: s.area || "", bhk: s.bhk || "any", budget: s.budget || "", keywords: s.keywords || "" });
+    if (s.sources) {
+      const srcMap = { reddit: false, telegram: false, nobroker: false, housing: false };
+      s.sources.forEach(src => { if (src in srcMap) srcMap[src] = true; });
+      setSources(srcMap);
+    }
+    if (s.min_quality != null) setMinScore(s.min_quality);
+    await updateLastRun(s.id);
+    doSearch({
+      area: s.location || "",
+      bhk: s.bhk || "any",
+      budget: s.budget?.toString() || "",
+      keywords: s.keywords || "",
+      sources: s.sources
+        ? Object.fromEntries((s.sources).map(src => [src, true]))
+        : sources,
+    });
   };
 
   const inputStyle = {
@@ -1801,10 +1832,10 @@ export default function App() {
                       flex: 1, color: "#c8c4bc", fontSize: "11px",
                       fontFamily: "monospace", minWidth: "120px",
                     }}>
-                      {s.label}
+                      {s.name}
                     </span>
                     <span style={{ color: "#3a3a4a", fontSize: "9px", fontFamily: "monospace" }}>
-                      {new Date(s.savedAt).toLocaleDateString()}
+                      {new Date(s.created_at).toLocaleDateString()}
                     </span>
                     <button
                       onClick={() => { handleRunSaved(s); setSavedPanelOpen(false); }}
@@ -2053,33 +2084,47 @@ export default function App() {
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button
-              onClick={handleSearch}
-              disabled={loading}
-              className="scan-button"
-              style={loading ? { background: "var(--bg-secondary)", color: "var(--text-muted)", cursor: "not-allowed", transform: "none", boxShadow: "none" } : undefined}
-            >
-              {loading ? "⟳  Searching..." : "▶  Search Homes"}
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={loading}
-              title="Save this search"
-              className="save-search-btn"
-              style={{
-                padding: "13px 18px",
-                background: justSaved ? "rgba(74,222,128,0.15)" : "rgba(255,255,255,0.06)",
-                color: justSaved ? "#4ade80" : "#f5a623",
-                border: `1px solid ${justSaved ? "rgba(74,222,128,0.4)" : "rgba(245,166,35,0.35)"}`,
-                borderRadius: "6px",
-                fontSize: "14px", fontFamily: "monospace",
-                cursor: loading ? "not-allowed" : "pointer",
-                transition: "all 0.2s", flexShrink: 0,
-              }}
-            >
-              {justSaved ? "✓" : "★"}
-            </button>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                onClick={handleSearch}
+                disabled={loading}
+                className="scan-button"
+                style={loading ? { background: "var(--bg-secondary)", color: "var(--text-muted)", cursor: "not-allowed", transform: "none", boxShadow: "none" } : undefined}
+              >
+                {loading ? "⟳  Searching..." : "▶  Search Homes"}
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={loading}
+                title="Save this search"
+                className="save-search-btn"
+                style={{
+                  padding: "13px 18px",
+                  background: justSaved ? "rgba(74,222,128,0.15)" : "rgba(255,255,255,0.06)",
+                  color: justSaved ? "#4ade80" : "#f5a623",
+                  border: `1px solid ${justSaved ? "rgba(74,222,128,0.4)" : "rgba(245,166,35,0.35)"}`,
+                  borderRadius: "6px",
+                  fontSize: "14px", fontFamily: "monospace",
+                  cursor: loading ? "not-allowed" : "pointer",
+                  transition: "all 0.2s", flexShrink: 0,
+                }}
+              >
+                {justSaved ? "✓" : "★"}
+              </button>
+            </div>
+            {showLoginPrompt && (
+              <div style={{
+                fontSize: "12px",
+                color: "var(--text-secondary)",
+                background: "var(--bg-secondary)",
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                padding: "8px 12px",
+              }}>
+                💡 Sign in to sync saved searches across devices
+              </div>
+            )}
           </div>
         </div>
 

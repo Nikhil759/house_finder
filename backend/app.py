@@ -1220,6 +1220,80 @@ def search():
     })
 
 
+@app.route("/api/search/new")
+def search_new():
+    """Return listings newer than 'since' (ISO8601) matching saved-search params."""
+    from datetime import datetime
+
+    location      = request.args.get("location", "").strip()
+    bhk           = request.args.get("bhk", "any").strip()
+    budget        = request.args.get("budget", "").strip()
+    keywords      = request.args.get("keywords", "").strip()
+    sources_param = request.args.get("sources", "telegram,nobroker,housing").strip()
+    since         = request.args.get("since", "").strip()
+    limit         = min(int(request.args.get("limit", 20)), 50)
+
+    if not since:
+        return jsonify({"listings": [], "count": 0})
+
+    try:
+        # Normalise Supabase ISO8601 (ends with +00:00 or Z)
+        since_norm = since.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(since_norm)
+        since_utc = dt.timestamp()
+    except Exception as exc:
+        logger.warning("search/new: invalid since param %r — %s", since, exc)
+        return jsonify({"listings": [], "count": 0, "error": "Invalid since param"})
+
+    source_list = [s.strip() for s in sources_param.split(",") if s.strip()]
+
+    canonical_area    = normalize_locality(location) if location else None
+    target_localities = expand_locality(location) if canonical_area else []
+    target_set        = {loc.lower() for loc in target_localities}
+    db_localities     = target_localities if canonical_area else None
+
+    all_posts = []
+    for src in source_list:
+        posts = query_listings(
+            localities=db_localities,
+            sources=[src],
+            bhk=bhk,
+            budget=budget,
+            limit=limit,
+            since_utc=since_utc,
+        )
+        all_posts += posts
+
+    # Locality filter
+    if canonical_area and target_set:
+        all_posts = [p for p in all_posts if (p.get("locality") or "").lower() in target_set]
+    elif location:
+        all_posts = []
+
+    # Keyword filter
+    if keywords and all_posts:
+        kw_lower = keywords.lower().split()
+        all_posts = [
+            p for p in all_posts
+            if all(
+                kw in (
+                    (p.get("title") or "") + " " +
+                    (p.get("selftext") or "") + " " +
+                    (p.get("body") or "")
+                ).lower()
+                for kw in kw_lower
+            )
+        ]
+
+    for post in all_posts:
+        post["quality_score"] = score_post(post)
+
+    all_posts = [p for p in all_posts if p["quality_score"] >= 20]
+    all_posts.sort(key=lambda x: x["quality_score"], reverse=True)
+
+    return jsonify({"listings": all_posts, "count": len(all_posts)})
+
+
 @app.route("/api/alerts", methods=["POST"])
 def create_alert():
     body = request.get_json(silent=True) or {}
