@@ -2172,13 +2172,25 @@ export default function App() {
         {/* Loading */}
         {loading && (
           <div style={{ textAlign: "center", padding: "50px 0" }}>
+            <div style={
+              theme === "light"
+                ? {
+                    display: "inline-block", width: "28px", height: "28px",
+                    border: "2px solid rgba(0,0,0,0.12)",
+                    borderTopColor: "#111827",
+                    borderRadius: "50%", animation: "spin 0.8s linear infinite", marginBottom: "14px",
+                  }
+                : {
+                    display: "inline-block", width: "28px", height: "28px",
+                    border: "2px solid #1a1a24", borderTopColor: "#f5a623",
+                    borderRadius: "50%", animation: "spin 0.8s linear infinite", marginBottom: "14px",
+                  }
+            } />
             <div style={{
-              display: "inline-block", width: "28px", height: "28px",
-              border: "2px solid #1a1a24", borderTopColor: "#f5a623",
-              borderRadius: "50%", animation: "spin 0.8s linear infinite", marginBottom: "14px",
-            }} />
-            <div style={{ color: "#444", fontSize: "11px" }}>
-              Searching Reddit{area ? ` for "${area}"` : " for Bangalore listings"}...
+              color: theme === "light" ? "rgba(17,24,39,0.65)" : "#444",
+              fontSize: "11px",
+            }}>
+              Scanning listings{area ? ` for "${area}"` : " across Bangalore"}…
             </div>
           </div>
         )}
