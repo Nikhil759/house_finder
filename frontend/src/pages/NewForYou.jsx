@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTheme } from '../ThemeContext'
 import { useAuth } from '../hooks/useAuth'
@@ -147,14 +146,6 @@ export default function NewForYou() {
   const { savedSearches } = useSavedSearches(user)
   const { newListings, totalCount, loading, markAllSeen } =
     useNewListings(user, savedSearches)
-
-  // Auto-mark all seen after 5 seconds on this page
-  useEffect(() => {
-    if (Object.keys(newListings).length === 0) return
-    const timer = setTimeout(markAllSeen, 5000)
-    return () => clearTimeout(timer)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newListings])
 
   if (!user) {
     return (
