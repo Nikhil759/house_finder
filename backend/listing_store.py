@@ -367,3 +367,228 @@ def total_listing_count():
         return 0
     finally:
         conn.close()
+
+
+def _row_to_dict(row, columns):
+    """Convert a DB row (tuple or sqlite3.Row) to a dict using column names."""
+    if isinstance(row, dict):
+        return row
+    return dict(zip(columns, row))
+
+
+def get_insights_data():
+    """
+    Compute market insight aggregations from the listings table.
+    Returns a dict with overall stats, per-locality/BHK breakdowns, etc.
+    Compatible with both SQLite (dev) and PostgreSQL (production).
+    'Active' listings are those where expires_at > now (unix timestamp).
+    """
+    conn, is_pg = _get_conn()
+    ph = "%s" if is_pg else "?"
+    now = time.time()
+    day_ago = now - 86400
+
+    # BHK filter: '2 BHK' match — portable across both DBs
+    bhk_2_filter = (
+        "bhk ILIKE '%2%'" if is_pg
+        else "LOWER(bhk) LIKE '%2%'"
+    )
+
+    try:
+        cur = conn.cursor()
+
+        # ── 1. Overall stats ──────────────────────────────────────────────
+        cur.execute(f"""
+            SELECT
+                COUNT(*)              AS total_listings,
+                COUNT(DISTINCT locality) AS total_localities,
+                ROUND(AVG(price))     AS overall_avg_price,
+                MIN(price)            AS overall_min_price,
+                MAX(price)            AS overall_max_price
+            FROM listings
+            WHERE price IS NOT NULL
+            AND   price > 0
+            AND   locality IS NOT NULL
+            AND   expires_at > {ph}
+        """, (now,))
+        row = cur.fetchone()
+        cols = ["total_listings", "total_localities",
+                "overall_avg_price", "overall_min_price", "overall_max_price"]
+        overall = _row_to_dict(row, cols) if row else {}
+        # Coerce to plain Python ints for JSON serialisation
+        for k in cols:
+            if overall.get(k) is not None:
+                overall[k] = int(overall[k])
+
+        # ── 2. Average price by locality + BHK ───────────────────────────
+        cur.execute(f"""
+            SELECT
+                TRIM(locality)    AS locality,
+                bhk,
+                ROUND(AVG(price)) AS avg_price,
+                MIN(price)        AS min_price,
+                MAX(price)        AS max_price,
+                COUNT(*)          AS listing_count
+            FROM listings
+            WHERE price IS NOT NULL
+            AND   price > 0
+            AND   locality IS NOT NULL
+            AND   bhk IS NOT NULL
+            AND   expires_at > {ph}
+            GROUP BY TRIM(locality), bhk
+            HAVING COUNT(*) >= 2
+            ORDER BY TRIM(locality), bhk
+        """, (now,))
+        rows = cur.fetchall()
+        locality_cols = ["locality", "bhk", "avg_price",
+                         "min_price", "max_price", "listing_count"]
+        locality_bhk_data = []
+        for r in rows:
+            d = _row_to_dict(r, locality_cols)
+            for k in ("avg_price", "min_price", "max_price", "listing_count"):
+                if d.get(k) is not None:
+                    d[k] = int(d[k])
+            locality_bhk_data.append(d)
+
+        # ── 3. Listing count per locality (top 20) ────────────────────────
+        cur.execute(f"""
+            SELECT
+                TRIM(locality)    AS locality,
+                COUNT(*)          AS total_listings,
+                ROUND(AVG(price)) AS avg_price,
+                COUNT(CASE WHEN source = 'nobroker'  THEN 1 END) AS nobroker_count,
+                COUNT(CASE WHEN source = 'housing'   THEN 1 END) AS housing_count,
+                COUNT(CASE WHEN source = 'telegram'  THEN 1 END) AS telegram_count,
+                COUNT(CASE WHEN source = 'reddit'    THEN 1 END) AS reddit_count
+            FROM listings
+            WHERE locality IS NOT NULL
+            AND   expires_at > {ph}
+            GROUP BY TRIM(locality)
+            HAVING COUNT(*) >= 3
+            ORDER BY COUNT(*) DESC
+            LIMIT 20
+        """, (now,))
+        rows = cur.fetchall()
+        loc_sum_cols = ["locality", "total_listings", "avg_price",
+                        "nobroker_count", "housing_count",
+                        "telegram_count", "reddit_count"]
+        locality_summary = []
+        for r in rows:
+            d = _row_to_dict(r, loc_sum_cols)
+            for k in loc_sum_cols[1:]:
+                if d.get(k) is not None:
+                    d[k] = int(d[k])
+            locality_summary.append(d)
+
+        # ── 4. Citywide price distribution by BHK ────────────────────────
+        cur.execute(f"""
+            SELECT
+                bhk,
+                ROUND(AVG(price)) AS avg_price,
+                MIN(price)        AS min_price,
+                MAX(price)        AS max_price,
+                COUNT(*)          AS listing_count
+            FROM listings
+            WHERE price IS NOT NULL
+            AND   price > 0
+            AND   bhk IS NOT NULL
+            AND   expires_at > {ph}
+            GROUP BY bhk
+            HAVING COUNT(*) >= 3
+            ORDER BY bhk
+        """, (now,))
+        rows = cur.fetchall()
+        bhk_cols = ["bhk", "avg_price", "min_price", "max_price", "listing_count"]
+        bhk_distribution = []
+        for r in rows:
+            d = _row_to_dict(r, bhk_cols)
+            for k in bhk_cols[1:]:
+                if d.get(k) is not None:
+                    d[k] = int(d[k])
+            bhk_distribution.append(d)
+
+        # ── 5. Source breakdown ───────────────────────────────────────────
+        cur.execute(f"""
+            SELECT
+                source,
+                COUNT(*)          AS listing_count,
+                ROUND(AVG(price)) AS avg_price
+            FROM listings
+            WHERE expires_at > {ph}
+            GROUP BY source
+            ORDER BY COUNT(*) DESC
+        """, (now,))
+        rows = cur.fetchall()
+        src_cols = ["source", "listing_count", "avg_price"]
+        source_breakdown = []
+        for r in rows:
+            d = _row_to_dict(r, src_cols)
+            for k in ("listing_count", "avg_price"):
+                if d.get(k) is not None:
+                    d[k] = int(d[k])
+            source_breakdown.append(d)
+
+        # ── 6. Best value localities (cheapest avg 2BHK) ─────────────────
+        cur.execute(f"""
+            SELECT
+                TRIM(locality)    AS locality,
+                ROUND(AVG(price)) AS avg_price,
+                COUNT(*)          AS listing_count
+            FROM listings
+            WHERE price IS NOT NULL
+            AND   price > 0
+            AND   ({bhk_2_filter})
+            AND   locality IS NOT NULL
+            AND   expires_at > {ph}
+            GROUP BY TRIM(locality)
+            HAVING COUNT(*) >= 2
+            ORDER BY AVG(price) ASC
+            LIMIT 5
+        """, (now,))
+        rows = cur.fetchall()
+        bv_cols = ["locality", "avg_price", "listing_count"]
+        best_value = []
+        for r in rows:
+            d = _row_to_dict(r, bv_cols)
+            for k in ("avg_price", "listing_count"):
+                if d.get(k) is not None:
+                    d[k] = int(d[k])
+            best_value.append(d)
+
+        # ── 7. Most active localities in last 24 h ────────────────────────
+        cur.execute(f"""
+            SELECT
+                TRIM(locality) AS locality,
+                COUNT(*)       AS new_listings
+            FROM listings
+            WHERE created_utc > {ph}
+            AND   locality IS NOT NULL
+            AND   expires_at > {ph}
+            GROUP BY TRIM(locality)
+            ORDER BY COUNT(*) DESC
+            LIMIT 5
+        """, (day_ago, now))
+        rows = cur.fetchall()
+        ma_cols = ["locality", "new_listings"]
+        most_active = []
+        for r in rows:
+            d = _row_to_dict(r, ma_cols)
+            if d.get("new_listings") is not None:
+                d["new_listings"] = int(d["new_listings"])
+            most_active.append(d)
+
+        return {
+            "overall":               overall,
+            "locality_bhk":          locality_bhk_data,
+            "locality_summary":      locality_summary,
+            "bhk_distribution":      bhk_distribution,
+            "source_breakdown":      source_breakdown,
+            "best_value_localities": best_value,
+            "most_active_localities": most_active,
+        }
+
+    except Exception as e:
+        logger.error("get_insights_data failed: %s", e)
+        raise
+    finally:
+        conn.close()

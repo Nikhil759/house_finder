@@ -8,6 +8,7 @@ import App from "./App";
 import HealthPage from "./HealthPage";
 import NewForYou from "./pages/NewForYou";
 import Profile from "./pages/Profile";
+import Insights from "./pages/Insights";
 import InstallBanner from "./components/InstallBanner";
 
 // Register service worker (enables Android PWA install prompt)
@@ -27,6 +28,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="/new" element={<NewForYou />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/health" element={<HealthPage />} />
+          <Route path="/insights" element={<Insights />} />
         </Routes>
         <InstallBanner />
       </BrowserRouter>

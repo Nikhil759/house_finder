@@ -41,6 +41,7 @@ from listing_store import (
     get_locality_counts,
     purge_old_listings,
     total_listing_count,
+    get_insights_data,
 )
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
@@ -1404,6 +1405,37 @@ def localities_endpoint():
         canonical = normalize_locality(area)
         response["canonical"] = canonical
     return jsonify(response)
+
+
+# ─────────────────────────────────────────────
+# Market insights — cached for 30 minutes
+# ─────────────────────────────────────────────
+_insights_cache = None
+_insights_cache_time: float = 0.0
+INSIGHTS_CACHE_TTL = 1800  # 30 minutes
+
+
+@app.route("/api/insights")
+def get_insights():
+    """Market stats computed from the listings DB, cached for 30 minutes."""
+    from datetime import datetime
+
+    global _insights_cache, _insights_cache_time
+
+    if _insights_cache and time.time() - _insights_cache_time < INSIGHTS_CACHE_TTL:
+        return jsonify(_insights_cache)
+
+    try:
+        result = get_insights_data()
+        result["generated_at"] = datetime.now().isoformat()
+
+        _insights_cache = result
+        _insights_cache_time = time.time()
+
+        return jsonify(result)
+    except Exception as e:
+        logger.error("Insights endpoint failed: %s", e)
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
