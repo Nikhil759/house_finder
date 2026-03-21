@@ -47,3 +47,68 @@ body { transition: background 0.25s ease, color 0.25s ease; }
 
 [data-theme="dark"]  .app-page { background-color: #0d0d14; }
 [data-theme="light"] .app-page { background-color: #f6f8fa; color: #111827; }
+
+/* Mobile bottom nav - hidden on desktop */
+.mobile-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-bottom-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    border-top: 1px solid var(--border);
+    padding: 8px 0 max(12px, env(safe-area-inset-bottom));
+  }
+
+  [data-theme="dark"] .mobile-bottom-nav {
+    background: rgba(13, 13, 20, 0.95);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  [data-theme="light"] .mobile-bottom-nav {
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  /* Match landing header blend in light mode on / */
+  [data-theme="light"] .mobile-bottom-nav.mobile-bottom-nav-landing {
+    background: linear-gradient(to bottom, #f8deb0 0%, #f7e3be 100%);
+    border-top: 1px solid rgba(157, 95, 18, 0.18);
+  }
+
+  .mobile-nav-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 4px 0;
+    gap: 2px;
+    transition: color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-nav-tab:active {
+    transform: scale(0.9);
+    transition: transform 0.1s;
+  }
+
+  /* Push page content above the fixed nav */
+  .app-page {
+    padding-bottom: 72px;
+  }
+}

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTheme } from "../ThemeContext";
 import { usePWAInstall } from "../hooks/usePWAInstall";
 import { AuthButton } from "./AuthButton";
@@ -76,12 +76,15 @@ function NotificationBell({ count, onClick }) {
   );
 }
 
-export default function Navbar({ subtitle, showAppCta = false, transparent = false, landingLightBlend = false, newCount = 0 }) {
+export default function Navbar({ subtitle, showAppCta = true, transparent = false, landingLightBlend = false, newCount = 0 }) {
   const { theme, toggleTheme } = useTheme();
   const { canInstall, isIOS, triggerInstall } = usePWAInstall();
   const [showIOSTip, setShowIOSTip] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
+  const isSearchListingsPage = location.pathname === "/app";
+  const shouldShowSearchCta = showAppCta && !isSearchListingsPage;
 
   return (
     <>
@@ -341,7 +344,7 @@ export default function Navbar({ subtitle, showAppCta = false, transparent = fal
 
         <div className="shared-nav-right">
           {subtitle && <span className="shared-nav-sub">{subtitle}</span>}
-          {showAppCta && (
+          {shouldShowSearchCta && (
             <Link to="/app" className="shared-nav-cta" style={{ alignItems: "center", gap: 6 }}>
               Search listings
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

@@ -4,6 +4,7 @@ import { useTheme } from '../ThemeContext'
 import { useAuth } from '../hooks/useAuth'
 import { useSavedSearches } from '../hooks/useSavedSearches'
 import { BackgroundPattern } from '../components/BackgroundPattern'
+import { MobileNav } from '../components/MobileNav'
 import Navbar from '../components/Navbar'
 import { supabase } from '../lib/supabase'
 import '../global.css'
@@ -521,6 +522,7 @@ export default function Profile() {
           </div>
         </div>
       </div>
+      <MobileNav />
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { useTheme } from "./ThemeContext";
 import cityscapeDark from "./assets/cityscape.png";
 import cityscapeLight from "./assets/cityscape_day.jpg";
 import Navbar from "./components/Navbar";
+import { MobileNav } from "./components/MobileNav";
 import { usePWAInstall } from "./hooks/usePWAInstall";
 
 export default function LandingPage() {
@@ -284,6 +285,8 @@ export default function LandingPage() {
           Open NestIQ →
         </button>
       </section>
+
+      <MobileNav />
 
       <style>{`
         * {
@@ -892,6 +895,18 @@ export default function LandingPage() {
         [data-theme="light"] .lp-step-arrow {
           color: rgba(0, 0, 0, 0.2);
         }
+        [data-theme="light"] .lp-how-it-works,
+        [data-theme="light"] .lp-scoring {
+          position: relative;
+          overflow: hidden;
+        }
+        [data-theme="light"] .lp-how-it-works {
+          background:
+            radial-gradient(1200px 300px at 50% -10%, rgba(245,166,35,0.12), transparent 60%),
+            linear-gradient(180deg, #f9fbff 0%, #f3f6fb 100%);
+          border-top: 1px solid rgba(0,0,0,0.04);
+          border-bottom: 1px solid rgba(0,0,0,0.04);
+        }
         [data-theme="light"] .lp-cta-section {
           background: #eef0f4;
           border-color: rgba(0, 0, 0, 0.06);
@@ -1055,8 +1070,11 @@ export default function LandingPage() {
 
         /* Light mode overrides for scoring section */
         [data-theme="light"] .lp-scoring {
-          background: #f6f8fa;
-          border-color: rgba(0,0,0,0.06);
+          background:
+            radial-gradient(900px 260px at 20% -20%, rgba(124,58,237,0.07), transparent 60%),
+            radial-gradient(900px 260px at 80% -20%, rgba(245,166,35,0.08), transparent 60%),
+            linear-gradient(180deg, #f6f9ff 0%, #eef3fb 100%);
+          border-top: 1px solid rgba(0,0,0,0.05);
         }
 
         [data-theme="light"] .lp-scoring-header h2 { color: #111827; }
@@ -1067,6 +1085,21 @@ export default function LandingPage() {
         [data-theme="light"] .lp-signal-divider    { background: rgba(0,0,0,0.07); }
         [data-theme="light"] .lp-scoring-note p    { color: rgba(0,0,0,0.35); }
         [data-theme="light"] .lp-score-example     { color: rgba(0,0,0,0.55); }
+        [data-theme="light"] .lp-how-it-works::after,
+        [data-theme="light"] .lp-scoring::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          background-image:
+            repeating-linear-gradient(
+              45deg,
+              rgba(17,24,39,0.02) 0,
+              rgba(17,24,39,0.02) 1px,
+              transparent 1px,
+              transparent 14px
+            );
+        }
 
         /* Responsive — stack columns on mobile */
         @media (max-width: 640px) {

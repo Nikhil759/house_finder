@@ -4,6 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useTheme } from "./ThemeContext";
 import { BackgroundPattern } from "./components/BackgroundPattern";
 import Navbar from "./components/Navbar";
+import { MobileNav } from "./components/MobileNav";
 import { useAuth } from "./hooks/useAuth";
 import { useSavedSearches } from "./hooks/useSavedSearches";
 import { useNewListings } from "./hooks/useNewListings";
@@ -2487,6 +2488,8 @@ export default function App() {
       )}
 
       </div>{/* end relative content wrapper */}
+
+      <MobileNav />
 
       <style>{`
         @keyframes spin    { to { transform: rotate(360deg); } }

@@ -5,6 +5,7 @@ import { useSavedSearches } from '../hooks/useSavedSearches'
 import { useNewListings } from '../hooks/useNewListings'
 import { AuthButton } from '../components/AuthButton'
 import { BackgroundPattern } from '../components/BackgroundPattern'
+import { MobileNav } from '../components/MobileNav'
 import Navbar from '../components/Navbar'
 import '../global.css'
 
@@ -372,6 +373,7 @@ export default function NewForYou() {
 
         </div>
       </div>
+      <MobileNav />
     </div>
   )
 }
