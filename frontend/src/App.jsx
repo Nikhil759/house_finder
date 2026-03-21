@@ -14,11 +14,24 @@ const API_BASE = import.meta.env.VITE_API_URL || "";
 const SUBREDDITS = ["r/bangalore", "r/bengaluru", "r/indianrealestate", "r/bangalorerentals", "r/FlatandFlatmatesBLR", "r/FlatmatesinBangalore"];
 
 const SOURCE_DEFS = [
-  { id: "reddit",   label: "Reddit",      icon: "🟠", color: "#ff4500" },
-  { id: "telegram", label: "Telegram",    icon: "✈️",  color: "#229ed9" },
-  { id: "nobroker", label: "NoBroker",    icon: "🔴", color: "#e63946" },
-  { id: "housing",  label: "Housing.com", icon: "🏠", color: "#7c3aed" },
+  { id: "reddit",   label: "Reddit",      iconClass: "fa-brands fa-reddit", color: "#ff4500" },
+  { id: "telegram", label: "Telegram",    iconClass: "fa-brands fa-telegram", color: "#229ed9" },
+  { id: "nobroker", label: "NoBroker",    iconClass: "fa-solid fa-building", color: "#e63946" },
+  { id: "housing",  label: "Housing.com", iconClass: "fa-solid fa-house", color: "#7c3aed" },
 ];
+
+/** True at max-width — show listing actions without relying on hover (touch / mobile). */
+function useNarrowScreen(maxWidth = 768) {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${maxWidth}px)`);
+    const sync = () => setNarrow(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, [maxWidth]);
+  return narrow;
+}
 
 const BANGALORE_AREAS = [
   "Indiranagar", "Whitefield", "Koramangala", "HSR Layout", "HSR",
@@ -183,6 +196,11 @@ function Pill({ icon, label, bg, color, extra }) {
   );
 }
 
+/** Font Awesome (see index.html) — use for pills/buttons instead of emoji */
+function FaIcon({ name, size = 10, style = {} }) {
+  return <i className={name} style={{ fontSize: size, lineHeight: 1, verticalAlign: "middle", ...style }} aria-hidden />;
+}
+
 
 /** Safely format a price value that may be an int, a "₹18,000" string, or null. */
 function formatPriceValue(price, priceFormatted) {
@@ -217,7 +235,7 @@ function ContactPill({ contact }) {
       fontSize: "10px", fontFamily: "monospace",
       padding: "3px 8px", borderRadius: "20px", whiteSpace: "nowrap",
     }}>
-      📞 {contact}
+      <FaIcon name="fa-solid fa-phone" size={9} /> {contact}
       <button
         onClick={copy}
         style={{
@@ -228,7 +246,7 @@ function ContactPill({ contact }) {
           transition: "background 0.2s",
         }}
       >
-        {copied ? "✓" : "Copy"}
+        {copied ? <FaIcon name="fa-solid fa-check" size={8} /> : "Copy"}
       </button>
     </span>
   );
@@ -247,7 +265,7 @@ function SourceBadge({ source }) {
       padding: "2px 7px", borderRadius: "5px",
       letterSpacing: "0.05em", flexShrink: 0,
     }}>
-      {def.icon} {def.label.toUpperCase()}
+      <FaIcon name={def.iconClass} size={9} /> {def.label.toUpperCase()}
     </span>
   );
 }
@@ -255,6 +273,7 @@ function SourceBadge({ source }) {
 function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) {
   const [expanded, setExpanded] = useState(false);
   const [hovered,  setHovered]  = useState(false);
+  const isNarrow = useNarrowScreen();
   const isTop           = index < 3;
   const isNewSinceVisit = post.created > lastVisit;
   const isTelegram      = post.source === "telegram";
@@ -283,7 +302,7 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
   const handleCopy = (e) => {
     stop(e);
     if (!displayContact) return;
-    navigator.clipboard.writeText(displayContact).then(() => onToast("📋 Number copied!"));
+    navigator.clipboard.writeText(displayContact).then(() => onToast("Number copied!"));
   };
   const handleOpen = (e) => {
     stop(e);
@@ -292,12 +311,12 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
   const handleSave = (e) => {
     stop(e);
     onSave(post);
-    onToast(isSaved ? "Removed from saved listings" : "💾 Listing saved!");
+    onToast(isSaved ? "Removed from saved listings" : "Listing saved!");
   };
   const handleHide = (e) => {
     stop(e);
     onHide(post.id);
-    onToast("🚫 Listing hidden");
+    onToast("Listing hidden");
   };
 
   const actionBtn = (icon, label, onClick, opts = {}) => (
@@ -327,7 +346,10 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
         e.currentTarget.style.color = opts.disabled ? "#333" : opts.active ? "#f5a623" : "#666";
       }}
     >
-      {icon} {label}
+      <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+        {icon}
+        <span>{label}</span>
+      </span>
     </button>
   );
 
@@ -422,25 +444,25 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
       {hasPills && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
           {displayBhk && (isNoBroker && post.area_sqft)
-            ? <Pill icon="🏠" label={`${displayBhk} · ${post.area_sqft} sqft`} bg="rgba(59,130,246,0.15)" color="#7eb8f7" />
-            : displayBhk && <Pill icon="🏠" label={displayBhk} bg="rgba(59,130,246,0.15)" color="#7eb8f7" />}
-          {displayLocality && <Pill icon="📍" label={displayLocality} bg="rgba(120,120,140,0.12)" color="#9a9ab0" />}
-          {displayPrice    && <Pill icon="💰" label={String(displayPrice)} bg="rgba(34,197,94,0.15)" color="#6ee09a" />}
-          {displayFurnished && <Pill icon="🛋️" label={displayFurnished} bg="rgba(168,85,247,0.15)" color="#c084fc" />}
+            ? <Pill icon={<FaIcon name="fa-solid fa-house" />} label={`${displayBhk} · ${post.area_sqft} sqft`} bg="rgba(59,130,246,0.15)" color="#7eb8f7" />
+            : displayBhk && <Pill icon={<FaIcon name="fa-solid fa-house" />} label={displayBhk} bg="rgba(59,130,246,0.15)" color="#7eb8f7" />}
+          {displayLocality && <Pill icon={<FaIcon name="fa-solid fa-location-dot" />} label={displayLocality} bg="rgba(120,120,140,0.12)" color="#9a9ab0" />}
+          {displayPrice    && <Pill icon={<FaIcon name="fa-solid fa-indian-rupee-sign" />} label={String(displayPrice)} bg="rgba(34,197,94,0.15)" color="#6ee09a" />}
+          {displayFurnished && <Pill icon={<FaIcon name="fa-solid fa-couch" />} label={displayFurnished} bg="rgba(168,85,247,0.15)" color="#c084fc" />}
           {isNoBroker && post.deposit_formatted && (
-            <Pill icon="🔒" label={`Deposit: ${post.deposit_formatted}`} bg="rgba(120,120,140,0.1)" color="#8a8a9a" />
+            <Pill icon={<FaIcon name="fa-solid fa-lock" />} label={`Deposit: ${post.deposit_formatted}`} bg="rgba(120,120,140,0.1)" color="#8a8a9a" />
           )}
           {isNoBroker && post.lease_type && post.lease_type !== "ANYONE" && (
-            <Pill icon="👤" label={post.lease_type.charAt(0) + post.lease_type.slice(1).toLowerCase()} bg="rgba(120,120,140,0.1)" color="#8a8a9a" />
+            <Pill icon={<FaIcon name="fa-solid fa-user" />} label={post.lease_type.charAt(0) + post.lease_type.slice(1).toLowerCase()} bg="rgba(120,120,140,0.1)" color="#8a8a9a" />
           )}
           {isTelegram && post.deposit_text && (
-            <Pill icon="🔒" label={`Deposit: ₹${post.deposit_text}`} bg="rgba(120,120,140,0.1)" color="#8a8a9a" />
+            <Pill icon={<FaIcon name="fa-solid fa-lock" />} label={`Deposit: ₹${post.deposit_text}`} bg="rgba(120,120,140,0.1)" color="#8a8a9a" />
           )}
           {isTelegram && post.no_brokerage && (
-            <Pill icon="✅" label="No Brokerage" bg="rgba(34,197,94,0.12)" color="#4ade80" />
+            <Pill icon={<FaIcon name="fa-solid fa-check" />} label="No Brokerage" bg="rgba(34,197,94,0.12)" color="#4ade80" />
           )}
           {isTelegram && post.is_flatmate && (
-            <Pill icon="🤝" label="Flatmate" bg="rgba(168,85,247,0.15)" color="#c084fc" />
+            <Pill icon={<FaIcon name="fa-solid fa-people-arrows" />} label="Flatmate" bg="rgba(168,85,247,0.15)" color="#c084fc" />
           )}
           {displayContact && <ContactPill contact={displayContact} />}
         </div>
@@ -486,8 +508,8 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
         ) : isNoBroker ? (
           <>
             {post.society && (
-              <span style={{ color: "#e63946", fontSize: "10px", fontFamily: "monospace", opacity: 0.8 }}>
-                🏢 {post.society}
+              <span style={{ color: "#e63946", fontSize: "10px", fontFamily: "monospace", opacity: 0.8, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                <FaIcon name="fa-solid fa-building" size={9} /> {post.society}
               </span>
             )}
             {post.owner_name && (
@@ -513,10 +535,10 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
                   color: "#6ee09a", fontSize: "10px", fontFamily: "monospace",
                   opacity: 0.85, background: "none", border: "none",
                   padding: 0, cursor: "pointer",
-                  display: "inline-flex", alignItems: "center", gap: "3px",
+                  display: "inline-flex", alignItems: "center", gap: "5px",
                 }}
               >
-                📍 View on Maps
+                <FaIcon name="fa-solid fa-map-location-dot" size={9} /> View on Maps
               </button>
             )}
           </>
@@ -537,8 +559,10 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
                 {post.flair}
               </span>
             )}
-            <span className="post-stats" style={{ color: "#666", fontSize: "10px", fontFamily: "monospace", marginLeft: "auto" }}>
-              ↑ {post.score} · 💬 {post.comments}
+            <span className="post-stats" style={{ color: "#666", fontSize: "10px", fontFamily: "monospace", marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              <FaIcon name="fa-solid fa-arrow-up" size={9} /> {post.score}
+              <span style={{ opacity: 0.8 }}>·</span>
+              <FaIcon name="fa-regular fa-comments" size={9} /> {post.comments}
             </span>
           </>
         )}
@@ -561,14 +585,18 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
               padding: "4px 0 0 0", opacity: 0.6,
             }}
           >
-            {expanded ? "▲ less" : "▼ more"}
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              <FaIcon name={expanded ? "fa-solid fa-chevron-up" : "fa-solid fa-chevron-down"} size={9} />
+              {expanded ? "less" : "more"}
+            </span>
           </button>
         </div>
       )}
 
-      {/* Quick actions bar — hover only */}
-      {hovered && (
+      {/* Quick actions — hover on desktop; always visible on narrow screens */}
+      {(hovered || isNarrow) && (
         <div
+          className="post-card-quick-actions"
           onClick={e => e.preventDefault()}
           style={{
             display: "flex", flexWrap: "wrap", gap: "6px",
@@ -590,7 +618,7 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
                 textDecoration: "none", whiteSpace: "nowrap",
               }}
             >
-              🏠 View on Housing.com
+              <FaIcon name="fa-solid fa-house" size={10} /> View on Housing.com
             </a>
           ) : isNoBroker ? (
             <a
@@ -606,10 +634,10 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
                 textDecoration: "none", whiteSpace: "nowrap",
               }}
             >
-              🔴 View on NoBroker
+              <FaIcon name="fa-solid fa-building" size={10} /> View on NoBroker
             </a>
           ) : (
-            actionBtn("🔗", isTelegram ? "Open in Telegram" : "Open Post", handleOpen)
+            actionBtn(<FaIcon name="fa-solid fa-arrow-up-right-from-square" />, isTelegram ? "Open in Telegram" : "Open Post", handleOpen)
           )}
           {isHousing ? (
             <a
@@ -625,7 +653,7 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
                 textDecoration: "none", whiteSpace: "nowrap",
               }}
             >
-              📞 Contact via Housing.com ↗
+              <FaIcon name="fa-solid fa-phone" size={10} /> Contact via Housing.com <FaIcon name="fa-solid fa-arrow-up-right-from-square" size={9} />
             </a>
           ) : isNoBroker ? (
             <a
@@ -641,14 +669,14 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
                 textDecoration: "none", whiteSpace: "nowrap",
               }}
             >
-              📞 Contact via NoBroker ↗
+              <FaIcon name="fa-solid fa-phone" size={10} /> Contact via NoBroker <FaIcon name="fa-solid fa-arrow-up-right-from-square" size={9} />
             </a>
           ) : isTelegram ? (
             displayContact
-              ? actionBtn("📋", "Copy Number", handleCopy)
-              : actionBtn("✈️", "View in Telegram", handleOpen)
+              ? actionBtn(<FaIcon name="fa-regular fa-copy" />, "Copy Number", handleCopy)
+              : actionBtn(<FaIcon name="fa-brands fa-telegram" />, "View in Telegram", handleOpen)
           ) : (
-            actionBtn("📋", displayContact ? "Copy Number" : "No Number", handleCopy, { disabled: !displayContact })
+            actionBtn(<FaIcon name="fa-regular fa-copy" />, displayContact ? "Copy Number" : "No Number", handleCopy, { disabled: !displayContact })
           )}
           {isTelegram && post.maps_url && (
             <button
@@ -661,11 +689,16 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
                 cursor: "pointer", whiteSpace: "nowrap",
               }}
             >
-              📍 Maps
+              <FaIcon name="fa-solid fa-map-location-dot" size={10} /> Maps
             </button>
           )}
-          {actionBtn(isSaved ? "💾" : "💾", isSaved ? "Saved ✓" : "Save", handleSave, { active: isSaved })}
-          {actionBtn("🚫", "Hide", handleHide)}
+          {actionBtn(
+            <FaIcon name={isSaved ? "fa-solid fa-bookmark" : "fa-regular fa-bookmark"} />,
+            isSaved ? "Saved" : "Save",
+            handleSave,
+            { active: isSaved },
+          )}
+          {actionBtn(<FaIcon name="fa-regular fa-eye-slash" />, "Hide", handleHide)}
         </div>
       )}
     </a>
@@ -715,6 +748,8 @@ function Pagination({ page, totalPages, onPage }) {
 // ─── PostTile ─────────────────────────────────────────────────────────────────
 function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
   const [hovered, setHovered] = useState(false);
+  const isNarrow = useNarrowScreen();
+  const { theme } = useTheme();
   const isNewSinceVisit = post.created > lastVisit;
   const isTelegram      = post.source === "telegram";
   const isNoBroker      = post.source === "nobroker";
@@ -734,12 +769,23 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
 
   const stop       = (e) => { e.preventDefault(); e.stopPropagation(); };
   const handleOpen = (e) => { stop(e); window.open(post.url, "_blank", "noopener,noreferrer"); };
-  const handleSave = (e) => { stop(e); onSave(post); onToast(isSaved ? "Removed from saved listings" : "💾 Listing saved!"); };
-  const handleHide = (e) => { stop(e); onHide(post.id); onToast("🚫 Listing hidden"); };
+  const handleSave = (e) => { stop(e); onSave(post); onToast(isSaved ? "Removed from saved listings" : "Listing saved!"); };
+  const handleHide = (e) => { stop(e); onHide(post.id); onToast("Listing hidden"); };
   const handleCopy = (e) => {
     stop(e);
     if (!displayContact) return;
-    navigator.clipboard.writeText(displayContact).then(() => onToast("📋 Number copied!"));
+    navigator.clipboard.writeText(displayContact).then(() => onToast("Number copied!"));
+  };
+
+  const touchOverlayBtn = (color = "#ccc", active = false) => {
+    const base = overlayBtnStyle(color, active);
+    if (theme !== "light") return base;
+    return {
+      ...base,
+      color: active ? color : "#374151",
+      background: active ? `${color}22` : "rgba(255,255,255,0.96)",
+      border: `1px solid ${active ? `${color}55` : "rgba(0,0,0,0.12)"}`,
+    };
   };
 
   return (
@@ -822,20 +868,20 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
       {/* Pills — priority: BHK > price > locality > furnished > badges */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "10px" }}>
         {displayBhk && ((isNoBroker || isHousing) && post.area_sqft)
-          ? <Pill icon="🏠" label={`${displayBhk} · ${post.area_sqft} sqft`} bg="rgba(59,130,246,0.15)" color="#7eb8f7" />
-          : displayBhk && <Pill icon="🏠" label={displayBhk} bg="rgba(59,130,246,0.15)" color="#7eb8f7" />}
-        {displayPrice && <Pill icon="💰" label={String(displayPrice)} bg="rgba(34,197,94,0.15)" color="#6ee09a" />}
+          ? <Pill icon={<FaIcon name="fa-solid fa-house" />} label={`${displayBhk} · ${post.area_sqft} sqft`} bg="rgba(59,130,246,0.15)" color="#7eb8f7" />
+          : displayBhk && <Pill icon={<FaIcon name="fa-solid fa-house" />} label={displayBhk} bg="rgba(59,130,246,0.15)" color="#7eb8f7" />}
+        {displayPrice && <Pill icon={<FaIcon name="fa-solid fa-indian-rupee-sign" />} label={String(displayPrice)} bg="rgba(34,197,94,0.15)" color="#6ee09a" />}
         {displayLocality
-          ? <Pill icon="📍" label={displayLocality} bg="rgba(120,120,140,0.12)" color="#9a9ab0" />
-          : displayFurnished && <Pill icon="🛋️" label={displayFurnished} bg="rgba(168,85,247,0.15)" color="#c084fc" />}
+          ? <Pill icon={<FaIcon name="fa-solid fa-location-dot" />} label={displayLocality} bg="rgba(120,120,140,0.12)" color="#9a9ab0" />
+          : displayFurnished && <Pill icon={<FaIcon name="fa-solid fa-couch" />} label={displayFurnished} bg="rgba(168,85,247,0.15)" color="#c084fc" />}
         {isHousing && displayFurnished && (
-          <Pill icon="🛋️" label={displayFurnished} bg="rgba(168,85,247,0.15)" color="#c084fc" />
+          <Pill icon={<FaIcon name="fa-solid fa-couch" />} label={displayFurnished} bg="rgba(168,85,247,0.15)" color="#c084fc" />
         )}
         {isTelegram && post.no_brokerage && (
-          <Pill icon="✅" label="No Brokerage" bg="rgba(34,197,94,0.12)" color="#4ade80" />
+          <Pill icon={<FaIcon name="fa-solid fa-check" />} label="No Brokerage" bg="rgba(34,197,94,0.12)" color="#4ade80" />
         )}
         {isTelegram && post.is_flatmate && (
-          <Pill icon="🤝" label="Flatmate" bg="rgba(168,85,247,0.15)" color="#c084fc" />
+          <Pill icon={<FaIcon name="fa-solid fa-people-arrows" />} label="Flatmate" bg="rgba(168,85,247,0.15)" color="#c084fc" />
         )}
       </div>
 
@@ -856,19 +902,61 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
           {isTelegram && post.maps_url && (
-            <span style={{ fontSize: "9px", opacity: 0.6, color: "#4ade80" }} title="Has Maps link">📍</span>
+            <span style={{ fontSize: "9px", opacity: 0.6, color: "#4ade80", display: "inline-flex", alignItems: "center" }} title="Has Maps link">
+              <FaIcon name="fa-solid fa-map-location-dot" size={9} />
+            </span>
           )}
-          {displayContact && <span style={{ fontSize: "9px", opacity: 0.5 }}>📞</span>}
+          {displayContact && (
+            <span style={{ fontSize: "9px", opacity: 0.5, display: "inline-flex", alignItems: "center" }}>
+              <FaIcon name="fa-solid fa-phone" size={9} />
+            </span>
+          )}
           {!isTelegram && !isNoBroker && (
-            <span className="post-stats" style={{ color: "#666", fontSize: "9px", fontFamily: "monospace" }}>
-              ↑{post.score} 💬{post.comments}
+            <span className="post-stats" style={{ color: "#666", fontSize: "9px", fontFamily: "monospace", display: "inline-flex", alignItems: "center", gap: "5px" }}>
+              <FaIcon name="fa-solid fa-arrow-up" size={8} />{post.score}
+              <FaIcon name="fa-regular fa-comments" size={8} />{post.comments}
             </span>
           )}
         </div>
       </div>
 
-      {/* Hover action overlay */}
-      {hovered && (
+      {/* Narrow screens: always-visible actions (no hover) */}
+      {isNarrow && (
+        <div
+          className="post-tile-touch-actions"
+          onClick={(e) => e.preventDefault()}
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "6px",
+            marginTop: "8px",
+            paddingTop: "8px",
+            borderTop: "1px solid var(--border)",
+            alignItems: "center",
+            justifyContent: "flex-start",
+          }}
+        >
+          <button type="button" onClick={handleOpen} style={{ ...touchOverlayBtn(isNoBroker ? "#e63946" : "#f5a623"), padding: "6px 12px", fontSize: "10px", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <FaIcon name={isHousing ? "fa-solid fa-house" : isNoBroker ? "fa-solid fa-building" : "fa-solid fa-arrow-up-right-from-square"} size={10} />
+            Open
+          </button>
+          {displayContact && !isNoBroker && !isHousing && (
+            <button type="button" onClick={handleCopy} style={{ ...touchOverlayBtn("#f5a623"), padding: "6px 12px", fontSize: "10px", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              <FaIcon name="fa-regular fa-copy" size={10} /> Copy
+            </button>
+          )}
+          <button type="button" onClick={handleSave} style={{ ...touchOverlayBtn("#f5a623", isSaved), padding: "6px 12px", fontSize: "10px", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <FaIcon name={isSaved ? "fa-solid fa-bookmark" : "fa-regular fa-bookmark"} size={10} />
+            {isSaved ? "Saved" : "Save"}
+          </button>
+          <button type="button" onClick={handleHide} style={{ ...touchOverlayBtn("#666"), padding: "6px 12px", fontSize: "10px", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+            <FaIcon name="fa-regular fa-eye-slash" size={10} /> Hide
+          </button>
+        </div>
+      )}
+
+      {/* Hover action overlay (desktop / fine pointer) */}
+      {hovered && !isNarrow && (
         <div className="card-hover-overlay" style={{
           position: "absolute", inset: 0, borderRadius: "15px",
           background: "rgba(10,10,20,0.97)",
@@ -918,19 +1006,27 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
           })()}
 
           {/* Action buttons */}
-          <button onClick={handleOpen} style={overlayBtnStyle(isNoBroker ? "#e63946" : "#f5a623")}>
-            {isNoBroker ? "🔴 View on NoBroker" : "🔗 Open Post"}
+          <button type="button" onClick={handleOpen} style={{ ...overlayBtnStyle(isNoBroker ? "#e63946" : "#f5a623"), display: "inline-flex", alignItems: "center", gap: "8px" }}>
+            <FaIcon name={isNoBroker ? "fa-solid fa-building" : "fa-solid fa-arrow-up-right-from-square"} />
+            {isNoBroker ? "View on NoBroker" : "Open Post"}
           </button>
           {isNoBroker ? (
-            <button onClick={handleOpen} style={overlayBtnStyle("#555")}>📞 Contact via NoBroker ↗</button>
+            <button type="button" onClick={handleOpen} style={{ ...overlayBtnStyle("#555"), display: "inline-flex", alignItems: "center", gap: "8px" }}>
+              <FaIcon name="fa-solid fa-phone" /> Contact via NoBroker <FaIcon name="fa-solid fa-arrow-up-right-from-square" size={9} />
+            </button>
           ) : displayContact && (
-            <button onClick={handleCopy} style={overlayBtnStyle("#f5a623")}>📋 Copy Number</button>
+            <button type="button" onClick={handleCopy} style={{ ...overlayBtnStyle("#f5a623"), display: "inline-flex", alignItems: "center", gap: "8px" }}>
+              <FaIcon name="fa-regular fa-copy" /> Copy Number
+            </button>
           )}
           <div style={{ display: "flex", gap: "8px" }}>
-            <button onClick={handleSave} style={overlayBtnStyle("#f5a623", isSaved)}>
-              {isSaved ? "💾 Saved ✓" : "💾 Save"}
+            <button type="button" onClick={handleSave} style={{ ...overlayBtnStyle("#f5a623", isSaved), display: "inline-flex", alignItems: "center", gap: "8px" }}>
+              <FaIcon name={isSaved ? "fa-solid fa-bookmark" : "fa-regular fa-bookmark"} />
+              {isSaved ? "Saved" : "Save"}
             </button>
-            <button onClick={handleHide} style={overlayBtnStyle("#666")}>🚫 Hide</button>
+            <button type="button" onClick={handleHide} style={{ ...overlayBtnStyle("#666"), display: "inline-flex", alignItems: "center", gap: "8px" }}>
+              <FaIcon name="fa-regular fa-eye-slash" /> Hide
+            </button>
           </div>
         </div>
       )}
@@ -1048,13 +1144,13 @@ function MapView({ posts }) {
             ${title}
           </div>
           <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px;">
-            ${bhk   ? `<span style="background:rgba(59,130,246,0.25);color:#7eb8f7;padding:2px 8px;border-radius:20px;font-size:10px;">🏠 ${bhk}</span>` : ""}
-            ${price ? `<span style="background:rgba(34,197,94,0.25);color:#6ee09a;padding:2px 8px;border-radius:20px;font-size:10px;">💰 ${price}</span>` : ""}
-            ${locality ? `<span style="background:${localityBg};color:${localityColor};padding:2px 8px;border-radius:20px;font-size:10px;">📍 ${locality}</span>` : ""}
+            ${bhk   ? `<span style="background:rgba(59,130,246,0.25);color:#7eb8f7;padding:2px 8px;border-radius:20px;font-size:10px;">BHK ${bhk}</span>` : ""}
+            ${price ? `<span style="background:rgba(34,197,94,0.25);color:#6ee09a;padding:2px 8px;border-radius:20px;font-size:10px;">${price}</span>` : ""}
+            ${locality ? `<span style="background:${localityBg};color:${localityColor};padding:2px 8px;border-radius:20px;font-size:10px;">${locality}</span>` : ""}
           </div>
           <a href="${post.url}" target="_blank" rel="noopener noreferrer"
              style="color:#f5a623;font-size:10px;text-decoration:none;">
-            🔗 Open Post →
+            Open post →
           </a>
         </div>
       `;
@@ -1082,7 +1178,7 @@ function MapView({ posts }) {
         marginBottom: "10px",
       }}>
         <span style={{ color: legendColor, fontSize: "10px", fontFamily: "monospace" }}>
-          📍 {mappableCount} of {posts.length} listings plotted
+          {mappableCount} of {posts.length} listings on map
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "9px", fontFamily: "monospace" }}>
           {[["#4ade80", "70+ score"], ["#facc15", "40–69"], ["#f87171", "<40"]].map(([c, l]) => (
@@ -2096,8 +2192,8 @@ export default function App() {
                       e.currentTarget.style.color = active ? s.color : "#444";
                     }}
                   >
-                    {s.icon} {s.label}
-                    {active && <span style={{ opacity: 0.6, fontSize: "9px" }}>✓</span>}
+                    <FaIcon name={s.iconClass} size={10} /> {s.label}
+                    {active && <FaIcon name="fa-solid fa-check" size={9} style={{ opacity: 0.6 }} />}
                   </button>
                 );
               })}
@@ -2200,7 +2296,7 @@ export default function App() {
           <div className="tab-bar" style={{ borderBottom: "1px solid #1a1a24", marginBottom: "20px" }}>
             {[
               { id: "results", label: `Search Results${posts.length > 0 ? ` (${posts.filter(p => !hiddenPosts.has(p.id)).length})` : ""}` },
-              { id: "saved",   label: `💾 Saved Listings${savedListings.length > 0 ? ` (${savedListings.length})` : ""}` },
+              { id: "saved",   label: `Saved Listings${savedListings.length > 0 ? ` (${savedListings.length})` : ""}` },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -2307,7 +2403,7 @@ export default function App() {
                       borderRadius: "6px", padding: "10px 14px", marginBottom: "14px",
                       color: "#4ade80", fontSize: "11px", fontFamily: "monospace",
                     }}>
-                      <span>✨</span>
+                      <FaIcon name="fa-solid fa-sparkles" size={12} />
                       <span><strong>{newCount}</strong> new home{newCount !== 1 ? "s" : ""} since your last visit</span>
                     </div>
                   )}
@@ -2319,7 +2415,7 @@ export default function App() {
                       borderRadius: "6px", padding: "8px 14px", marginBottom: "14px",
                       color: "#7eb8f7", fontSize: "10px", fontFamily: "monospace",
                     }}>
-                      <span>📍</span>
+                      <FaIcon name="fa-solid fa-location-dot" size={11} />
                       <span>Searching {meta.localityExpanded.length} areas:</span>
                       {meta.localityExpanded.map(loc => (
                         <span key={loc} style={{
@@ -2335,25 +2431,57 @@ export default function App() {
                         {sorted.length} home{sorted.length !== 1 ? "s" : ""} found
                       </span>
                       {multiSource && (
-                        <span style={{ color: "#555", fontSize: "10px", fontFamily: "monospace" }}>
-                          —{" "}
-                          {redditCount > 0 && <span style={{ color: "#ff4500" }}>🟠 {redditCount} Reddit{"  "}</span>}
-                          {telegramCount > 0 && <span style={{ color: "#229ed9" }}>✈️ {telegramCount} Telegram{"  "}</span>}
-                          {nobrokerCount > 0 && <span style={{ color: "#e63946" }}>🔴 {nobrokerCount} NoBroker{"  "}</span>}
-                          {housingCount > 0 && <span style={{ color: "#7c3aed" }}>🏠 {housingCount} Housing.com</span>}
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            flexWrap: "wrap",
+                            gap: "12px",
+                            color: "#555",
+                            fontSize: "10px",
+                            fontFamily: "monospace",
+                          }}
+                        >
+                          <span style={{ opacity: 0.65 }} aria-hidden>—</span>
+                          {redditCount > 0 && (
+                            <span style={{ color: "#ff4500", display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                              <FaIcon name="fa-brands fa-reddit" size={10} />
+                              <span>{redditCount} Reddit</span>
+                            </span>
+                          )}
+                          {telegramCount > 0 && (
+                            <span style={{ color: "#229ed9", display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                              <FaIcon name="fa-brands fa-telegram" size={10} />
+                              <span>{telegramCount} Telegram</span>
+                            </span>
+                          )}
+                          {nobrokerCount > 0 && (
+                            <span style={{ color: "#e63946", display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                              <FaIcon name="fa-solid fa-building" size={10} />
+                              <span>{nobrokerCount} NoBroker</span>
+                            </span>
+                          )}
+                          {housingCount > 0 && (
+                            <span style={{ color: "#7c3aed", display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                              <FaIcon name="fa-solid fa-house" size={10} />
+                              <span>{housingCount} Housing.com</span>
+                            </span>
+                          )}
                         </span>
                       )}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                       {/* List / Map toggle */}
                       <div className="view-toggle-group">
-                        {[["list", "☰ List"], ["grid", "▦ Grid"], ["map", "🗺 Map"]].map(([id, label]) => (
+                        {[["list", "List", "fa-solid fa-list"], ["grid", "Grid", "fa-solid fa-grip"], ["map", "Map", "fa-solid fa-map"]].map(([id, label, fa]) => (
                           <button
                             key={id}
                             onClick={() => setViewMode(id)}
                             className={`view-toggle-btn${viewMode === id ? " active" : ""}`}
                           >
-                            {label}
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                              <FaIcon name={fa} size={9} /> {label}
+                            </span>
                           </button>
                         ))}
                       </div>
@@ -2477,7 +2605,7 @@ export default function App() {
               </>
             ) : (
               <div style={{ textAlign: "center", padding: "50px 0", color: "#333", fontSize: "13px" }}>
-                No saved listings yet. Hover a card and click 💾 Save.
+                No saved listings yet. Hover a card (or use Save on mobile) to add one.
               </div>
             )}
           </>
@@ -2734,6 +2862,9 @@ export default function App() {
         /* ── Post card (list view) ───────────────────────────────────── */
         .post-card { overflow: hidden; word-break: break-word; box-sizing: border-box; }
         @media (max-width: 768px) { .post-card { padding: 12px !important; } }
+        [data-theme="light"] .post-card-quick-actions {
+          border-top: 1px solid var(--border) !important;
+        }
 
         /* ── Map container ───────────────────────────────────────────── */
         .map-container {
