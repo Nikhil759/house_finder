@@ -128,6 +128,7 @@ export default function Navbar({ subtitle, showAppCta = false, transparent = fal
           letter-spacing: 0.3px;
         }
         .shared-nav-cta {
+          display: inline-flex;
           font-size: 12px;
           font-weight: 600;
           color: #f5a623;
@@ -321,7 +322,7 @@ export default function Navbar({ subtitle, showAppCta = false, transparent = fal
         <div className="shared-nav-right">
           {subtitle && <span className="shared-nav-sub">{subtitle}</span>}
           {showAppCta && (
-            <Link to="/app" className="shared-nav-cta" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Link to="/app" className="shared-nav-cta" style={{ alignItems: "center", gap: 6 }}>
               Search listings
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="5" y1="12" x2="19" y2="12"/>
