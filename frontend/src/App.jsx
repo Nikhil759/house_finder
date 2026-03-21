@@ -1597,7 +1597,7 @@ export default function App() {
   const [meta,           setMeta]           = useState(null);
   const [searched,       setSearched]       = useState(false);
   const { user }                            = useAuth();
-  const { savedSearches, saveSearch, deleteSearch, updateLastRun } = useSavedSearches(user);
+  const { savedSearches, saveSearch, deleteSearch, clearAllSearches, updateLastRun } = useSavedSearches(user);
   const { totalCount: newListingsCount }    = useNewListings(user, savedSearches);
   const [savedPanelOpen, setSavedPanelOpen] = useState(false);
   const [justSaved,      setJustSaved]      = useState(false);
@@ -1794,25 +1794,41 @@ export default function App() {
         {/* Saved Searches Panel */}
         {savedSearches.length > 0 && (
           <div style={{ marginBottom: "16px" }}>
-            <button
-              onClick={() => setSavedPanelOpen(o => !o)}
-              className="saved-searches-btn"
-              style={{
-                background: "none", border: "1px solid #2a2a3a",
-                borderRadius: "6px", color: "#f5a623",
-                fontSize: "10px", fontFamily: "monospace",
-                padding: "7px 14px", cursor: "pointer",
-                display: "flex", alignItems: "center", gap: "8px",
-                letterSpacing: "0.1em",
-              }}
-            >
-              <span>★ SAVED SEARCHES</span>
-              <span style={{
-                background: "rgba(245,166,35,0.2)", color: "#f5a623",
-                borderRadius: "10px", padding: "1px 7px", fontSize: "9px",
-              }}>{savedSearches.length}</span>
-              <span style={{ opacity: 0.5, fontSize: "9px" }}>{savedPanelOpen ? "▲" : "▼"}</span>
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <button
+                onClick={() => setSavedPanelOpen(o => !o)}
+                className="saved-searches-btn"
+                style={{
+                  background: "none", border: "1px solid #2a2a3a",
+                  borderRadius: "6px", color: "#f5a623",
+                  fontSize: "10px", fontFamily: "monospace",
+                  padding: "7px 14px", cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: "8px",
+                  letterSpacing: "0.1em",
+                }}
+              >
+                <span>★ SAVED SEARCHES</span>
+                <span style={{
+                  background: "rgba(245,166,35,0.2)", color: "#f5a623",
+                  borderRadius: "10px", padding: "1px 7px", fontSize: "9px",
+                }}>{savedSearches.length}</span>
+                <span style={{ opacity: 0.5, fontSize: "9px" }}>{savedPanelOpen ? "▲" : "▼"}</span>
+              </button>
+              <button
+                onClick={() => { if (window.confirm("Delete all saved searches?")) clearAllSearches(); }}
+                style={{
+                  background: "none", border: "1px solid #2a2a3a",
+                  borderRadius: "6px", color: "#444",
+                  fontSize: "9px", fontFamily: "monospace",
+                  padding: "7px 10px", cursor: "pointer",
+                  letterSpacing: "0.05em", transition: "color 0.15s, border-color 0.15s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.color = "#ff6b6b"; e.currentTarget.style.borderColor = "rgba(255,107,107,0.4)"; }}
+                onMouseLeave={e => { e.currentTarget.style.color = "#444"; e.currentTarget.style.borderColor = "#2a2a3a"; }}
+              >
+                Clear all
+              </button>
+            </div>
 
             {savedPanelOpen && (
               <div style={{
@@ -1877,6 +1893,7 @@ export default function App() {
         )}
 
         {/* Form */}
+
         <div className="search-form-container">
           {/* Row 1: Area | Type | Budget | Keywords — 4 columns */}
           <div className="search-fields-grid">

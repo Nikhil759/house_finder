@@ -19,7 +19,7 @@ export default function Profile() {
   const navigate = useNavigate()
   const { theme } = useTheme()
   const { user, loading: authLoading, signOut } = useAuth()
-  const { savedSearches, deleteSearch } = useSavedSearches(user)
+  const { savedSearches, deleteSearch, clearAllSearches } = useSavedSearches(user)
 
   const [activeTab, setActiveTab]       = useState('searches')
   const [savedHomes, setSavedHomes]     = useState([])
@@ -285,9 +285,30 @@ export default function Profile() {
             {/* ── SAVED SEARCHES ──────────────────────────────────────── */}
             {activeTab === 'searches' && (
               <div>
-                <h3 style={{ margin: '0 0 16px', fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)', letterSpacing: '0.3px' }}>
-                  Saved Searches
-                </h3>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                  <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)', letterSpacing: '0.3px' }}>
+                    Saved Searches
+                  </h3>
+                  {savedSearches.length > 0 && (
+                    <button
+                      onClick={() => { if (window.confirm('Delete all saved searches?')) clearAllSearches() }}
+                      style={{
+                        background: 'transparent',
+                        border: '1px solid var(--border)',
+                        borderRadius: '6px',
+                        padding: '4px 10px',
+                        color: 'var(--text-muted)',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        transition: 'color 0.15s, border-color 0.15s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.color = '#ff6b6b'; e.currentTarget.style.borderColor = 'rgba(255,107,107,0.4)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+                    >
+                      Delete all
+                    </button>
+                  )}
+                </div>
                 {savedSearches.length === 0 ? (
                   <EmptyState
                     icon="fa-regular fa-magnifying-glass"

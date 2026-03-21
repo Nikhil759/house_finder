@@ -113,6 +113,17 @@ export function useSavedSearches(user) {
     }
   }
 
+  const clearAllSearches = async () => {
+    if (user) {
+      await supabase
+        .from('saved_searches')
+        .delete()
+        .eq('user_id', user.id)
+    }
+    setSavedSearches([])
+    localStorage.removeItem(LOCALSTORAGE_KEY)
+  }
+
   const updateLastRun = async (searchId) => {
     const now = new Date().toISOString()
     if (user) {
@@ -178,6 +189,7 @@ export function useSavedSearches(user) {
     loading,
     saveSearch,
     deleteSearch,
+    clearAllSearches,
     updateLastRun,
   }
 }
