@@ -6,6 +6,7 @@ import { BackgroundPattern } from "./components/BackgroundPattern";
 import Navbar from "./components/Navbar";
 import { useAuth } from "./hooks/useAuth";
 import { useSavedSearches } from "./hooks/useSavedSearches";
+import { useNewListings } from "./hooks/useNewListings";
 import { supabase } from "./lib/supabase";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -1597,6 +1598,7 @@ export default function App() {
   const [searched,       setSearched]       = useState(false);
   const { user }                            = useAuth();
   const { savedSearches, saveSearch, deleteSearch, updateLastRun } = useSavedSearches(user);
+  const { totalCount: newListingsCount }    = useNewListings(user, savedSearches);
   const [savedPanelOpen, setSavedPanelOpen] = useState(false);
   const [justSaved,      setJustSaved]      = useState(false);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
@@ -1785,7 +1787,7 @@ export default function App() {
 
       <div style={{ position: 'relative', zIndex: 1 }}>
 
-      <Navbar subtitle="Smart Home Search · Bangalore" />
+      <Navbar subtitle="Smart Home Search · Bangalore" newCount={newListingsCount} />
 
       <div className="main-container" style={{ maxWidth: "1380px", margin: "0 auto" }}>
 

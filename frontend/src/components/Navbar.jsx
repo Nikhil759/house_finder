@@ -4,8 +4,6 @@ import { useTheme } from "../ThemeContext";
 import { usePWAInstall } from "../hooks/usePWAInstall";
 import { AuthButton } from "./AuthButton";
 import { useAuth } from "../hooks/useAuth";
-import { useSavedSearches } from "../hooks/useSavedSearches";
-import { useNewListings } from "../hooks/useNewListings";
 
 const SunIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -78,14 +76,12 @@ function NotificationBell({ count, onClick }) {
   );
 }
 
-export default function Navbar({ subtitle, showAppCta = false, transparent = false }) {
+export default function Navbar({ subtitle, showAppCta = false, transparent = false, newCount = 0 }) {
   const { theme, toggleTheme } = useTheme();
   const { canInstall, isIOS, triggerInstall } = usePWAInstall();
   const [showIOSTip, setShowIOSTip] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { savedSearches } = useSavedSearches(user);
-  const { totalCount } = useNewListings(user, savedSearches);
 
   return (
     <>
@@ -347,7 +343,7 @@ export default function Navbar({ subtitle, showAppCta = false, transparent = fal
           )}
           {user && (
             <NotificationBell
-              count={totalCount}
+              count={newCount}
               onClick={() => navigate('/new')}
             />
           )}

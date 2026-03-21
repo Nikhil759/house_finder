@@ -185,7 +185,7 @@ export default function NewForYou() {
       <BackgroundPattern theme={theme} />
 
       <div style={{ position: 'relative', zIndex: 1 }}>
-        <Navbar />
+        <Navbar newCount={totalCount} />
 
         <div style={{
           maxWidth: '1100px',

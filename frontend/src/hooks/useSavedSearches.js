@@ -3,25 +3,30 @@ import { supabase } from '../lib/supabase'
 
 const LOCALSTORAGE_KEY = 'nestiq_saved_searches'
 
+// Per-user flag so migration never runs twice (even across two hook instances)
+const migrationDoneKey = (userId) => `nestiq_migrated_${userId}`
+
 export function useSavedSearches(user) {
   const [savedSearches, setSavedSearches] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
       loadFromSupabase()
-    } else {
+    } else if (user === null) {
       loadFromLocalStorage()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user])
+  }, [user?.id])
 
   const loadFromSupabase = async () => {
     setLoading(true)
     const { data, error } = await supabase
       .from('saved_searches')
       .select('*')
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false })
+      .limit(100)
 
     if (!error && data) {
       setSavedSearches(data)
@@ -54,6 +59,15 @@ export function useSavedSearches(user) {
     }
 
     if (user) {
+      // Prevent saving an identical search that already exists
+      const isDuplicate = savedSearches.some(s =>
+        s.location === newSearch.location &&
+        s.bhk === newSearch.bhk &&
+        s.budget === newSearch.budget &&
+        s.keywords === newSearch.keywords
+      )
+      if (isDuplicate) return null
+
       const { data, error } = await supabase
         .from('saved_searches')
         .insert([{ ...newSearch, user_id: user.id }])
@@ -65,6 +79,14 @@ export function useSavedSearches(user) {
         return data
       }
     } else {
+      const isDuplicate = savedSearches.some(s =>
+        s.location === newSearch.location &&
+        s.bhk === newSearch.bhk &&
+        s.budget === newSearch.budget &&
+        s.keywords === newSearch.keywords
+      )
+      if (isDuplicate) return null
+
       const localSearch = {
         ...newSearch,
         id: crypto.randomUUID(),
@@ -104,9 +126,15 @@ export function useSavedSearches(user) {
     )
   }
 
-  // Migrate localStorage searches to Supabase on first login
+  // Migrate localStorage searches to Supabase on first login.
+  // Guard prevents this from running twice when multiple hook instances exist.
   const migrateLocalToSupabase = async () => {
     if (!user) return
+    const doneKey = migrationDoneKey(user.id)
+    if (localStorage.getItem(doneKey)) return   // already migrated
+
+    // Claim the lock immediately before any async work
+    localStorage.setItem(doneKey, '1')
 
     const stored = localStorage.getItem(LOCALSTORAGE_KEY)
     if (!stored) return
@@ -132,11 +160,14 @@ export function useSavedSearches(user) {
     if (!error) {
       localStorage.removeItem(LOCALSTORAGE_KEY)
       loadFromSupabase()
+    } else {
+      // Roll back the lock so it can be retried next login
+      localStorage.removeItem(doneKey)
     }
   }
 
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
       migrateLocalToSupabase()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
