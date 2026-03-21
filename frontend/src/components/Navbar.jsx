@@ -76,7 +76,7 @@ function NotificationBell({ count, onClick }) {
   );
 }
 
-export default function Navbar({ subtitle, showAppCta = false, transparent = false, newCount = 0 }) {
+export default function Navbar({ subtitle, showAppCta = false, transparent = false, landingLightBlend = false, newCount = 0 }) {
   const { theme, toggleTheme } = useTheme();
   const { canInstall, isIOS, triggerInstall } = usePWAInstall();
   const [showIOSTip, setShowIOSTip] = useState(false);
@@ -102,6 +102,30 @@ export default function Navbar({ subtitle, showAppCta = false, transparent = fal
         .shared-nav.transparent {
           background: transparent;
           border-bottom: none;
+        }
+        .shared-nav.landing-light-blend {
+          background: linear-gradient(to bottom, #f8deb0 0%, #f7e3be 100%);
+          border-bottom: 1px solid rgba(157, 95, 18, 0.18);
+          backdrop-filter: blur(4px);
+          -webkit-backdrop-filter: blur(4px);
+        }
+        .shared-nav.landing-light-blend .shared-nav-logo {
+          color: #d88900;
+        }
+        .shared-nav.landing-light-blend .shared-nav-sub {
+          color: rgba(43, 28, 11, 0.72);
+        }
+        .shared-nav.landing-light-blend .shared-nav-theme-btn,
+        .shared-nav.landing-light-blend .shared-nav-health {
+          background: rgba(255,255,255,0.62);
+          border-color: rgba(157, 95, 18, 0.18);
+          color: rgba(43, 28, 11, 0.7);
+        }
+        .shared-nav.landing-light-blend .shared-nav-theme-btn:hover,
+        .shared-nav.landing-light-blend .shared-nav-health:hover {
+          background: rgba(255,255,255,0.82);
+          border-color: rgba(216, 137, 0, 0.5);
+          color: #d88900;
         }
         .shared-nav-logo {
           display: flex;
@@ -309,7 +333,7 @@ export default function Navbar({ subtitle, showAppCta = false, transparent = fal
         </div>
       )}
 
-      <nav className={`shared-nav${transparent ? " transparent" : ""}`}>
+      <nav className={`shared-nav${transparent ? " transparent" : ""}${landingLightBlend && theme === "light" ? " landing-light-blend" : ""}`}>
         <Link to="/" className="shared-nav-logo">
           <RadarLogo />
           <span>NestIQ</span>

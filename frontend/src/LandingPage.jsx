@@ -20,7 +20,7 @@ export default function LandingPage() {
 
   return (
     <div>
-      <Navbar showAppCta />
+      <Navbar showAppCta landingLightBlend />
 
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <section
@@ -38,7 +38,7 @@ export default function LandingPage() {
 
         <div className="lp-hero-content">
           <div className="lp-logo">
-            <svg width="32" height="32" viewBox="0 0 32 32">
+            <svg width="38" height="38" viewBox="0 0 32 32">
               <circle cx="16" cy="16" r="14" fill="none" stroke="#f5a623" strokeWidth="2" className="lp-radar-ping"/>
               <circle cx="16" cy="16" r="8" fill="none" stroke="#f5a623" strokeWidth="1.5" opacity="0.6"/>
               <circle cx="16" cy="16" r="3" fill="#f5a623"/>
@@ -52,11 +52,11 @@ export default function LandingPage() {
             <span>Smarter search. Better homes.</span>
           </h1>
 
-          <p className="lp-hero-sub">
-            NestIQ is a smart housing aggregator that scans <span style={{ color: "#ff4500" }}>Reddit</span>,{" "}
-            <span style={{ color: "#229ed9" }}>Telegram</span>,{" "}
-            <span style={{ color: "#e63946" }}>NoBroker</span>, Housing.com and more — scoring and
-            ranking every listing to make finding your next home effortless.
+          <p className="lp-hero-sub hero-sub">
+            NestIQ is a smart housing aggregator that scans <span className="lp-inline-source lp-inline-source-reddit source-reddit">Reddit</span>,{" "}
+            <span className="lp-inline-source lp-inline-source-telegram source-telegram">Telegram</span>,{" "}
+            <span className="lp-inline-source lp-inline-source-nobroker source-nobroker">NoBroker</span> and more — scoring and
+            ranking every listing to make finding your next home effortless!
           </p>
 
           <div className="lp-hero-search">
@@ -363,12 +363,12 @@ export default function LandingPage() {
         .lp-logo {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 12px;
           justify-content: center;
           margin-bottom: 28px;
-          font-size: 20px;
+          font-size: 24px;
           font-weight: 700;
-          letter-spacing: 0.5px;
+          letter-spacing: 0.4px;
           color: #f5a623;
         }
 
@@ -447,6 +447,14 @@ export default function LandingPage() {
           margin: 0 auto 36px;
           text-shadow: 0 1px 12px rgba(0,0,0,0.8);
         }
+        .lp-inline-source {
+          font-weight: 700;
+          -webkit-text-stroke: 0;
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+        }
+        .lp-inline-source-reddit { color: #ff4500; }
+        .lp-inline-source-telegram { color: #00a8ff; }
+        .lp-inline-source-nobroker { color: #ff2d55; }
 
         .lp-hero-search {
           display: flex;
@@ -807,15 +815,10 @@ export default function LandingPage() {
           );
         }
         [data-theme="light"] .lp-hero::after {
-          background: linear-gradient(
-            to bottom,
-            transparent 0%,
-            rgba(246, 248, 250, 0.7) 60%,
-            #f6f8fa 100%
-          );
+          display: none;
         }
         [data-theme="light"] .lp-hero-top-fade {
-          background: linear-gradient(to bottom, #f6f8fa, transparent);
+          display: none;
         }
 
         /* ── Light mode: hero text ── */
@@ -832,10 +835,29 @@ export default function LandingPage() {
             0 0 30px rgba(255, 255, 255, 0.9),
             0 0 60px rgba(255, 255, 255, 0.6);
         }
-        [data-theme="light"] .lp-hero-sub {
+        [data-theme="light"] .lp-hero-sub,
+        [data-theme="light"] .hero-sub {
           color: #1a1a2e;
           font-weight: 500;
+          background: rgba(255, 255, 255, 0.15);
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+          border: 1px solid rgba(255, 255, 255, 0.4);
+          border-radius: 12px;
+          padding: 10px 18px;
           text-shadow: none;
+        }
+        [data-theme="light"] .source-reddit {
+          color: #ff4500;
+          font-weight: 700;
+        }
+        [data-theme="light"] .source-telegram {
+          color: #0088cc;
+          font-weight: 700;
+        }
+        [data-theme="light"] .source-nobroker {
+          color: #e63946;
+          font-weight: 700;
         }
         [data-theme="light"] .lp-logo {
           color: #b36d00;
@@ -844,27 +866,6 @@ export default function LandingPage() {
         [data-theme="light"] .lp-logo span {
           color: #b36d00;
           text-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
-        }
-
-        /* ── Light mode: search bar ── */
-        [data-theme="light"] .lp-hero-search {
-          border: 1px solid rgba(0, 0, 0, 0.1);
-          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-        }
-        [data-theme="light"] .lp-hero-search input {
-          background: rgba(255, 255, 255, 0.92);
-          color: #111827;
-        }
-        [data-theme="light"] .lp-hero-search input::placeholder {
-          color: #9ca3af;
-        }
-        [data-theme="light"] .lp-hero-search button {
-          background: #f5a623;
-          color: #000000;
-          font-weight: 700;
-        }
-        [data-theme="light"] .lp-hero-search button:hover {
-          background: #e09400;
         }
 
         /* ── Light mode: sections below hero ── */
