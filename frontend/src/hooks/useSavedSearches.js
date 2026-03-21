@@ -47,6 +47,7 @@ export function useSavedSearches(user) {
 
   const saveSearch = async (searchParams) => {
     const name = generateSearchName(searchParams)
+    const now = new Date().toISOString()
 
     const newSearch = {
       name,
@@ -56,6 +57,7 @@ export function useSavedSearches(user) {
       keywords: searchParams.keywords || '',
       sources: searchParams.sources || ['telegram', 'nobroker', 'housing'],
       min_quality: searchParams.minQuality || 20,
+      last_run_at: now,
     }
 
     if (user) {
@@ -90,7 +92,7 @@ export function useSavedSearches(user) {
       const localSearch = {
         ...newSearch,
         id: crypto.randomUUID(),
-        created_at: new Date().toISOString(),
+        created_at: now,
       }
       const updated = [localSearch, ...savedSearches].slice(0, 10)
       setSavedSearches(updated)

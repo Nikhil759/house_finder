@@ -341,7 +341,14 @@ export default function Profile() {
                         </div>
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button
-                            onClick={() => {
+                            onClick={async () => {
+                              // Treat "Run" as viewing the search now, so New For You
+                              // compares against this timestamp going forward.
+                              await supabase
+                                .from('saved_searches')
+                                .update({ last_run_at: new Date().toISOString() })
+                                .eq('id', search.id)
+
                               const params = new URLSearchParams()
                               if (search.location) params.set('location', search.location)
                               if (search.bhk)      params.set('bhk', search.bhk)

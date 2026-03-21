@@ -24,7 +24,10 @@ export function useNewListings(user, savedSearches) {
     let total = 0
 
     for (const search of savedSearches) {
-      if (!search.last_run_at) continue
+      // Older saved searches may not have last_run_at yet.
+      // Fall back to created_at so New For You still works.
+      const since = search.last_run_at || search.created_at
+      if (!since) continue
 
       const params = new URLSearchParams()
       if (search.location) params.append('location', search.location)
@@ -32,7 +35,7 @@ export function useNewListings(user, savedSearches) {
       if (search.budget) params.append('budget', search.budget)
       if (search.keywords) params.append('keywords', search.keywords)
       if (search.sources?.length) params.append('sources', search.sources.join(','))
-      params.append('since', search.last_run_at)
+      params.append('since', since)
       params.append('limit', '20')
 
       try {
