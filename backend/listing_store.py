@@ -201,7 +201,16 @@ def query_listings(
 
         where = " AND ".join(conditions) if conditions else "1=1"
         sql = f"""
-            SELECT raw_payload FROM listings
+            SELECT source, source_id, source_url, source_group,
+                   title, body, bhk, property_type, furnishing,
+                   rent, deposit, maintenance,
+                   locality, address, latitude, longitude, maps_url,
+                   area_sqft, floor_info, amenities, lease_type,
+                   contact_phone, contact_name, is_broker, no_brokerage,
+                   is_flatmate, is_sponsored, thumbnail_url,
+                   EXTRACT(EPOCH FROM posted_at)::FLOAT as posted_epoch,
+                   quality_score, raw_payload
+            FROM listings
             WHERE {where}
             ORDER BY posted_at DESC NULLS LAST
             LIMIT %s
@@ -214,9 +223,46 @@ def query_listings(
 
         results = []
         for row in rows:
-            d = _row_to_dict(row[0])
-            if d:
-                results.append(d)
+            base = _row_to_dict(row[30]) or {}
+            base.update({
+                "id": f"{row[0]}_{row[1]}",
+                "source": row[0],
+                "source_id": row[1],
+                "url": row[2],
+                "source_url": row[2],
+                "source_group": row[3],
+                "title": row[4] or "",
+                "body": row[5] or "",
+                "selftext": row[5] or "",
+                "bhk": row[6],
+                "property_type": row[7],
+                "furnishing": row[8],
+                "price": row[9],
+                "rent": row[9],
+                "deposit": row[10],
+                "maintenance": row[11],
+                "locality": row[12],
+                "address": row[13],
+                "latitude": row[14],
+                "longitude": row[15],
+                "maps_url": row[16],
+                "area_sqft": row[17],
+                "floor_info": row[18],
+                "amenities": row[19] or [],
+                "lease_type": row[20],
+                "contact": row[21],
+                "contact_phone": row[21],
+                "contact_name": row[22],
+                "is_broker": row[23],
+                "no_brokerage": row[24],
+                "is_flatmate": row[25],
+                "is_sponsored": row[26],
+                "thumbnail_url": row[27],
+                "created": row[28] or 0,
+                "created_utc": row[28] or 0,
+                "quality_score": row[29] or 0,
+            })
+            results.append(base)
         return results
 
     except Exception as e:
