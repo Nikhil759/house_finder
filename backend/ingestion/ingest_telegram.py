@@ -176,8 +176,13 @@ async def fetch_all_groups() -> list[StandardListing]:
     """Fetch and normalize listings from all Telegram groups."""
     api_id = os.getenv("TELEGRAM_API_ID")
     api_hash = os.getenv("TELEGRAM_API_HASH")
-    session_string = (os.getenv("TELEGRAM_SESSION_STRING") or "").strip() or None
+    raw_session = os.getenv("TELEGRAM_SESSION_STRING") or ""
+    session_string = re.sub(r"\s+", "", raw_session) or None
     session_name = os.getenv("TELEGRAM_SESSION_NAME", "housing_finder")
+
+    if session_string:
+        logger.info("Session string: len=%d, first5=%s, last5=%s",
+                     len(session_string), session_string[:5], session_string[-5:])
 
     if not api_id or not api_hash:
         logger.error("TELEGRAM_API_ID and TELEGRAM_API_HASH must be set")
