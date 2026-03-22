@@ -711,7 +711,7 @@ class _Conn:
             # Railway sometimes gives "postgres://" but psycopg2 prefers "postgresql://"
             if url.startswith("postgres://"):
                 url = "postgresql://" + url[len("postgres://"):]
-            self._conn = psycopg2.connect(url)
+            self._conn = psycopg2.connect(url, connect_timeout=10)
             self._pg   = True
         else:
             self._conn            = sqlite3.connect(_SQLITE_PATH)
@@ -1527,7 +1527,7 @@ def pipeline_status():
         url = "postgresql://" + url[len("postgres://"):]
 
     try:
-        conn = psycopg2.connect(url)
+        conn = psycopg2.connect(url, connect_timeout=10)
         cur = conn.cursor()
 
         # Last 5 runs per source

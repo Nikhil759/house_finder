@@ -27,7 +27,7 @@ def _get_conn():
         url = _DATABASE_URL
         if url.startswith("postgres://"):
             url = "postgresql://" + url[len("postgres://"):]
-        conn = psycopg2.connect(url)
+        conn = psycopg2.connect(url, connect_timeout=10)
         return conn, True
     else:
         conn = sqlite3.connect(_SQLITE_PATH)
