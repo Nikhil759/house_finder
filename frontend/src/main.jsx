@@ -8,6 +8,7 @@ import App from "./App";
 import HealthPage from "./HealthPage";
 import NewForYou from "./pages/NewForYou";
 import Profile from "./pages/Profile";
+import Stats from "./pages/Stats";
 import InstallBanner from "./components/InstallBanner";
 import PostHogRouteTracker from "./components/PostHogRouteTracker";
 import { initPostHog } from "./lib/posthog";
@@ -32,6 +33,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="/new" element={<NewForYou />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/health" element={<HealthPage />} />
+          <Route path="/stats" element={<Stats />} />
         </Routes>
         <InstallBanner />
       </BrowserRouter>

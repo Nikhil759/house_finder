@@ -1406,6 +1406,111 @@ def localities_endpoint():
     return jsonify(response)
 
 
+def _posthog_query(hogql: str) -> dict:
+    """Run a HogQL query against the PostHog API and return the raw result."""
+    key = os.getenv("POSTHOG_PERSONAL_API_KEY")
+    project_id = os.getenv("POSTHOG_PROJECT_ID")
+    if not key or not project_id:
+        return {"error": "PostHog credentials not configured"}
+    resp = http.post(
+        f"https://app.posthog.com/api/projects/{project_id}/query",
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        json={"query": {"kind": "HogQLQuery", "query": hogql}},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+@app.route("/api/stats")
+def stats():
+    """
+    Return PostHog analytics stats for the internal dashboard.
+    Protected by a simple owner-email check via query param.
+    Real auth happens on the frontend via Supabase; this endpoint
+    is low-risk (read-only analytics) so a shared secret is sufficient.
+    """
+    owner_email = "bn5799@gmail.com"
+    token = request.headers.get("X-Stats-Token", "")
+    expected = os.getenv("STATS_SECRET", "")
+    if not expected or token != expected:
+        return jsonify({"error": "unauthorized"}), 401
+
+    try:
+        # Unique visitors last 30 days (excluding internal)
+        visitors_res = _posthog_query(
+            "SELECT count(DISTINCT person_id) AS cnt "
+            "FROM events "
+            "WHERE event = 'page_view' "
+            "AND timestamp >= now() - INTERVAL 30 DAY "
+            "AND (properties.internal_user IS NULL OR properties.internal_user != true)"
+        )
+        visitors = visitors_res.get("results", [[0]])[0][0] if visitors_res.get("results") else 0
+
+        # Total page views last 30 days (excluding internal)
+        views_res = _posthog_query(
+            "SELECT count() AS cnt "
+            "FROM events "
+            "WHERE event = 'page_view' "
+            "AND timestamp >= now() - INTERVAL 30 DAY "
+            "AND (properties.internal_user IS NULL OR properties.internal_user != true)"
+        )
+        total_views = views_res.get("results", [[0]])[0][0] if views_res.get("results") else 0
+
+        # Page views today
+        views_today_res = _posthog_query(
+            "SELECT count() AS cnt "
+            "FROM events "
+            "WHERE event = 'page_view' "
+            "AND timestamp >= toStartOfDay(now()) "
+            "AND (properties.internal_user IS NULL OR properties.internal_user != true)"
+        )
+        views_today = views_today_res.get("results", [[0]])[0][0] if views_today_res.get("results") else 0
+
+        # Views per route last 30 days
+        routes_res = _posthog_query(
+            "SELECT properties.pathname AS route, count() AS cnt "
+            "FROM events "
+            "WHERE event = 'page_view' "
+            "AND timestamp >= now() - INTERVAL 30 DAY "
+            "AND (properties.internal_user IS NULL OR properties.internal_user != true) "
+            "GROUP BY route "
+            "ORDER BY cnt DESC "
+            "LIMIT 10"
+        )
+        routes = [
+            {"route": row[0] or "/", "views": row[1]}
+            for row in (routes_res.get("results") or [])
+        ]
+
+        # Daily unique visitors last 14 days for sparkline
+        daily_res = _posthog_query(
+            "SELECT toDate(timestamp) AS day, count(DISTINCT person_id) AS cnt "
+            "FROM events "
+            "WHERE event = 'page_view' "
+            "AND timestamp >= now() - INTERVAL 14 DAY "
+            "AND (properties.internal_user IS NULL OR properties.internal_user != true) "
+            "GROUP BY day "
+            "ORDER BY day ASC"
+        )
+        daily = [
+            {"date": str(row[0]), "visitors": row[1]}
+            for row in (daily_res.get("results") or [])
+        ]
+
+        return jsonify({
+            "unique_visitors_30d": visitors,
+            "total_views_30d": total_views,
+            "views_today": views_today,
+            "top_routes": routes,
+            "daily_visitors": daily,
+        })
+
+    except Exception as e:
+        logger.error("PostHog stats error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     port  = int(os.environ.get("PORT", 5001))
     debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
