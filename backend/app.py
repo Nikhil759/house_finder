@@ -1116,51 +1116,53 @@ def search():
 
     db_localities = target_localities if canonical_area else None
 
-    # ── Each source is fetched independently and merged ──
-    # DB-backed sources first; fall back to live fetch if DB is empty for that source.
-    for src in source_list:
-        src_db_posts = query_listings(
-            localities=db_localities,
-            sources=[src],
-            bhk=bhk,
-            budget=budget,
-            limit=limit,
-        )
+    # ── Single DB query for ALL sources at once (1 connection, not N) ──
+    db_posts = query_listings(
+        localities=db_localities,
+        sources=source_list,
+        bhk=bhk,
+        budget=budget,
+        limit=limit * 2,
+    )
 
-        if src_db_posts:
-            all_posts += src_db_posts
-            from_db = True
-        else:
-            # Live fetch fallback for this source
-            if src == "reddit":
+    if db_posts:
+        all_posts += db_posts
+        from_db = True
+
+    # Check which sources came back from DB; live-fetch any missing ones
+    found_sources = {p.get("source") for p in db_posts} if db_posts else set()
+    missing_sources = [s for s in source_list if s not in found_sources]
+
+    for src in missing_sources:
+        if src == "reddit":
+            try:
+                reddit_posts, query, _ = fetch_listings(area, bhk, budget, keywords, limit)
+                all_posts += reddit_posts
+                logger.info(f"Reddit live fetch returned {len(reddit_posts)} posts")
+            except Exception as e:
+                logger.error(f"Reddit fetch failed: {e}")
+                reddit_warning = True
+
+        elif src == "telegram":
+            tg_posts = fetch_telegram(bhk, keywords, limit)
+            all_posts += tg_posts
+            logger.info(f"Telegram live fetch returned {len(tg_posts)} posts")
+
+        elif src == "nobroker":
+            nb_listings = get_cached_listings()
+            if bhk and bhk != "any":
+                bhk_norm = bhk.lower().replace(" ", "")
+                nb_listings = [
+                    p for p in nb_listings
+                    if bhk_norm in p.get("bhk", "").lower().replace(" ", "")
+                ]
+            if budget:
                 try:
-                    reddit_posts, query, _ = fetch_listings(area, bhk, budget, keywords, limit)
-                    all_posts += reddit_posts
-                    logger.info(f"Reddit live fetch returned {len(reddit_posts)} posts")
-                except Exception as e:
-                    logger.error(f"Reddit fetch failed: {e}")
-                    reddit_warning = True
-
-            elif src == "telegram":
-                tg_posts = fetch_telegram(bhk, keywords, limit)
-                all_posts += tg_posts
-                logger.info(f"Telegram live fetch returned {len(tg_posts)} posts")
-
-            elif src == "nobroker":
-                nb_listings = get_cached_listings()
-                if bhk and bhk != "any":
-                    bhk_norm = bhk.lower().replace(" ", "")
-                    nb_listings = [
-                        p for p in nb_listings
-                        if bhk_norm in p.get("bhk", "").lower().replace(" ", "")
-                    ]
-                if budget:
-                    try:
-                        budget_val = int(budget)
-                        nb_listings = [p for p in nb_listings if (p.get("price") or 0) <= budget_val]
-                    except ValueError:
-                        pass
-                all_posts += nb_listings
+                    budget_val = int(budget)
+                    nb_listings = [p for p in nb_listings if (p.get("price") or 0) <= budget_val]
+                except ValueError:
+                    pass
+            all_posts += nb_listings
 
     query = query or (build_query(area, bhk, budget, keywords) if area else "")
 
@@ -1252,17 +1254,15 @@ def search_new():
     target_set        = {loc.lower() for loc in target_localities}
     db_localities     = target_localities if canonical_area else None
 
-    all_posts = []
-    for src in source_list:
-        posts = query_listings(
-            localities=db_localities,
-            sources=[src],
-            bhk=bhk,
-            budget=budget,
-            limit=limit,
-            since_utc=since_utc,
-        )
-        all_posts += posts
+    # Single DB query for all sources at once
+    all_posts = query_listings(
+        localities=db_localities,
+        sources=source_list,
+        bhk=bhk,
+        budget=budget,
+        limit=limit,
+        since_utc=since_utc,
+    )
 
     # Locality filter
     if canonical_area and target_set:
@@ -1517,17 +1517,11 @@ def pipeline_status():
     Return ingestion pipeline health dashboard.
     Queries the new ingestion_runs and listings tables in Supabase.
     """
-    db_url = os.environ.get("SUPABASE_DB_URL") or os.environ.get("DATABASE_URL", "")
-    if not db_url:
-        return jsonify({"error": "Database not configured"}), 500
-
-    import psycopg2
-    url = db_url
-    if url.startswith("postgres://"):
-        url = "postgresql://" + url[len("postgres://"):]
-
     try:
-        conn = psycopg2.connect(url, connect_timeout=10)
+        from listing_store import _get_conn, _put_conn
+        conn, is_pg = _get_conn()
+        if not is_pg:
+            return jsonify({"error": "Pipeline status requires Postgres"}), 500
         cur = conn.cursor()
 
         # Last 5 runs per source
@@ -1568,8 +1562,6 @@ def pipeline_status():
         """)
         locality_counts = {row[0]: row[1] for row in cur.fetchall()}
 
-        conn.close()
-
         for run in recent_runs:
             for k, v in run.items():
                 if hasattr(v, 'isoformat'):
@@ -1585,6 +1577,8 @@ def pipeline_status():
     except Exception as e:
         logger.error("pipeline-status error: %s", e)
         return jsonify({"error": str(e)}), 500
+    finally:
+        _put_conn(conn)
 
 
 if __name__ == "__main__":

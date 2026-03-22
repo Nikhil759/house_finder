@@ -10,29 +10,58 @@ import logging
 import os
 import sqlite3
 import time
+import threading
 
 logger = logging.getLogger(__name__)
 
 _DATABASE_URL = os.environ.get("DATABASE_URL", "")
 _SQLITE_PATH = os.path.join(os.path.dirname(__file__), "listings.db")
 
+_pg_pool = None
+_pool_lock = threading.Lock()
+
 
 def _use_postgres():
     return bool(_DATABASE_URL)
 
 
-def _get_conn():
-    if _use_postgres():
-        import psycopg2
+def _get_pg_pool():
+    """Lazy-init a connection pool (min 1, max 5 connections)."""
+    global _pg_pool
+    if _pg_pool is not None:
+        return _pg_pool
+    with _pool_lock:
+        if _pg_pool is not None:
+            return _pg_pool
+        from psycopg2 import pool as pg_pool
         url = _DATABASE_URL
         if url.startswith("postgres://"):
             url = "postgresql://" + url[len("postgres://"):]
-        conn = psycopg2.connect(url, connect_timeout=10)
+        _pg_pool = pg_pool.ThreadedConnectionPool(
+            minconn=1, maxconn=5, dsn=url, connect_timeout=10,
+            options="-c statement_timeout=15000",
+        )
+        return _pg_pool
+
+
+def _get_conn():
+    if _use_postgres():
+        conn = _get_pg_pool().getconn()
         return conn, True
     else:
         conn = sqlite3.connect(_SQLITE_PATH)
         conn.row_factory = sqlite3.Row
         return conn, False
+
+
+def _put_conn(conn):
+    """Return a pooled Postgres connection."""
+    if _use_postgres() and conn:
+        try:
+            conn.rollback()
+            _get_pg_pool().putconn(conn)
+        except Exception:
+            pass
 
 
 def init_listings_table():
@@ -269,7 +298,7 @@ def query_listings(
         logger.error("query_listings failed: %s", e)
         return []
     finally:
-        conn.close()
+        _put_conn(conn)
 
 
 def _query_listings_sqlite(conn, localities, sources, bhk, budget, limit, include_expired, since_utc):
@@ -377,7 +406,7 @@ def get_listing_counts():
         logger.error("get_listing_counts failed: %s", e)
         return {}
     finally:
-        conn.close()
+        _put_conn(conn)
 
 
 def get_locality_counts():
@@ -408,7 +437,7 @@ def get_locality_counts():
         logger.error("get_locality_counts failed: %s", e)
         return {}
     finally:
-        conn.close()
+        _put_conn(conn)
 
 
 def purge_old_listings(max_age_hours=72):
@@ -448,4 +477,4 @@ def total_listing_count():
         logger.error("total_listing_count failed: %s", e)
         return 0
     finally:
-        conn.close()
+        _put_conn(conn)
