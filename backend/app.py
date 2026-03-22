@@ -1511,6 +1511,82 @@ def stats():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/pipeline-status")
+def pipeline_status():
+    """
+    Return ingestion pipeline health dashboard.
+    Queries the new ingestion_runs and listings tables in Supabase.
+    """
+    db_url = os.environ.get("SUPABASE_DB_URL") or os.environ.get("DATABASE_URL", "")
+    if not db_url:
+        return jsonify({"error": "Database not configured"}), 500
+
+    import psycopg2
+    url = db_url
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+
+    try:
+        conn = psycopg2.connect(url)
+        cur = conn.cursor()
+
+        # Last 5 runs per source
+        cur.execute("""
+            SELECT source, started_at, finished_at, status,
+                   total_fetched, total_new, total_updated, total_stale,
+                   total_errors, duration_ms, error_message
+            FROM ingestion_runs
+            ORDER BY started_at DESC
+            LIMIT 20
+        """)
+        cols = [d[0] for d in cur.description]
+        recent_runs = [dict(zip(cols, row)) for row in cur.fetchall()]
+
+        # Active / stale / expired counts per source
+        cur.execute("""
+            SELECT source, status, COUNT(*) as cnt
+            FROM listings
+            GROUP BY source, status
+            ORDER BY source, status
+        """)
+        status_counts = {}
+        for source, status_val, cnt in cur.fetchall():
+            status_counts.setdefault(source, {})[status_val] = cnt
+
+        # Total listings
+        cur.execute("SELECT COUNT(*) FROM listings")
+        total = cur.fetchone()[0]
+
+        # Listings per locality (active only)
+        cur.execute("""
+            SELECT locality, COUNT(*) as cnt
+            FROM listings
+            WHERE status = 'active' AND locality IS NOT NULL
+            GROUP BY locality
+            ORDER BY cnt DESC
+            LIMIT 30
+        """)
+        locality_counts = {row[0]: row[1] for row in cur.fetchall()}
+
+        conn.close()
+
+        for run in recent_runs:
+            for k, v in run.items():
+                if hasattr(v, 'isoformat'):
+                    run[k] = v.isoformat()
+
+        return jsonify({
+            "total_listings": total,
+            "by_source_status": status_counts,
+            "by_locality": locality_counts,
+            "recent_runs": recent_runs,
+        })
+
+    except Exception as e:
+        logger.error("pipeline-status error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     port  = int(os.environ.get("PORT", 5001))
     debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"

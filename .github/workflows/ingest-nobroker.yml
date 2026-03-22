@@ -1,0 +1,27 @@
+name: Ingest NoBroker
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'    # every 3 hours
+  workflow_dispatch: {}       # manual trigger
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run NoBroker ingestion
+        working-directory: backend
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: python -m ingestion.ingest_nobroker
