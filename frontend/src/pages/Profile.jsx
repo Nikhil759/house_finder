@@ -193,21 +193,38 @@ export default function Profile() {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {user.email === 'bn5799@gmail.com' && (
-                <button
-                  onClick={() => navigate('/stats')}
-                  style={{
-                    background: 'rgba(245,166,35,0.12)',
-                    border: '1px solid rgba(245,166,35,0.3)',
-                    borderRadius: '8px',
-                    padding: '7px 12px',
-                    color: '#f5a623',
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                  }}
-                >
-                  📊 Stats
-                </button>
+                <>
+                  <button
+                    onClick={() => navigate('/stats')}
+                    style={{
+                      background: 'rgba(245,166,35,0.12)',
+                      border: '1px solid rgba(245,166,35,0.3)',
+                      borderRadius: '8px',
+                      padding: '7px 12px',
+                      color: '#f5a623',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                    }}
+                  >
+                    📊 Stats
+                  </button>
+                  <button
+                    onClick={() => navigate('/health')}
+                    style={{
+                      background: 'rgba(34,197,94,0.12)',
+                      border: '1px solid rgba(34,197,94,0.3)',
+                      borderRadius: '8px',
+                      padding: '7px 12px',
+                      color: '#4ade80',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                    }}
+                  >
+                    🩺 Health
+                  </button>
+                </>
               )}
               <button
                 onClick={signOut}
