@@ -1,9 +1,9 @@
 name: Ingest Telegram
 
 on:
-  schedule:
-    - cron: '40 */4 * * *'   # every 4 hours, offset by 40 min
-  workflow_dispatch: {}
+  # schedule:
+  #   - cron: '40 */4 * * *'   # every 4 hours (disabled — Railway primary)
+  workflow_dispatch: {}       # manual trigger (backup)
 
 jobs:
   ingest:

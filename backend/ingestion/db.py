@@ -2,7 +2,7 @@
 Shared database writer for all ingestion scripts.
 
 Connects to Supabase Postgres and provides:
-  - upsert_listings()  — bulk insert/update StandardListing objects
+  - upsert_listings()  — batch insert/update StandardListing objects
   - mark_stale()       — flag listings not seen in recent cycles
   - record_run_start() / record_run_end() — observability
 """
@@ -22,6 +22,8 @@ import psycopg2.extras
 from ingestion.models import StandardListing
 
 logger = logging.getLogger(__name__)
+
+BATCH_SIZE = 50
 
 
 def get_connection():
@@ -47,28 +49,141 @@ class UpsertStats:
         self.price_changes = 0
 
 
+_UPSERT_COLUMNS = [
+    "source", "source_id", "source_url", "source_group",
+    "title", "body", "bhk", "property_type", "furnishing",
+    "rent", "deposit", "maintenance",
+    "locality", "address", "latitude", "longitude", "maps_url",
+    "area_sqft", "floor_info", "amenities", "lease_type",
+    "contact_phone", "contact_name", "is_broker", "no_brokerage",
+    "is_flatmate", "is_sponsored", "thumbnail_url",
+    "posted_at", "scraped_at", "quality_score", "raw_payload",
+]
+
+_UPDATE_ON_CONFLICT = [
+    "source_url", "source_group",
+    "title", "body", "bhk", "property_type", "furnishing",
+    "rent", "deposit", "maintenance",
+    "locality", "address", "latitude", "longitude", "maps_url",
+    "area_sqft", "floor_info", "amenities", "lease_type",
+    "contact_phone", "contact_name", "is_broker", "no_brokerage",
+    "is_flatmate", "is_sponsored", "thumbnail_url",
+    "posted_at", "scraped_at", "quality_score", "raw_payload",
+]
+
+
+def _listing_to_row(listing: StandardListing, now: datetime) -> tuple:
+    """Convert a StandardListing to a tuple matching _UPSERT_COLUMNS."""
+    raw_json = json.dumps(listing.raw_payload, default=str) if listing.raw_payload else None
+    amenities = listing.amenities if listing.amenities else []
+    return (
+        listing.source, listing.source_id, listing.source_url, listing.source_group,
+        listing.title, listing.body, listing.bhk, listing.property_type,
+        listing.furnishing,
+        listing.rent, listing.deposit, listing.maintenance,
+        listing.locality, listing.address, listing.latitude, listing.longitude,
+        listing.maps_url,
+        listing.area_sqft, listing.floor_info, amenities, listing.lease_type,
+        listing.contact_phone, listing.contact_name, listing.is_broker, listing.no_brokerage,
+        listing.is_flatmate, listing.is_sponsored, listing.thumbnail_url,
+        listing.posted_at, now, listing.quality_score,
+        raw_json,
+    )
+
+
 def upsert_listings(listings: list[StandardListing]) -> UpsertStats:
     """
-    Bulk insert/update listings. Detects price changes and records history.
-    Returns UpsertStats with counters.
+    Batch upsert listings using INSERT ... ON CONFLICT.
+    Detects price changes via a CTE that captures old values.
     """
     if not listings:
         return UpsertStats()
 
     stats = UpsertStats()
+    now = datetime.now(timezone.utc)
     conn = get_connection()
+
+    cols = ", ".join(_UPSERT_COLUMNS)
+    placeholders = ", ".join(["%s"] * len(_UPSERT_COLUMNS))
+    update_set = ", ".join(
+        f"{c} = EXCLUDED.{c}" for c in _UPDATE_ON_CONFLICT
+    )
+
+    upsert_sql = f"""
+        INSERT INTO listings (
+            {cols},
+            status, first_seen_at, last_seen_at, consecutive_misses, marked_stale_at
+        )
+        VALUES (
+            {placeholders},
+            'active', NOW(), NOW(), 0, NULL
+        )
+        ON CONFLICT (source, source_id) DO UPDATE SET
+            {update_set},
+            status = 'active',
+            last_seen_at = NOW(),
+            consecutive_misses = 0,
+            marked_stale_at = NULL
+        RETURNING id, source_id,
+                  (xmax = 0) AS is_new,
+                  rent,
+                  deposit
+    """
+
     try:
         cur = conn.cursor()
-        for listing in listings:
-            try:
-                _upsert_one(cur, listing, stats)
-            except Exception as e:
-                logger.error("Failed to upsert %s/%s: %s", listing.source, listing.source_id, e)
-                stats.total_errors += 1
-                conn.rollback()
-                cur = conn.cursor()
-                continue
-        conn.commit()
+
+        old_prices: dict[str, tuple] = {}
+        source = listings[0].source if listings else ""
+        source_ids = [l.source_id for l in listings]
+        if source_ids:
+            cur.execute(
+                "SELECT source_id, rent, deposit FROM listings WHERE source = %s AND source_id = ANY(%s)",
+                (source, source_ids),
+            )
+            for row in cur.fetchall():
+                old_prices[row[0]] = (row[1], row[2])
+
+        for i in range(0, len(listings), BATCH_SIZE):
+            batch = listings[i:i + BATCH_SIZE]
+            rows = [_listing_to_row(l, now) for l in batch]
+
+            results = []
+            for row in rows:
+                try:
+                    cur.execute(upsert_sql, row)
+                    results.append(cur.fetchone())
+                except Exception as e:
+                    logger.error("Failed to upsert %s: %s", row[1], e)
+                    stats.total_errors += 1
+                    conn.rollback()
+                    cur = conn.cursor()
+                    old_prices = {}
+
+            for res in results:
+                if res is None:
+                    continue
+                listing_id, source_id, is_new, new_rent, new_deposit = res
+                if is_new:
+                    stats.total_new += 1
+                else:
+                    stats.total_updated += 1
+                    old = old_prices.get(source_id)
+                    if old:
+                        old_rent, old_deposit = old
+                        if (new_rent and old_rent and new_rent != old_rent) or \
+                           (new_deposit and old_deposit and new_deposit != old_deposit):
+                            try:
+                                cur.execute(
+                                    "INSERT INTO listing_price_history (listing_id, rent, deposit) VALUES (%s, %s, %s)",
+                                    (listing_id, new_rent, new_deposit),
+                                )
+                                stats.price_changes += 1
+                            except Exception as e:
+                                logger.error("Failed to record price change for %s: %s", listing_id, e)
+
+            conn.commit()
+
     except Exception as e:
         logger.error("upsert_listings batch failed: %s", e)
         conn.rollback()
@@ -82,126 +197,6 @@ def upsert_listings(listings: list[StandardListing]) -> UpsertStats:
         stats.total_errors, stats.price_changes,
     )
     return stats
-
-
-def _upsert_one(cur, listing: StandardListing, stats: UpsertStats):
-    """Insert or update a single listing, tracking price changes."""
-    now = datetime.now(timezone.utc)
-
-    # Check if listing already exists and get current price
-    cur.execute(
-        "SELECT id, rent, deposit FROM listings WHERE source = %s AND source_id = %s",
-        (listing.source, listing.source_id),
-    )
-    existing = cur.fetchone()
-
-    raw_payload_json = json.dumps(listing.raw_payload, default=str) if listing.raw_payload else None
-    amenities_pg = listing.amenities if listing.amenities else []
-
-    if existing:
-        existing_id, old_rent, old_deposit = existing
-        # Track price changes
-        if (listing.rent and old_rent and listing.rent != old_rent) or \
-           (listing.deposit and old_deposit and listing.deposit != old_deposit):
-            cur.execute(
-                """INSERT INTO listing_price_history (listing_id, rent, deposit)
-                   VALUES (%s, %s, %s)""",
-                (existing_id, listing.rent, listing.deposit),
-            )
-            stats.price_changes += 1
-
-        cur.execute("""
-            UPDATE listings SET
-                source_url      = %s,
-                source_group    = %s,
-                status          = 'active',
-                last_seen_at    = %s,
-                consecutive_misses = 0,
-                marked_stale_at = NULL,
-                title           = %s,
-                body            = %s,
-                bhk             = %s,
-                property_type   = %s,
-                furnishing      = %s,
-                rent            = %s,
-                deposit         = %s,
-                maintenance     = %s,
-                locality        = %s,
-                address         = %s,
-                latitude        = %s,
-                longitude       = %s,
-                maps_url        = %s,
-                area_sqft       = %s,
-                floor_info      = %s,
-                amenities       = %s,
-                lease_type      = %s,
-                contact_phone   = %s,
-                contact_name    = %s,
-                is_broker       = %s,
-                no_brokerage    = %s,
-                is_flatmate     = %s,
-                is_sponsored    = %s,
-                thumbnail_url   = %s,
-                posted_at       = %s,
-                scraped_at      = %s,
-                quality_score   = %s,
-                raw_payload     = %s
-            WHERE id = %s
-        """, (
-            listing.source_url, listing.source_group,
-            now,
-            listing.title, listing.body, listing.bhk, listing.property_type,
-            listing.furnishing,
-            listing.rent, listing.deposit, listing.maintenance,
-            listing.locality, listing.address, listing.latitude, listing.longitude,
-            listing.maps_url,
-            listing.area_sqft, listing.floor_info, amenities_pg, listing.lease_type,
-            listing.contact_phone, listing.contact_name, listing.is_broker, listing.no_brokerage,
-            listing.is_flatmate, listing.is_sponsored,
-            listing.thumbnail_url,
-            listing.posted_at, now, listing.quality_score,
-            raw_payload_json,
-            existing_id,
-        ))
-        stats.total_updated += 1
-    else:
-        cur.execute("""
-            INSERT INTO listings (
-                source, source_id, source_url, source_group,
-                status, first_seen_at, last_seen_at, consecutive_misses,
-                title, body, bhk, property_type, furnishing,
-                rent, deposit, maintenance,
-                locality, address, latitude, longitude, maps_url,
-                area_sqft, floor_info, amenities, lease_type,
-                contact_phone, contact_name, is_broker, no_brokerage,
-                is_flatmate, is_sponsored, thumbnail_url,
-                posted_at, scraped_at, quality_score, raw_payload
-            ) VALUES (
-                %s, %s, %s, %s,
-                'active', %s, %s, 0,
-                %s, %s, %s, %s, %s,
-                %s, %s, %s,
-                %s, %s, %s, %s, %s,
-                %s, %s, %s, %s,
-                %s, %s, %s, %s,
-                %s, %s, %s,
-                %s, %s, %s, %s
-            )
-        """, (
-            listing.source, listing.source_id, listing.source_url, listing.source_group,
-            now, now,
-            listing.title, listing.body, listing.bhk, listing.property_type,
-            listing.furnishing,
-            listing.rent, listing.deposit, listing.maintenance,
-            listing.locality, listing.address, listing.latitude, listing.longitude,
-            listing.maps_url,
-            listing.area_sqft, listing.floor_info, amenities_pg, listing.lease_type,
-            listing.contact_phone, listing.contact_name, listing.is_broker, listing.no_brokerage,
-            listing.is_flatmate, listing.is_sponsored, listing.thumbnail_url,
-            listing.posted_at, now, listing.quality_score,
-            raw_payload_json,
-        ))
-        stats.total_new += 1
 
 
 # ─────────────────────────────────────────────
@@ -218,7 +213,6 @@ def mark_stale(source: str, run_started_at: datetime) -> int:
     try:
         cur = conn.cursor()
 
-        # Increment consecutive_misses for active listings not seen in this run
         cur.execute("""
             UPDATE listings
             SET consecutive_misses = consecutive_misses + 1
@@ -227,7 +221,6 @@ def mark_stale(source: str, run_started_at: datetime) -> int:
               AND last_seen_at < %s
         """, (source, run_started_at))
 
-        # Mark stale: 2+ consecutive misses
         cur.execute("""
             UPDATE listings
             SET status = 'stale', marked_stale_at = NOW()
@@ -238,7 +231,6 @@ def mark_stale(source: str, run_started_at: datetime) -> int:
         """, (source,))
         stale_count = cur.rowcount
 
-        # Mark expired: not seen for 7+ days
         cur.execute("""
             UPDATE listings
             SET status = 'expired'

@@ -1,9 +1,9 @@
 name: Ingest Housing.com
 
 on:
-  schedule:
-    - cron: '20 */3 * * *'   # every 3 hours, offset by 20 min
-  workflow_dispatch: {}
+  # schedule:
+  #   - cron: '20 */3 * * *'   # every 3 hours (disabled — Railway primary)
+  workflow_dispatch: {}       # manual trigger (backup)
 
 jobs:
   ingest:

@@ -1,9 +1,9 @@
 name: Ingest NoBroker
 
 on:
-  schedule:
-    - cron: '0 */3 * * *'    # every 3 hours
-  workflow_dispatch: {}       # manual trigger
+  # schedule:
+  #   - cron: '0 */3 * * *'    # every 3 hours (disabled — Railway primary)
+  workflow_dispatch: {}       # manual trigger (backup)
 
 jobs:
   ingest:
