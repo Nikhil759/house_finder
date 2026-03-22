@@ -1,2 +1,2 @@
-web: gunicorn app:app
+web: gunicorn app:app --bind 0.0.0.0:${PORT:-5001} --workers 2 --timeout 120 --log-level info --access-logfile -
 worker: python -m ingestion.run_all
