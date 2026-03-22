@@ -191,20 +191,39 @@ export default function Profile() {
               </div>
             </div>
 
-            <button
-              onClick={signOut}
-              style={{
-                background: 'transparent',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                padding: '7px 14px',
-                color: 'var(--text-secondary)',
-                fontSize: '13px',
-                cursor: 'pointer',
-              }}
-            >
-              Sign out
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {user.email === 'bn5799@gmail.com' && (
+                <button
+                  onClick={() => navigate('/stats')}
+                  style={{
+                    background: 'rgba(245,166,35,0.12)',
+                    border: '1px solid rgba(245,166,35,0.3)',
+                    borderRadius: '8px',
+                    padding: '7px 12px',
+                    color: '#f5a623',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                  }}
+                >
+                  📊 Stats
+                </button>
+              )}
+              <button
+                onClick={signOut}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  padding: '7px 14px',
+                  color: 'var(--text-secondary)',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                }}
+              >
+                Sign out
+              </button>
+            </div>
           </div>
 
           {/* ── Tab bar ────────────────────────────────────────────────── */}
