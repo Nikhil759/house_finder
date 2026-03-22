@@ -1,8 +1,8 @@
 """
-Persistent listing storage (SQLite locally, Postgres on Railway).
+Persistent listing storage — reads from the new ingestion pipeline schema.
 
-All sources (Reddit, Telegram, NoBroker) write normalized listings here.
-The /api/search endpoint reads from this table for fast responses.
+The ingestion cron jobs (Railway) write to the `listings` table.
+This module provides read access for the Flask search/health endpoints.
 """
 
 import json
@@ -35,61 +35,35 @@ def _get_conn():
         return conn, False
 
 
-# ─────────────────────────────────────────────
-# Schema
-# ─────────────────────────────────────────────
-
-_CREATE_SQLITE = """
-CREATE TABLE IF NOT EXISTS listings (
-    id            TEXT PRIMARY KEY,
-    source        TEXT NOT NULL,
-    locality      TEXT,
-    title         TEXT,
-    body          TEXT,
-    raw_json      TEXT,
-    price         INTEGER,
-    bhk           TEXT,
-    created_utc   REAL,
-    fetched_at    REAL NOT NULL,
-    expires_at    REAL NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_listings_source   ON listings(source);
-CREATE INDEX IF NOT EXISTS idx_listings_locality ON listings(locality);
-CREATE INDEX IF NOT EXISTS idx_listings_expires  ON listings(expires_at);
-"""
-
-_CREATE_PG = """
-CREATE TABLE IF NOT EXISTS listings (
-    id            TEXT PRIMARY KEY,
-    source        TEXT NOT NULL,
-    locality      TEXT,
-    title         TEXT,
-    body          TEXT,
-    raw_json      TEXT,
-    price         INTEGER,
-    bhk           TEXT,
-    created_utc   DOUBLE PRECISION,
-    fetched_at    DOUBLE PRECISION NOT NULL,
-    expires_at    DOUBLE PRECISION NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_listings_source   ON listings(source);
-CREATE INDEX IF NOT EXISTS idx_listings_locality ON listings(locality);
-CREATE INDEX IF NOT EXISTS idx_listings_expires  ON listings(expires_at);
-"""
-
-
 def init_listings_table():
-    """Create the listings table if it doesn't exist."""
-    conn, is_pg = _get_conn()
+    """No-op for Postgres — the new schema is managed by migrations."""
+    if _use_postgres():
+        logger.info("listings table managed by ingestion pipeline (skipping init)")
+        return
+
+    conn, _ = _get_conn()
     try:
         cur = conn.cursor()
-        sql = _CREATE_PG if is_pg else _CREATE_SQLITE
-        for statement in sql.strip().split(";"):
-            statement = statement.strip()
-            if statement:
-                cur.execute(statement)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS listings (
+                id            TEXT PRIMARY KEY,
+                source        TEXT NOT NULL,
+                locality      TEXT,
+                title         TEXT,
+                body          TEXT,
+                raw_json      TEXT,
+                price         INTEGER,
+                bhk           TEXT,
+                created_utc   REAL,
+                fetched_at    REAL NOT NULL,
+                expires_at    REAL NOT NULL
+            )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_listings_source ON listings(source)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_listings_locality ON listings(locality)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_listings_expires ON listings(expires_at)")
         conn.commit()
-        logger.info("listings table initialized (%s)", "postgres" if is_pg else "sqlite")
+        logger.info("listings table initialized (sqlite)")
     except Exception as e:
         logger.error("Failed to init listings table: %s", e)
         conn.rollback()
@@ -98,24 +72,35 @@ def init_listings_table():
         conn.close()
 
 
-# ─────────────────────────────────────────────
-# Write operations
-# ─────────────────────────────────────────────
+def _row_to_dict(raw_payload):
+    """Convert a raw_payload JSONB/dict or JSON string to a listing dict."""
+    if raw_payload is None:
+        return None
+    if isinstance(raw_payload, dict):
+        return raw_payload
+    if isinstance(raw_payload, str):
+        try:
+            return json.loads(raw_payload)
+        except (json.JSONDecodeError, TypeError):
+            return None
+    return None
+
 
 def upsert_listing(listing: dict, ttl_seconds: int = 10800):
-    """
-    Insert or update a single listing.
-    ttl_seconds defaults to 3 hours (10800s).
-    """
     upsert_listings_batch([listing], ttl_seconds)
 
 
 def upsert_listings_batch(listings: list, ttl_seconds: int = 10800):
     """
-    Bulk insert/update listings.
-    Each listing dict must have at least: id, source, title.
+    Legacy upsert for the old in-app ingestion (Telegram daemon, etc.).
+    For Postgres, this is now handled by the ingestion pipeline.
+    Only used for SQLite (local dev).
     """
     if not listings:
+        return
+
+    if _use_postgres():
+        logger.debug("upsert_listings_batch: skipped (handled by ingestion pipeline)")
         return
 
     now = time.time()
@@ -136,33 +121,13 @@ def upsert_listings_batch(listings: list, ttl_seconds: int = 10800):
                 now,
                 now + ttl_seconds,
             )
-
-            if is_pg:
-                cur.execute("""
-                    INSERT INTO listings (id, source, locality, title, body, raw_json,
-                                          price, bhk, created_utc, fetched_at, expires_at)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                    ON CONFLICT (id) DO UPDATE SET
-                        locality   = EXCLUDED.locality,
-                        title      = EXCLUDED.title,
-                        body       = EXCLUDED.body,
-                        raw_json   = EXCLUDED.raw_json,
-                        price      = EXCLUDED.price,
-                        bhk        = EXCLUDED.bhk,
-                        fetched_at = EXCLUDED.fetched_at,
-                        expires_at = EXCLUDED.expires_at
-                """, row)
-            else:
-                cur.execute("""
-                    INSERT OR REPLACE INTO listings
-                        (id, source, locality, title, body, raw_json,
-                         price, bhk, created_utc, fetched_at, expires_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?)
-                """, row)
-
+            cur.execute("""
+                INSERT OR REPLACE INTO listings
+                    (id, source, locality, title, body, raw_json,
+                     price, bhk, created_utc, fetched_at, expires_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            """, row)
         conn.commit()
-        logger.info("Upserted %d listings (source=%s)",
-                     len(listings), listings[0].get("source", "?"))
     except Exception as e:
         logger.error("upsert_listings_batch failed: %s", e)
         conn.rollback()
@@ -172,7 +137,6 @@ def upsert_listings_batch(listings: list, ttl_seconds: int = 10800):
 
 
 def _extract_price_int(item):
-    """Pull an integer price from various formats listings use."""
     p = item.get("price")
     if p is None:
         return None
@@ -185,10 +149,6 @@ def _extract_price_int(item):
     return None
 
 
-# ─────────────────────────────────────────────
-# Read operations
-# ─────────────────────────────────────────────
-
 def query_listings(
     localities=None,
     sources=None,
@@ -198,47 +158,108 @@ def query_listings(
     include_expired=False,
     since_utc=None,
 ):
-    """
-    Query listings from the DB.
-    Returns list of full listing dicts (deserialized from raw_json).
-    """
     conn, is_pg = _get_conn()
-    ph = "%s" if is_pg else "?"
+
+    if not is_pg:
+        return _query_listings_sqlite(
+            conn, localities, sources, bhk, budget, limit, include_expired, since_utc
+        )
 
     try:
         conditions = []
         params = []
 
         if not include_expired:
-            conditions.append(f"expires_at > {ph}")
-            params.append(time.time())
+            conditions.append("status = %s")
+            params.append("active")
 
         if sources:
-            placeholders = ",".join([ph] * len(sources))
+            placeholders = ",".join(["%s"] * len(sources))
             conditions.append(f"source IN ({placeholders})")
             params.extend(sources)
 
         if localities:
-            placeholders = ",".join([ph] * len(localities))
+            placeholders = ",".join(["%s"] * len(localities))
             conditions.append(f"LOWER(locality) IN ({placeholders})")
             params.extend([loc.lower() for loc in localities])
 
         if bhk and bhk != "any":
-            conditions.append(
-                f"LOWER(REPLACE(bhk, ' ', '')) LIKE {ph}"
-            )
+            conditions.append("LOWER(REPLACE(bhk, ' ', '')) LIKE %s")
             params.append(f"%{bhk.lower().replace(' ', '')}%")
 
         if budget:
             try:
                 budget_val = int(budget)
-                conditions.append(f"(price IS NULL OR price <= {ph})")
+                conditions.append("(rent IS NULL OR rent <= %s)")
                 params.append(budget_val)
             except ValueError:
                 pass
 
         if since_utc is not None:
-            conditions.append(f"created_utc > {ph}")
+            conditions.append("EXTRACT(EPOCH FROM posted_at) > %s")
+            params.append(since_utc)
+
+        where = " AND ".join(conditions) if conditions else "1=1"
+        sql = f"""
+            SELECT raw_payload FROM listings
+            WHERE {where}
+            ORDER BY posted_at DESC NULLS LAST
+            LIMIT %s
+        """
+        params.append(limit)
+
+        cur = conn.cursor()
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+
+        results = []
+        for row in rows:
+            d = _row_to_dict(row[0])
+            if d:
+                results.append(d)
+        return results
+
+    except Exception as e:
+        logger.error("query_listings failed: %s", e)
+        return []
+    finally:
+        conn.close()
+
+
+def _query_listings_sqlite(conn, localities, sources, bhk, budget, limit, include_expired, since_utc):
+    """SQLite fallback for local dev."""
+    try:
+        conditions = []
+        params = []
+
+        if not include_expired:
+            conditions.append("expires_at > ?")
+            params.append(time.time())
+
+        if sources:
+            placeholders = ",".join(["?"] * len(sources))
+            conditions.append(f"source IN ({placeholders})")
+            params.extend(sources)
+
+        if localities:
+            placeholders = ",".join(["?"] * len(localities))
+            conditions.append(f"LOWER(locality) IN ({placeholders})")
+            params.extend([loc.lower() for loc in localities])
+
+        if bhk and bhk != "any":
+            conditions.append("LOWER(REPLACE(bhk, ' ', '')) LIKE ?")
+            params.append(f"%{bhk.lower().replace(' ', '')}%")
+
+        if budget:
+            try:
+                budget_val = int(budget)
+                conditions.append("(price IS NULL OR price <= ?)")
+                params.append(budget_val)
+            except ValueError:
+                pass
+
+        if since_utc is not None:
+            conditions.append("created_utc > ?")
             params.append(since_utc)
 
         where = " AND ".join(conditions) if conditions else "1=1"
@@ -246,7 +267,7 @@ def query_listings(
             SELECT raw_json FROM listings
             WHERE {where}
             ORDER BY created_utc DESC
-            LIMIT {ph}
+            LIMIT ?
         """
         params.append(limit)
 
@@ -262,29 +283,35 @@ def query_listings(
             except (json.JSONDecodeError, TypeError):
                 continue
         return results
-
     except Exception as e:
-        logger.error("query_listings failed: %s", e)
+        logger.error("query_listings (sqlite) failed: %s", e)
         return []
     finally:
         conn.close()
 
 
 def get_listing_counts():
-    """Return {source: {count, oldest_fetched_at, newest_fetched_at}} for status."""
     conn, is_pg = _get_conn()
-    ph = "%s" if is_pg else "?"
     try:
         cur = conn.cursor()
-        cur.execute(f"""
-            SELECT source,
-                   COUNT(*) as cnt,
-                   MIN(fetched_at) as oldest,
-                   MAX(fetched_at) as newest
-            FROM listings
-            WHERE expires_at > {ph}
-            GROUP BY source
-        """, (time.time(),))
+        if is_pg:
+            cur.execute("""
+                SELECT source,
+                       COUNT(*) as cnt,
+                       MIN(EXTRACT(EPOCH FROM last_seen_at)) as oldest,
+                       MAX(EXTRACT(EPOCH FROM last_seen_at)) as newest
+                FROM listings
+                WHERE status = 'active'
+                GROUP BY source
+            """)
+        else:
+            cur.execute("""
+                SELECT source, COUNT(*) as cnt,
+                       MIN(fetched_at) as oldest, MAX(fetched_at) as newest
+                FROM listings WHERE expires_at > ?
+                GROUP BY source
+            """, (time.time(),))
+
         rows = cur.fetchall()
         result = {}
         for row in rows:
@@ -308,18 +335,25 @@ def get_listing_counts():
 
 
 def get_locality_counts():
-    """Return {locality: count} for non-expired listings."""
     conn, is_pg = _get_conn()
-    ph = "%s" if is_pg else "?"
     try:
         cur = conn.cursor()
-        cur.execute(f"""
-            SELECT locality, COUNT(*) as cnt
-            FROM listings
-            WHERE expires_at > {ph} AND locality IS NOT NULL
-            GROUP BY locality
-            ORDER BY cnt DESC
-        """, (time.time(),))
+        if is_pg:
+            cur.execute("""
+                SELECT locality, COUNT(*) as cnt
+                FROM listings
+                WHERE status = 'active' AND locality IS NOT NULL
+                GROUP BY locality
+                ORDER BY cnt DESC
+            """)
+        else:
+            cur.execute("""
+                SELECT locality, COUNT(*) as cnt
+                FROM listings
+                WHERE expires_at > ? AND locality IS NOT NULL
+                GROUP BY locality ORDER BY cnt DESC
+            """, (time.time(),))
+
         rows = cur.fetchall()
         if is_pg:
             return {row[0]: row[1] for row in rows}
@@ -332,13 +366,15 @@ def get_locality_counts():
 
 
 def purge_old_listings(max_age_hours=72):
-    """Delete listings older than max_age_hours."""
-    conn, is_pg = _get_conn()
-    ph = "%s" if is_pg else "?"
+    """No-op for Postgres — lifecycle managed by ingestion pipeline."""
+    if _use_postgres():
+        return 0
+
+    conn, _ = _get_conn()
     try:
         cur = conn.cursor()
         cutoff = time.time() - (max_age_hours * 3600)
-        cur.execute(f"DELETE FROM listings WHERE fetched_at < {ph}", (cutoff,))
+        cur.execute("DELETE FROM listings WHERE fetched_at < ?", (cutoff,))
         deleted = cur.rowcount
         conn.commit()
         if deleted:
@@ -353,13 +389,13 @@ def purge_old_listings(max_age_hours=72):
 
 
 def total_listing_count():
-    """Quick count of all non-expired listings."""
     conn, is_pg = _get_conn()
-    ph = "%s" if is_pg else "?"
     try:
         cur = conn.cursor()
-        cur.execute(f"SELECT COUNT(*) FROM listings WHERE expires_at > {ph}",
-                    (time.time(),))
+        if is_pg:
+            cur.execute("SELECT COUNT(*) FROM listings WHERE status = 'active'")
+        else:
+            cur.execute("SELECT COUNT(*) FROM listings WHERE expires_at > ?", (time.time(),))
         row = cur.fetchone()
         return row[0] if row else 0
     except Exception as e:
