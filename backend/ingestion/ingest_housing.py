@@ -170,6 +170,41 @@ def fetch_locality(locality_name: str, hash_val: str, page: int = 1, size: int =
         return []
 
 
+def _extract_from_url_slug(url: str) -> dict:
+    """
+    Pull area_sqft, bhk, furnishing, and property_type from the Housing.com URL slug.
+    URL pattern: /rent/19441264-1500-sqft-3-bhk-apartment-on-rent-in-whitefield
+    """
+    result: dict = {}
+    slug = url.lower().replace("-", " ")
+
+    m = re.search(r"(\d{2,5})\s*sqft", slug)
+    if m:
+        result["area_sqft"] = int(m.group(1))
+
+    m = re.search(r"(\d)\s*bhk", slug)
+    if m:
+        result["bhk"] = f"{m.group(1)} BHK"
+
+    if "fully furnished" in slug or "fully-furnished" in slug:
+        result["furnishing"] = "Fully Furnished"
+    elif "semi furnished" in slug or "semi-furnished" in slug:
+        result["furnishing"] = "Semi Furnished"
+    elif "unfurnished" in slug:
+        result["furnishing"] = "Unfurnished"
+    elif "furnished" in slug:
+        result["furnishing"] = "Furnished"
+
+    if "independent house" in slug or "independent-house" in slug:
+        result["property_type"] = "Independent House"
+    elif "villa" in slug:
+        result["property_type"] = "Villa"
+    elif "studio" in slug:
+        result["property_type"] = "Studio"
+
+    return result
+
+
 def normalize(item: dict, locality_name: str) -> StandardListing:
     """Convert a raw Housing.com property dict to StandardListing."""
     listing_id = str(item.get("listingId", ""))
@@ -180,33 +215,66 @@ def normalize(item: dict, locality_name: str) -> StandardListing:
     address = addr_obj.get("address") or addr_obj.get("longAddress") or addr_obj.get("subAddress") or ""
     canonical = extract_locality(address) or extract_locality(locality_name) or locality_name
 
-    carpet_obj = item.get("carpetArea") or {}
-    area_val = carpet_obj.get("value")
-
     url_raw = item.get("url", "")
     detail_url = url_raw if url_raw.startswith("http") else f"https://housing.com{url_raw}"
     cover = (item.get("coverImage") or {}).get("url") or ""
     posted_str = item.get("postedDate") or item.get("addedOn") or ""
 
-    furnish_raw = (item.get("furnishingType") or item.get("serviceType") or "").strip()
+    # Extract from API first, then fall back to URL slug (API often returns null)
+    carpet_obj = item.get("carpetArea") or {}
+    area_from_api = carpet_obj.get("value")
+    furnish_from_api = (item.get("furnishingType") or item.get("serviceType") or "").strip()
 
+    slug_data = _extract_from_url_slug(detail_url)
+    area_val = area_from_api or slug_data.get("area_sqft")
+    furnish_raw = furnish_from_api or slug_data.get("furnishing", "")
+    property_type = slug_data.get("property_type", "Apartment")
+
+    # Derive BHK from title first, then URL slug
     bhk_match = re.search(r"(\d)\s*BHK", title, re.IGNORECASE)
-    bhk_str = f"{bhk_match.group(1)} BHK" if bhk_match else None
+    bhk_str = f"{bhk_match.group(1)} BHK" if bhk_match else slug_data.get("bhk")
 
-    body_text = " | ".join(filter(None, [bhk_str, f"{area_val} sqft" if area_val else "", furnish_raw, address]))
+    # Build a descriptive title: "3 BHK Apartment · 1500 sqft in Whitefield"
+    title_parts = [bhk_str, property_type if property_type != "Apartment" else None]
+    if area_val:
+        title_parts.append(f"{area_val} sqft")
+    if furnish_raw:
+        title_parts.append(furnish_raw)
+
+    # Use API title if it has a society/building name, otherwise build a better one
+    api_title = title.strip()
+    if api_title and api_title not in ("Flat", "Apartment", ""):
+        # Keep API title but it's usually just "3 BHK Flat" — enhance it
+        if len(api_title) < 20:
+            # Generic — replace with richer title
+            rich_parts = [p for p in title_parts if p]
+            api_title = " · ".join(rich_parts) + f" in {canonical}"
+    else:
+        rich_parts = [p for p in title_parts if p]
+        api_title = " · ".join(rich_parts) + f" in {canonical}" if rich_parts else f"Flat for Rent in {canonical}"
+
+    # Short address: strip city suffix (", Bangalore East , Bangalore") for clean display
+    short_address = re.sub(r",?\s*(Bangalore East|South Bangalore|North Bangalore|West Bangalore|East Bangalore|Bangalore)\s*,?\s*Bangalore\s*$", "", address, flags=re.IGNORECASE).strip().rstrip(",").strip()
+
+    body_text = " | ".join(filter(None, [
+        bhk_str,
+        f"{area_val} sqft" if area_val else None,
+        furnish_raw or None,
+        short_address or address,
+    ]))
 
     listing = StandardListing(
         source="housing",
         source_id=listing_id,
         source_url=detail_url,
-        title=title or f"{bhk_str or 'Flat'} for Rent in {locality_name}",
+        title=api_title,
         body=body_text,
         bhk=bhk_str,
-        property_type="Apartment",
-        furnishing=furnish_raw,
+        property_type=property_type,
+        furnishing=furnish_raw or None,
         rent=price,
         locality=canonical,
-        address=address,
+        address=short_address or address,
         area_sqft=area_val,
         thumbnail_url=cover,
         posted_at=posted_str if posted_str else None,

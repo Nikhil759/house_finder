@@ -295,6 +295,7 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
 
   const hasPills = displayBhk || displayLocality || displayPrice || displayFurnished || displayContact
     || (isNoBroker && (post.area_sqft || post.deposit_formatted))
+    || (isHousing && (post.area_sqft || post.deposit))
     || (isTelegram && (post.deposit_text || post.no_brokerage || post.is_flatmate));
 
   const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
@@ -386,10 +387,10 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
         e.currentTarget.style.boxShadow = "none";
       }}
     >
-      {/* NoBroker thumbnail */}
-      {isNoBroker && post.thumbnail && (
+      {/* NoBroker / Housing.com thumbnail */}
+      {(isNoBroker || isHousing) && (post.thumbnail || post.thumbnail_url) && (
         <img
-          src={post.thumbnail}
+          src={post.thumbnail || post.thumbnail_url}
           alt="property"
           style={{
             width: "100%", maxHeight: "160px", objectFit: "cover",
@@ -443,7 +444,7 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
       {/* Info pills */}
       {hasPills && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
-          {displayBhk && (isNoBroker && post.area_sqft)
+          {displayBhk && ((isNoBroker || isHousing) && post.area_sqft)
             ? <Pill icon={<FaIcon name="fa-solid fa-house" />} label={`${displayBhk} · ${post.area_sqft} sqft`} bg="rgba(59,130,246,0.15)" color="#7eb8f7" />
             : displayBhk && <Pill icon={<FaIcon name="fa-solid fa-house" />} label={displayBhk} bg="rgba(59,130,246,0.15)" color="#7eb8f7" />}
           {displayLocality && <Pill icon={<FaIcon name="fa-solid fa-location-dot" />} label={displayLocality} bg="rgba(120,120,140,0.12)" color="#9a9ab0" />}
@@ -451,6 +452,9 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
           {displayFurnished && <Pill icon={<FaIcon name="fa-solid fa-couch" />} label={displayFurnished} bg="rgba(168,85,247,0.15)" color="#c084fc" />}
           {isNoBroker && post.deposit_formatted && (
             <Pill icon={<FaIcon name="fa-solid fa-lock" />} label={`Deposit: ${post.deposit_formatted}`} bg="rgba(120,120,140,0.1)" color="#8a8a9a" />
+          )}
+          {isHousing && post.deposit && (
+            <Pill icon={<FaIcon name="fa-solid fa-lock" />} label={`Deposit: ₹${Number(post.deposit).toLocaleString('en-IN')}`} bg="rgba(120,120,140,0.1)" color="#8a8a9a" />
           )}
           {isNoBroker && post.lease_type && post.lease_type !== "ANYONE" && (
             <Pill icon={<FaIcon name="fa-solid fa-user" />} label={post.lease_type.charAt(0) + post.lease_type.slice(1).toLowerCase()} bg="rgba(120,120,140,0.1)" color="#8a8a9a" />
@@ -494,14 +498,15 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
       <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "8px", flexWrap: "wrap" }}>
         {isHousing ? (
           <>
-            {post.owner_name && (
-              <span style={{ color: "#7c3aed", fontSize: "10px", fontFamily: "monospace", opacity: 0.8 }}>
-                Owner: {post.owner_name}
+            {post.address && (
+              <span style={{ color: "#7c3aed", fontSize: "10px", fontFamily: "monospace", opacity: 0.8, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                <FaIcon name="fa-solid fa-building" size={9} />
+                {post.address.length > 60 ? post.address.slice(0, 60) + "…" : post.address}
               </span>
             )}
-            {post.available_from && (
+            {post.property_type && post.property_type !== "Apartment" && (
               <span className="post-meta-text" style={{ color: "#666", fontSize: "10px", fontFamily: "monospace" }}>
-                Available: {post.available_from}
+                {post.property_type}
               </span>
             )}
           </>
