@@ -206,20 +206,25 @@ export default function NewForYou() {
               }}>
                 <i className="fa-regular fa-bell" style={{ color: '#f5a623', fontSize: '18px' }} />
                 New For You
+                {loading && (
+                  <span style={{
+                    fontSize: '11px', fontWeight: '500',
+                    color: 'var(--text-muted)', fontFamily: 'monospace',
+                    animation: 'pulse 1.5s ease-in-out infinite',
+                  }}>
+                    refreshing…
+                  </span>
+                )}
               </h1>
-              <p style={{
-                color: 'var(--text-muted)',
-                fontSize: '13px',
-                margin: 0,
-              }}>
-                {loading
-                  ? 'Checking your saved searches...'
-                  : totalCount > 0
-                    ? `${totalCount} new ${totalCount === 1 ? 'listing' : 'listings'} since your last search`
+              <p style={{ color: 'var(--text-muted)', fontSize: '13px', margin: 0 }}>
+                {totalCount > 0
+                  ? `${totalCount} new ${totalCount === 1 ? 'listing' : 'listings'} since your last search`
+                  : loading
+                    ? 'Checking your saved searches...'
                     : 'No new listings since your last search'}
               </p>
             </div>
-            {!loading && totalCount > 0 && (
+            {totalCount > 0 && (
               <button
                 onClick={markAllSeen}
                 style={{
@@ -237,20 +242,31 @@ export default function NewForYou() {
             )}
           </div>
 
-          {/* Loading */}
-          {loading && (
+          {/* Full-page loading only on very first load (no cache, no results yet) */}
+          {loading && Object.keys(newListings).length === 0 && (
             <div style={{
-              textAlign: 'center',
-              padding: '80px 0',
-              color: 'var(--text-muted)',
-              fontSize: '14px',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+              gap: '16px',
+              marginBottom: '48px',
             }}>
-              Scanning your saved searches...
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} style={{
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '10px',
+                  padding: '14px 16px',
+                  height: '130px',
+                  opacity: 0.4,
+                  animation: 'pulse 1.5s ease-in-out infinite',
+                  animationDelay: `${i * 0.1}s`,
+                }} />
+              ))}
             </div>
           )}
 
           {/* No saved searches */}
-          {!loading && savedSearches.length === 0 && (
+          {!loading && savedSearches.length === 0 && Object.keys(newListings).length === 0 && (
             <div style={{
               textAlign: 'center',
               padding: '80px 0',
@@ -278,7 +294,7 @@ export default function NewForYou() {
             </div>
           )}
 
-          {/* All caught up */}
+          {/* All caught up — only show after loading fully completes with no results */}
           {!loading && savedSearches.length > 0 && totalCount === 0 && (
             <div style={{
               textAlign: 'center',

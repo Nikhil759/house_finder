@@ -112,3 +112,8 @@ body { transition: background 0.25s ease, color 0.25s ease; }
     padding-bottom: 72px;
   }
 }
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 0.8; }
+}
