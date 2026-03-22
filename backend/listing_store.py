@@ -298,8 +298,8 @@ def get_listing_counts():
             cur.execute("""
                 SELECT source,
                        COUNT(*) as cnt,
-                       MIN(EXTRACT(EPOCH FROM last_seen_at)) as oldest,
-                       MAX(EXTRACT(EPOCH FROM last_seen_at)) as newest
+                       EXTRACT(EPOCH FROM MIN(last_seen_at))::FLOAT as oldest,
+                       EXTRACT(EPOCH FROM MAX(last_seen_at))::FLOAT as newest
                 FROM listings
                 WHERE status = 'active'
                 GROUP BY source
