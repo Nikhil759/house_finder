@@ -441,6 +441,18 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
         </div>
       )}
 
+      {/* Housing.com address subtitle */}
+      {isHousing && post.address && (
+        <div style={{
+          color: "#8b7cf8", fontSize: "11px", fontFamily: "monospace",
+          lineHeight: "1.4", marginBottom: "8px",
+          display: "inline-flex", alignItems: "center", gap: "5px",
+        }}>
+          <FaIcon name="fa-solid fa-location-dot" size={9} />
+          {post.address.length > 80 ? post.address.slice(0, 80) + "…" : post.address}
+        </div>
+      )}
+
       {/* Info pills */}
       {hasPills && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
@@ -498,12 +510,6 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
       <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "8px", flexWrap: "wrap" }}>
         {isHousing ? (
           <>
-            {post.address && (
-              <span style={{ color: "#7c3aed", fontSize: "10px", fontFamily: "monospace", opacity: 0.8, display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                <FaIcon name="fa-solid fa-building" size={9} />
-                {post.address.length > 60 ? post.address.slice(0, 60) + "…" : post.address}
-              </span>
-            )}
             {post.property_type && post.property_type !== "Apartment" && (
               <span className="post-meta-text" style={{ color: "#666", fontSize: "10px", fontFamily: "monospace" }}>
                 {post.property_type}
@@ -863,12 +869,28 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
       {/* Title — 3 lines max */}
       <div className="post-title" style={{
         color: "#e8e4d8", fontSize: "13px", fontFamily: "'Georgia', serif",
-        lineHeight: "1.5", marginBottom: "10px", flex: 1,
+        lineHeight: "1.5", marginBottom: isHousing && post.address ? "6px" : "10px", flex: 1,
         display: "-webkit-box", WebkitLineClamp: 3,
         WebkitBoxOrient: "vertical", overflow: "hidden",
       }}>
         {post.title}
       </div>
+
+      {/* Housing.com address line */}
+      {isHousing && post.address && (
+        <div style={{
+          color: "#8b7cf8", fontSize: "10px", fontFamily: "monospace",
+          lineHeight: "1.4", marginBottom: "8px",
+          display: "inline-flex", alignItems: "center", gap: "4px",
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          maxWidth: "100%",
+        }}>
+          <FaIcon name="fa-solid fa-location-dot" size={8} />
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {post.address.length > 55 ? post.address.slice(0, 55) + "…" : post.address}
+          </span>
+        </div>
+      )}
 
       {/* Pills — priority: BHK > price > locality > furnished > badges */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "10px" }}>
@@ -898,7 +920,7 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "65%",
         }}>
           {isHousing
-            ? (post.address ? post.address.split(",").slice(0, 2).join(",") : "housing.com")
+            ? "housing.com"
             : isNoBroker
             ? (post.society || post.owner_name
                 ? `${post.society || ""}${post.society && post.owner_name ? " · " : ""}${post.owner_name ? "Owner: " + post.owner_name : ""}`
