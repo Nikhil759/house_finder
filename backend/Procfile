@@ -1,2 +1,2 @@
-web: gunicorn app:app --bind 0.0.0.0:${PORT:-5001} --workers 2 --worker-class gevent --worker-connections 50 --timeout 120 --preload --log-level info --access-logfile -
+web: gunicorn app:app --bind 0.0.0.0:${PORT:-5001} --workers 2 --threads 8 --timeout 120 --preload --log-level info --access-logfile -
 worker: python -m ingestion.run_all

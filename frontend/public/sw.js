@@ -1,5 +1,8 @@
 // Minimal service worker — enables PWA install prompt on Android Chrome.
-// Passthrough fetch: no caching, so the app always fetches fresh data.
+// Only intercept same-origin navigation requests; let API calls pass through
+// natively to avoid doubling errors on network failures.
 self.addEventListener("fetch", (event) => {
-  event.respondWith(fetch(event.request));
+  if (event.request.mode === "navigate") {
+    event.respondWith(fetch(event.request));
+  }
 });

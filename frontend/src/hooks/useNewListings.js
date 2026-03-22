@@ -39,7 +39,13 @@ export function useNewListings(user, savedSearches) {
       params.append('limit', '20')
 
       try {
-        const resp = await fetch(`${API_BASE}/api/search/new?${params}`)
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 10000)
+        const resp = await fetch(`${API_BASE}/api/search/new?${params}`, {
+          signal: controller.signal,
+        })
+        clearTimeout(timeout)
+        if (!resp.ok) continue
         const data = await resp.json()
         if (data.listings?.length) {
           results[search.id] = {
@@ -49,8 +55,8 @@ export function useNewListings(user, savedSearches) {
           }
           total += data.listings.length
         }
-      } catch (e) {
-        console.error('Failed to fetch new listings for', search.name, e)
+      } catch {
+        // Silently skip — avoids console noise on slow/unavailable backend
       }
     }
 
