@@ -1,0 +1,111 @@
+import posthog from 'posthog-js'
+
+/** Set after successful init — guards capture helpers when key is missing. */
+let clientReady = false
+
+/** Prevents double init in HMR / repeated imports. */
+const INIT_FLAG = '__posthog_client_initialized__'
+
+const INTERNAL_LS_KEY = 'posthog_internal_user'
+
+/**
+ * If URL has ?internal=true, persist internal flag and return true.
+ * Otherwise read from localStorage (persists across the session).
+ */
+function resolveInternalUser() {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('internal') === 'true') {
+      localStorage.setItem(INTERNAL_LS_KEY, 'true')
+      return true
+    }
+    return localStorage.getItem(INTERNAL_LS_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+/** Super properties on every event when internal. */
+function applyInternalSuperProperties() {
+  if (resolveInternalUser()) {
+    posthog.register({ internal_user: true })
+  }
+}
+
+/**
+ * Initialize PostHog once per page load. Safe to call multiple times.
+ * @returns {boolean} true if init ran with a valid key
+ */
+export function initPostHog() {
+  if (typeof window === 'undefined') return false
+  if (window[INIT_FLAG]) return clientReady
+
+  const key = import.meta.env.VITE_PUBLIC_POSTHOG_KEY
+  if (!key) {
+    if (import.meta.env.DEV) {
+      console.warn('[PostHog] VITE_PUBLIC_POSTHOG_KEY is not set; analytics disabled.')
+    }
+    return false
+  }
+
+  posthog.init(key, {
+    api_host: 'https://app.posthog.com',
+    capture_pageview: false,
+    persistence: 'localStorage+cookie',
+  })
+
+  applyInternalSuperProperties()
+
+  window[INIT_FLAG] = true
+  clientReady = true
+  return true
+}
+
+export function isPostHogReady() {
+  return clientReady
+}
+
+/** Dedupe rapid duplicate fires (e.g. React 18 Strict Mode dev double-invoke). */
+let lastPagePath = null
+let lastPageAt = 0
+const PAGE_VIEW_DEDUPE_MS = 100
+
+export function trackPageView(pathname) {
+  if (!clientReady) return
+  const now = Date.now()
+  if (lastPagePath === pathname && now - lastPageAt < PAGE_VIEW_DEDUPE_MS) return
+  lastPagePath = pathname
+  lastPageAt = now
+  posthog.capture('page_view', { pathname })
+}
+
+export function trackSearch(query) {
+  if (!clientReady) return
+  posthog.capture('search', {
+    query: typeof query === 'string' ? query : String(query ?? ''),
+  })
+}
+
+export function trackListingClick(listingId) {
+  if (!clientReady) return
+  posthog.capture('listing_click', {
+    listing_id: listingId,
+  })
+}
+
+/**
+ * After auth when you have a stable user id (e.g. Supabase user.id).
+ * @example identifyUser(session.user.id, { email: session.user.email })
+ */
+export function identifyUser(userId, traits = {}) {
+  if (!clientReady || !userId) return
+  posthog.identify(userId, traits)
+}
+
+/** Call on logout so the next visitor is not merged with the previous person. */
+export function resetPostHog() {
+  if (!clientReady) return
+  posthog.reset()
+}
+
+export { posthog }

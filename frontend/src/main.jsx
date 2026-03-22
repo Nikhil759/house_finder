@@ -9,6 +9,10 @@ import HealthPage from "./HealthPage";
 import NewForYou from "./pages/NewForYou";
 import Profile from "./pages/Profile";
 import InstallBanner from "./components/InstallBanner";
+import PostHogRouteTracker from "./components/PostHogRouteTracker";
+import { initPostHog } from "./lib/posthog";
+
+initPostHog();
 
 // Register service worker (enables Android PWA install prompt)
 if ("serviceWorker" in navigator) {
@@ -21,6 +25,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ThemeProvider>
       <BrowserRouter>
+        <PostHogRouteTracker />
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/app" element={<App />} />

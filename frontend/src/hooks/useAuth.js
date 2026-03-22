@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { identifyUser, resetPostHog } from '../lib/posthog'
 
 export function useAuth() {
   const [user, setUser] = useState(null)
@@ -9,12 +10,20 @@ export function useAuth() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       setLoading(false)
+      if (session?.user) {
+        identifyUser(session.user.id, { email: session.user.email })
+      }
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
         setUser(session?.user ?? null)
         setLoading(false)
+        if (session?.user) {
+          identifyUser(session.user.id, { email: session.user.email })
+        } else if (event === 'SIGNED_OUT') {
+          resetPostHog()
+        }
       }
     )
 
