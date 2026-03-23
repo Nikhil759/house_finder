@@ -509,6 +509,12 @@ export default function NewForYou() {
   })
 
   const [activeTab, setActiveTab] = useState('saved')
+  const [expandedSearches, setExpandedSearches] = useState(new Set())
+  const toggleExpand = (id) => setExpandedSearches(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
 
   const handleHideLead = (id) => {
     setHiddenLeads(prev => {
@@ -742,7 +748,7 @@ export default function NewForYou() {
               {!loading && savedSearches.length > 0 && totalCount === 0 && (
                 <div style={{ textAlign: 'center', padding: '80px 0', color: 'var(--text-muted)' }}>
                   <i className="fa-regular fa-circle-check" style={{ fontSize: '40px', color: '#4ade80', marginBottom: '16px', display: 'block' }} />
-                  <p style={{ fontSize: '14px' }}>You're all caught up — no new listings since your last check</p>
+                  <p style={{ fontSize: '14px' }}>No new listings in the last {sinceWindow === '24h' ? '24 hours' : sinceWindow === '3d' ? '3 days' : '7 days'}</p>
                   <button
                     onClick={() => navigate('/app')}
                     style={{
@@ -757,50 +763,75 @@ export default function NewForYou() {
               )}
 
               {/* Listings grouped by saved search */}
-              {Object.values(newListings).map(({ search, listings }) => (
-                <div key={search.id} style={{ marginBottom: '48px' }}>
-                  <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid var(--border)',
-                  }}>
-                    <div>
-                      <span style={{ color: 'var(--text-primary)', fontWeight: '600', fontSize: '15px' }}>
-                        {search.name}
-                      </span>
-                      <span style={{ color: 'var(--text-muted)', fontSize: '12px', marginLeft: '10px' }}>
-                        {listings.length} new
-                      </span>
+              {Object.values(newListings).map(({ search, listings }) => {
+                const visible = listings.filter(l => !hiddenLeads.has(l.id))
+                const PAGE = 10
+                const isExpanded = expandedSearches.has(search.id)
+                const shown = isExpanded ? visible : visible.slice(0, PAGE)
+                const hiddenCount = visible.length - PAGE
+                return (
+                  <div key={search.id} style={{ marginBottom: '48px' }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid var(--border)',
+                    }}>
+                      <div>
+                        <span style={{ color: 'var(--text-primary)', fontWeight: '600', fontSize: '15px' }}>
+                          {search.name}
+                        </span>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '12px', marginLeft: '10px' }}>
+                          {visible.length} new
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const params = new URLSearchParams()
+                          if (search.location) params.set('location', search.location)
+                          if (search.bhk)      params.set('bhk', search.bhk)
+                          if (search.budget)   params.set('budget', search.budget)
+                          navigate(`/app?${params}`)
+                        }}
+                        style={{
+                          background: 'transparent', border: '1px solid var(--border)',
+                          borderRadius: '6px', padding: '5px 12px',
+                          color: 'var(--text-secondary)', fontSize: '12px', cursor: 'pointer',
+                        }}
+                      >
+                        View all →
+                      </button>
                     </div>
-                    <button
-                      onClick={() => {
-                        const params = new URLSearchParams()
-                        if (search.location) params.set('location', search.location)
-                        if (search.bhk)      params.set('bhk', search.bhk)
-                        if (search.budget)   params.set('budget', search.budget)
-                        navigate(`/app?${params}`)
-                      }}
-                      style={{
-                        background: 'transparent', border: '1px solid var(--border)',
-                        borderRadius: '6px', padding: '5px 12px',
-                        color: 'var(--text-secondary)', fontSize: '12px', cursor: 'pointer',
-                      }}
-                    >
-                      View all →
-                    </button>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
+                      {shown.map(listing => (
+                        <MiniCard
+                          key={listing.id}
+                          post={listing}
+                          onSave={saveListing}
+                          onHide={handleHideLead}
+                          savedStatus={isSaved(listing.id)}
+                        />
+                      ))}
+                    </div>
+                    {hiddenCount > 0 && (
+                      <button
+                        onClick={() => toggleExpand(search.id)}
+                        style={{
+                          marginTop: '14px', display: 'block', width: '100%',
+                          background: 'transparent', border: '1px dashed var(--border)',
+                          borderRadius: '8px', padding: '9px',
+                          color: 'var(--text-muted)', fontSize: '12px', cursor: 'pointer',
+                          transition: 'border-color 0.15s, color 0.15s',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#f5a623'; e.currentTarget.style.color = '#f5a623'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                      >
+                        {isExpanded
+                          ? '↑ Show less'
+                          : `↓ Show ${hiddenCount} more listing${hiddenCount === 1 ? '' : 's'}`}
+                      </button>
+                    )}
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
-                    {listings.filter(l => !hiddenLeads.has(l.id)).map(listing => (
-                      <MiniCard
-                        key={listing.id}
-                        post={listing}
-                        onSave={saveListing}
-                        onHide={handleHideLead}
-                        savedStatus={isSaved(listing.id)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </>
           )}
 
