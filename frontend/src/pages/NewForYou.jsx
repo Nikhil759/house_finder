@@ -495,7 +495,13 @@ export default function NewForYou() {
   const { theme } = useTheme()
   const { user } = useAuth()
   const { savedSearches } = useSavedSearches(user)
-  const { newListings, totalCount, loading, markAllSeen } = useNewListings(user, savedSearches)
+  const [sinceWindow, setSinceWindow] = useState('7d')
+  const sinceOverride = sinceWindow === '24h'
+    ? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    : sinceWindow === '3d'
+      ? new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
+      : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const { newListings, totalCount, badgeCount, loading, markAllSeen } = useNewListings(user, savedSearches, sinceOverride)
   const { savedListings, isSaved, saveListing, updateStatus, updateNotes } = useSavedListings(user)
   const [hiddenLeads, setHiddenLeads] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem('nestiq_hub_hidden') || '[]')) } catch { return new Set() }
@@ -561,7 +567,7 @@ export default function NewForYou() {
     <div className="app-page">
       <BackgroundPattern theme={theme} />
       <div style={{ position: 'relative', zIndex: 1 }}>
-        <Navbar newCount={totalCount} />
+        <Navbar newCount={badgeCount} />
 
         <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '32px 24px' }}>
 
@@ -588,7 +594,7 @@ export default function NewForYou() {
           }}>
             {[
               { key: 'saved', label: 'My Listings', icon: 'fa-solid fa-bookmark',    badge: savedCount > 0 ? savedCount : null },
-              { key: 'leads', label: 'New Leads',   icon: 'fa-solid fa-bolt',        badge: totalCount > 0 ? totalCount : null },
+              { key: 'leads', label: 'New Leads',   icon: 'fa-solid fa-bolt',        badge: badgeCount > 0 ? badgeCount : null },
             ].map(tab => {
               const active = activeTab === tab.key
               return (
@@ -637,23 +643,56 @@ export default function NewForYou() {
           {/* ── Tab: New Leads ─────────────────────────────────────────────── */}
           {activeTab === 'leads' && (
             <>
+              {/* Time window picker */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', flexShrink: 0 }}>Show:</span>
+                {[
+                  { key: '24h', label: 'Last 24h' },
+                  { key: '3d',  label: 'Last 3 days' },
+                  { key: '7d',  label: 'Last 7 days' },
+                ].map(w => {
+                  const active = sinceWindow === w.key
+                  return (
+                    <button
+                      key={w.key}
+                      onClick={() => setSinceWindow(w.key)}
+                      style={{
+                        padding: '4px 12px', borderRadius: '20px', fontSize: '12px',
+                        cursor: 'pointer', transition: 'all 0.15s',
+                        background: active ? 'rgba(245,166,35,0.12)' : 'transparent',
+                        border: `1px solid ${active ? '#f5a623' : 'var(--border)'}`,
+                        color: active ? '#f5a623' : 'var(--text-muted)',
+                        fontWeight: active ? '600' : '400',
+                      }}
+                    >
+                      {w.label}
+                    </button>
+                  )
+                })}
+              </div>
+
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 marginBottom: '24px', flexWrap: 'wrap', gap: '10px',
               }}>
                 <p style={{ color: 'var(--text-muted)', fontSize: '13px', margin: 0 }}>
                   {totalCount > 0
-                    ? `${totalCount} new ${totalCount === 1 ? 'listing' : 'listings'} since your last check`
+                    ? `${totalCount} ${totalCount === 1 ? 'listing' : 'listings'} in the last ${sinceWindow === '24h' ? '24 hours' : sinceWindow === '3d' ? '3 days' : '7 days'}`
                     : loading
                       ? 'Checking your saved searches…'
-                      : 'No new listings since your last check'}
+                      : `No listings in the last ${sinceWindow === '24h' ? '24 hours' : sinceWindow === '3d' ? '3 days' : '7 days'}`}
                   {loading && (
                     <span style={{ marginLeft: '8px', fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
                       refreshing…
                     </span>
                   )}
+                  {!loading && badgeCount > totalCount && (
+                    <span style={{ marginLeft: '8px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                      · {badgeCount} new since your last visit
+                    </span>
+                  )}
                 </p>
-                {totalCount > 0 && (
+                {badgeCount > 0 && (
                   <button
                     onClick={markAllSeen}
                     style={{

@@ -27,8 +27,8 @@ function clearCache() {
   try { sessionStorage.removeItem(CACHE_KEY) } catch {}
 }
 
-async function fetchOneSearch(search) {
-  const since = search.last_run_at || search.created_at
+async function fetchOneSearch(search, sinceOverride) {
+  const since = sinceOverride || search.last_run_at || search.created_at
   if (!since) return null
 
   const params = new URLSearchParams()
@@ -56,9 +56,10 @@ async function fetchOneSearch(search) {
   }
 }
 
-export function useNewListings(user, savedSearches) {
+export function useNewListings(user, savedSearches, sinceOverride) {
   const [newListings, setNewListings] = useState({})
-  const [totalCount, setTotalCount] = useState(0)
+  const [badgeCount, setBadgeCount] = useState(0)   // always "since last_run_at"
+  const [totalCount, setTotalCount] = useState(0)   // reflects current window
   const [loading, setLoading] = useState(false)
   const fetchingRef = useRef(false)
 
@@ -71,33 +72,45 @@ export function useNewListings(user, savedSearches) {
     if (!user || !savedSearches?.length) {
       setNewListings({})
       setTotalCount(0)
+      setBadgeCount(0)
       clearCache()
       return
     }
 
-    // Immediately restore from cache for instant render
-    const cached = readCache()
-    if (cached) {
-      setNewListings(cached)
+    // Immediately restore from cache for instant render (only when no override)
+    if (!sinceOverride) {
+      const cached = readCache()
+      if (cached) setNewListings(cached)
+    } else {
+      setNewListings({})
     }
 
     // Always refresh in background (parallel fetches)
     fetchNewListings()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, savedSearches])
+  }, [user, savedSearches, sinceOverride])
 
   const fetchNewListings = useCallback(async () => {
     if (fetchingRef.current || !savedSearches?.length) return
     fetchingRef.current = true
     setLoading(true)
 
-    // Fire all searches in parallel — results stream in as they arrive
+    // Badge: always fetch against last_run_at (no override) — run once for counts
+    const badgePromises = savedSearches.map(s =>
+      fetchOneSearch(s, null).then(r => r ? r.count : 0)
+    )
+    Promise.allSettled(badgePromises).then(results => {
+      const total = results.reduce((sum, r) => sum + (r.status === 'fulfilled' ? r.value : 0), 0)
+      setBadgeCount(total)
+    })
+
+    // Visible results: use sinceOverride if set
     const promises = savedSearches.map(search =>
-      fetchOneSearch(search).then(result => {
+      fetchOneSearch(search, sinceOverride).then(result => {
         if (!result) return
         setNewListings(prev => {
           const next = { ...prev, [search.id]: result }
-          writeCache(next)
+          if (!sinceOverride) writeCache(next)
           return next
         })
       })
@@ -106,7 +119,7 @@ export function useNewListings(user, savedSearches) {
     await Promise.allSettled(promises)
     setLoading(false)
     fetchingRef.current = false
-  }, [savedSearches])
+  }, [savedSearches, sinceOverride])
 
   const markAllSeen = async () => {
     if (!user) return
@@ -121,5 +134,5 @@ export function useNewListings(user, savedSearches) {
     clearCache()
   }
 
-  return { newListings, totalCount, loading, fetchNewListings, markAllSeen }
+  return { newListings, totalCount, badgeCount, loading, fetchNewListings, markAllSeen }
 }
