@@ -228,6 +228,13 @@ def query_listings(
         # (< ₹2k is garbage; > ₹1.5L is out of range for typical Bangalore rentals)
         conditions.append("(rent IS NULL OR (rent >= 2000 AND rent <= 150000))")
 
+        # Hide non-canonical duplicates: if a listing is in a duplicate group,
+        # only show the one with the highest quality_score (the canonical one).
+        # The canonical listing has id = duplicate_group_id (set by run_dedup.py).
+        conditions.append(
+            "(duplicate_group_id IS NULL OR id = duplicate_group_id)"
+        )
+
         if since_utc is not None:
             conditions.append("EXTRACT(EPOCH FROM posted_at) > %s")
             params.append(since_utc)
@@ -242,7 +249,8 @@ def query_listings(
                    contact_phone, contact_name, is_broker, no_brokerage,
                    is_flatmate, is_sponsored, thumbnail_url,
                    EXTRACT(EPOCH FROM posted_at)::FLOAT as posted_epoch,
-                   quality_score, raw_payload
+                   quality_score, raw_payload,
+                   id, duplicate_group_id
             FROM listings
             WHERE {where}
             ORDER BY posted_at DESC NULLS LAST
@@ -254,8 +262,41 @@ def query_listings(
         cur.execute(sql, params)
         rows = cur.fetchall()
 
+        # Collect canonical listing IDs that have a duplicate group,
+        # so we can fetch their sibling sources in one query.
+        canonical_with_group = {
+            row[31]: row[32]  # id → duplicate_group_id
+            for row in rows
+            if row[32] is not None  # duplicate_group_id not null
+        }
+
+        # Fetch sibling sources for all canonical listings in one query
+        sibling_map: dict = {}  # canonical_id → [{source, url}]
+        if canonical_with_group:
+            group_ids = list(canonical_with_group.values())
+            sib_cur = conn.cursor()
+            sib_cur.execute("""
+                SELECT duplicate_group_id, source, source_url
+                FROM listings
+                WHERE duplicate_group_id = ANY(%s)
+                  AND status = 'active'
+                ORDER BY quality_score DESC
+            """, (group_ids,))
+            for sib_row in sib_cur.fetchall():
+                grp_id, src, url = sib_row
+                sibling_map.setdefault(grp_id, []).append({"source": src, "url": url})
+
         results = []
         for row in rows:
+            listing_id = row[31]
+            dup_group_id = row[32]
+            siblings = []
+            if dup_group_id is not None:
+                all_in_group = sibling_map.get(dup_group_id, [])
+                # Exclude self from siblings list
+                current_source = row[0]
+                siblings = [s for s in all_in_group if s["source"] != current_source]
+
             base = _row_to_dict(row[30]) or {}
             base.update({
                 "id": f"{row[0]}_{row[1]}",
@@ -294,6 +335,7 @@ def query_listings(
                 "created": row[28] or 0,
                 "created_utc": row[28] or 0,
                 "quality_score": row[29] or 0,
+                "duplicate_sources": siblings,
             })
             results.append(base)
         return results

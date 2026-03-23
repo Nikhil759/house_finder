@@ -270,6 +270,41 @@ function SourceBadge({ source }) {
   );
 }
 
+function AlsoOnBadges({ duplicateSources }) {
+  if (!duplicateSources || duplicateSources.length === 0) return null;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center", marginTop: "6px" }}>
+      <span style={{ color: "#444", fontSize: "9px", fontFamily: "monospace" }}>Also on:</span>
+      {duplicateSources.map((ds) => {
+        const def = SOURCE_DEFS.find(s => s.id === ds.source) || SOURCE_DEFS[0];
+        return (
+          <a
+            key={ds.source}
+            href={ds.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: "3px",
+              background: `${def.color}12`,
+              color: def.color,
+              border: `1px solid ${def.color}30`,
+              fontSize: "9px", fontFamily: "monospace",
+              padding: "2px 6px", borderRadius: "4px",
+              textDecoration: "none",
+              transition: "background 0.15s",
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = `${def.color}25`}
+            onMouseLeave={e => e.currentTarget.style.background = `${def.color}12`}
+          >
+            <FaIcon name={def.iconClass} size={8} /> {def.label}
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
 function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) {
   const [expanded, setExpanded] = useState(false);
   const [hovered,  setHovered]  = useState(false);
@@ -429,6 +464,9 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
           </span>
         </div>
       </div>
+
+      {/* Duplicate cross-source badge */}
+      <AlsoOnBadges duplicateSources={post.duplicate_sources} />
 
       {/* Telegram subtitle — only when it adds info beyond the title */}
       {isTelegram && post.subtitle &&
@@ -891,6 +929,9 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
           </span>
         </div>
       )}
+
+      {/* Duplicate cross-source badge */}
+      <AlsoOnBadges duplicateSources={post.duplicate_sources} />
 
       {/* Pills — priority: BHK > price > locality > furnished > badges */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "10px" }}>
