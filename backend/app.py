@@ -1094,13 +1094,14 @@ def health():
 
 @app.route("/api/search")
 def search():
-    area      = request.args.get("area", "").strip()
-    bhk       = request.args.get("bhk", "any").strip()
-    budget    = request.args.get("budget", "").strip()
-    keywords  = request.args.get("keywords", "").strip()
-    limit     = min(int(request.args.get("limit", 50)), 50)
-    sort      = request.args.get("sort", "score")
-    min_score = max(0, min(60, int(request.args.get("min_score", 20))))
+    area       = request.args.get("area", "").strip()
+    bhk        = request.args.get("bhk", "any").strip()
+    budget     = request.args.get("budget", "").strip()
+    min_budget = request.args.get("min_budget", "").strip()
+    keywords   = request.args.get("keywords", "").strip()
+    limit      = min(int(request.args.get("limit", 50)), 50)
+    sort       = request.args.get("sort", "score")
+    min_score  = max(0, min(60, int(request.args.get("min_score", 20))))
     sources_param = request.args.get("sources", "reddit,telegram,nobroker")
     source_list   = [s.strip() for s in sources_param.split(",") if s.strip()]
 
@@ -1122,6 +1123,7 @@ def search():
         sources=source_list,
         bhk=bhk,
         budget=budget,
+        min_budget=min_budget or None,
         limit=limit * 2,
     )
 

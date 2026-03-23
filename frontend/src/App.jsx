@@ -1610,9 +1610,8 @@ function AlertModal({ search, onClose, onCreated }) {
 }
 
 const SORT_OPTIONS = [
-  { value: "score",    label: "Best match"    },
-  { value: "newest",   label: "Newest first"  },
-  { value: "upvotes",  label: "Most upvoted"  },
+  { value: "score",    label: "Best match"   },
+  { value: "newest",   label: "Newest first" },
 ];
 
 const LAST_VISIT_KEY = "lastVisit";
@@ -1639,10 +1638,8 @@ function generateLabel({ bhk, area, budget, keywords }) {
 
 function sortedPosts(posts, sortBy) {
   const copy = [...posts];
-  if (sortBy === "score" || sortBy === "quality") return copy.sort((a, b) => (b.quality_score || 0) - (a.quality_score || 0));
-  if (sortBy === "newest")  return copy.sort((a, b) => b.created - a.created);
-  if (sortBy === "upvotes") return copy.sort((a, b) => (b.score || 0) - (a.score || 0));
-  return copy;
+  if (sortBy === "newest") return copy.sort((a, b) => b.created - a.created);
+  return copy.sort((a, b) => (b.quality_score || 0) - (a.quality_score || 0));
 }
 
 // ─── Tooltip ─────────────────────────────────────────────────────────────────
@@ -1836,6 +1833,113 @@ function Toast({ message }) {
   );
 }
 
+// Rent slider stops (non-linear, in ₹)
+const BUDGET_STOPS = [0, 5000, 8000, 10000, 12000, 15000, 18000, 20000, 25000, 30000, 35000, 40000, 50000, 60000, 75000, 100000, 150000];
+
+function formatBudget(val) {
+  if (val === 0) return "Any";
+  if (val >= 100000) return `₹${(val / 100000).toFixed(val % 100000 === 0 ? 0 : 1)}L`;
+  if (val >= 1000)   return `₹${val / 1000}k`;
+  return `₹${val}`;
+}
+
+function BudgetSlider({ minVal, maxVal, onChange }) {
+  const minIdx = BUDGET_STOPS.indexOf(minVal) === -1 ? 0 : BUDGET_STOPS.indexOf(minVal);
+  const maxIdx = maxVal === 0 ? BUDGET_STOPS.length - 1 : (BUDGET_STOPS.indexOf(maxVal) === -1 ? BUDGET_STOPS.length - 1 : BUDGET_STOPS.indexOf(maxVal));
+  const maxStop = BUDGET_STOPS.length - 1;
+
+  const handleMin = (e) => {
+    const idx = Number(e.target.value);
+    if (idx >= maxIdx) return;
+    onChange(BUDGET_STOPS[idx], maxVal);
+  };
+
+  const handleMax = (e) => {
+    const idx = Number(e.target.value);
+    if (idx <= minIdx) return;
+    const newMax = idx === maxStop ? 0 : BUDGET_STOPS[idx];
+    onChange(minVal, newMax);
+  };
+
+  const minPct = (minIdx / maxStop) * 100;
+  const maxPct = (maxIdx / maxStop) * 100;
+
+  const label = minVal === 0 && maxVal === 0
+    ? "Any budget"
+    : minVal === 0
+      ? `Up to ${formatBudget(maxVal)}`
+      : maxVal === 0
+        ? `${formatBudget(minVal)}+`
+        : `${formatBudget(minVal)} – ${formatBudget(maxVal)}`;
+
+  return (
+    <div style={{ paddingTop: "4px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+        <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Budget</span>
+        <span style={{
+          fontSize: "12px", fontWeight: "600",
+          color: (minVal > 0 || maxVal > 0) ? "#f5a623" : "var(--text-muted)",
+        }}>
+          {label}
+        </span>
+      </div>
+      <div style={{ position: "relative", height: "20px", marginBottom: "4px" }}>
+        {/* Track background */}
+        <div style={{
+          position: "absolute", top: "50%", left: 0, right: 0, height: "4px",
+          transform: "translateY(-50%)", background: "var(--bg-secondary)",
+          borderRadius: "2px",
+        }} />
+        {/* Active range highlight */}
+        <div style={{
+          position: "absolute", top: "50%", height: "4px",
+          left: `${minPct}%`, width: `${maxPct - minPct}%`,
+          transform: "translateY(-50%)", background: "#f5a623",
+          borderRadius: "2px",
+        }} />
+        {/* Min handle */}
+        <input
+          type="range" min={0} max={maxStop} step={1} value={minIdx}
+          onChange={handleMin}
+          style={{
+            position: "absolute", top: 0, left: 0, width: "100%", height: "100%",
+            opacity: 0, cursor: "pointer", zIndex: minIdx > maxIdx - 2 ? 5 : 3,
+          }}
+        />
+        {/* Max handle */}
+        <input
+          type="range" min={0} max={maxStop} step={1} value={maxIdx}
+          onChange={handleMax}
+          style={{
+            position: "absolute", top: 0, left: 0, width: "100%", height: "100%",
+            opacity: 0, cursor: "pointer", zIndex: 4,
+          }}
+        />
+        {/* Visible thumb min */}
+        <div style={{
+          position: "absolute", top: "50%", left: `${minPct}%`,
+          width: "16px", height: "16px", borderRadius: "50%",
+          background: minVal > 0 ? "#f5a623" : "var(--bg-secondary)",
+          border: `2px solid ${minVal > 0 ? "#f5a623" : "var(--border)"}`,
+          transform: "translate(-50%, -50%)",
+          pointerEvents: "none", transition: "left 0.1s",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.25)",
+        }} />
+        {/* Visible thumb max */}
+        <div style={{
+          position: "absolute", top: "50%", left: `${maxPct}%`,
+          width: "16px", height: "16px", borderRadius: "50%",
+          background: "#f5a623",
+          border: "2px solid #f5a623",
+          transform: "translate(-50%, -50%)",
+          pointerEvents: "none", transition: "left 0.1s",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.25)",
+        }} />
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [searchParams]                      = useSearchParams();
   const locationParam                       = searchParams.get("location");
@@ -1843,6 +1947,8 @@ export default function App() {
   const [area,           setArea]           = useState(locationParam || "");
   const [bhk,            setBhk]            = useState("any");
   const [budget,         setBudget]         = useState("");
+  const [budgetMin,      setBudgetMin]      = useState(0);
+  const [budgetMax,      setBudgetMax]      = useState(0);   // 0 = no upper limit
   const [keywords,       setKeywords]       = useState("");
   const [sortBy,         setSortBy]         = useState("score");
   const [minScore,       setMinScore]       = useState(20);
@@ -1929,7 +2035,7 @@ export default function App() {
     showToast("Cleared all saved listings");
   };
 
-  const doSearch = async ({ area: a, bhk: b, budget: bu, keywords: kw, sources: src, sort: s, minScore: ms }) => {
+  const doSearch = async ({ area: a, bhk: b, budget: bu, minBudget: minBu, keywords: kw, sources: src, sort: s, minScore: ms }) => {
     setLoading(true);
     setError("");
     setRedditWarning(false);
@@ -1950,7 +2056,8 @@ export default function App() {
         sort:      s  ?? sortBy,
         min_score: ms ?? minScore,
         ...(a  ? { area: a }      : {}),
-        ...(bu ? { budget: bu }   : {}),
+        ...(bu     ? { budget: bu }         : {}),
+        ...(minBu  ? { min_budget: minBu }  : {}),
         ...(kw ? { keywords: kw } : {}),
         limit: 50,
       });
@@ -1977,7 +2084,12 @@ export default function App() {
     setLoading(false);
   };
 
-  const handleSearch = () => doSearch({ area, bhk, budget, keywords, sort: sortBy, minScore });
+  const handleSearch = () => doSearch({
+    area, bhk,
+    budget: budgetMax > 0 ? String(budgetMax) : budget,
+    minBudget: budgetMin > 0 ? String(budgetMin) : "",
+    keywords, sort: sortBy, minScore,
+  });
 
   const handleSave = async () => {
     if (!user) {
@@ -1987,7 +2099,7 @@ export default function App() {
     await saveSearch({
       location: area,
       bhk,
-      budget,
+      budget: budgetMax > 0 ? budgetMax : (budget ? parseInt(budget) : null),
       keywords,
       sources: Object.entries(sources).filter(([, on]) => on).map(([id]) => id),
       minQuality: minScore,
@@ -2005,6 +2117,11 @@ export default function App() {
     setArea(s.location || "");
     setBhk(s.bhk || "any");
     setBudget(s.budget?.toString() || "");
+    // Map saved budget (max) to slider
+    if (s.budget) {
+      const snap = BUDGET_STOPS.reduce((prev, cur) => Math.abs(cur - s.budget) < Math.abs(prev - s.budget) ? cur : prev);
+      setBudgetMax(snap); setBudgetMin(0);
+    } else { setBudgetMax(0); setBudgetMin(0); }
     setKeywords(s.keywords || "");
     if (s.sources) {
       const srcMap = { reddit: false, telegram: false, nobroker: false, housing: false };
@@ -2245,11 +2362,11 @@ export default function App() {
                 <option value="villa">Villa / Independent</option>
               </select>
             </div>
-            <div>
-              <label className="app-field-label">Budget</label>
-              <input value={budget} onChange={e => setBudget(e.target.value)}
-                placeholder="20000, under 30k..."
-                className="app-input"
+            <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+              <BudgetSlider
+                minVal={budgetMin}
+                maxVal={budgetMax}
+                onChange={(min, max) => { setBudgetMin(min); setBudgetMax(max); }}
               />
             </div>
             <div>

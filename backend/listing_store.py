@@ -183,6 +183,7 @@ def query_listings(
     sources=None,
     bhk=None,
     budget=None,
+    min_budget=None,
     limit=50,
     include_expired=False,
     since_utc=None,
@@ -191,7 +192,7 @@ def query_listings(
 
     if not is_pg:
         return _query_listings_sqlite(
-            conn, localities, sources, bhk, budget, limit, include_expired, since_utc
+            conn, localities, sources, bhk, budget, min_budget, limit, include_expired, since_utc
         )
 
     try:
@@ -221,6 +222,14 @@ def query_listings(
                 budget_val = int(budget)
                 conditions.append("(rent IS NULL OR rent <= %s)")
                 params.append(budget_val)
+            except ValueError:
+                pass
+
+        if min_budget:
+            try:
+                min_budget_val = int(min_budget)
+                conditions.append("(rent IS NULL OR rent >= %s)")
+                params.append(min_budget_val)
             except ValueError:
                 pass
 
@@ -347,7 +356,7 @@ def query_listings(
         _put_conn(conn)
 
 
-def _query_listings_sqlite(conn, localities, sources, bhk, budget, limit, include_expired, since_utc):
+def _query_listings_sqlite(conn, localities, sources, bhk, budget, min_budget, limit, include_expired, since_utc):
     """SQLite fallback for local dev."""
     try:
         conditions = []
@@ -376,6 +385,14 @@ def _query_listings_sqlite(conn, localities, sources, bhk, budget, limit, includ
                 budget_val = int(budget)
                 conditions.append("(price IS NULL OR price <= ?)")
                 params.append(budget_val)
+            except ValueError:
+                pass
+
+        if min_budget:
+            try:
+                min_budget_val = int(min_budget)
+                conditions.append("(price IS NULL OR price >= ?)")
+                params.append(min_budget_val)
             except ValueError:
                 pass
 

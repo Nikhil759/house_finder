@@ -63,71 +63,116 @@ const pillStyle = {
 }
 
 // ── New Leads: mini card ────────────────────────────────────────────────────
-function MiniCard({ post }) {
+function MiniCard({ post, onSave, onHide, savedStatus }) {
   const source  = post.source || 'reddit'
   const color   = SOURCE_COLORS[source] || '#888'
   const created = post.created || post.created_utc || 0
+  const url     = post.url || (post.permalink ? `https://reddit.com${post.permalink}` : null)
 
-  const url = post.url || (post.permalink ? `https://reddit.com${post.permalink}` : null)
+  const handleSave = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    onSave && onSave(post)
+  }
+
+  const handleHide = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    onHide && onHide(post.id)
+  }
 
   return (
-    <a
-      href={url || '#'}
-      target="_blank"
-      rel="noopener noreferrer"
-      style={{
-        display: 'block',
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
-        borderRadius: '10px',
-        padding: '14px 16px',
-        textDecoration: 'none',
-        transition: 'border-color 0.2s, transform 0.15s',
-        cursor: url ? 'pointer' : 'default',
-      }}
-      onMouseEnter={e => {
-        e.currentTarget.style.borderColor = color
-        e.currentTarget.style.transform = 'translateY(-1px)'
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.borderColor = 'var(--border)'
-        e.currentTarget.style.transform = 'none'
-      }}
+    <div style={{
+      background: 'var(--bg-card)',
+      border: '1px solid var(--border)',
+      borderRadius: '10px',
+      transition: 'border-color 0.2s, transform 0.15s',
+    }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = color; e.currentTarget.style.transform = 'translateY(-1px)' }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.transform = 'none' }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-        <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: color, flexShrink: 0 }} />
-        <span style={{ fontSize: '11px', color, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{source}</span>
-        {post.quality_score != null && (
-          <span style={{
-            marginLeft: 'auto', fontSize: '11px', fontWeight: '700',
-            color: post.quality_score >= 60 ? '#4ade80' : post.quality_score >= 40 ? '#f5a623' : 'var(--text-muted)',
-            background: post.quality_score >= 60 ? 'rgba(74,222,128,0.1)' : post.quality_score >= 40 ? 'rgba(245,166,35,0.1)' : 'var(--bg-secondary)',
-            border: `1px solid ${post.quality_score >= 60 ? 'rgba(74,222,128,0.25)' : post.quality_score >= 40 ? 'rgba(245,166,35,0.25)' : 'var(--border)'}`,
-            borderRadius: '4px', padding: '1px 6px',
-          }}>
-            {post.quality_score}
-          </span>
-        )}
-      </div>
-      <div style={{
-        fontSize: '13px', fontWeight: '500', color: 'var(--text-primary)',
-        lineHeight: '1.4', marginBottom: '10px',
-        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-      }}>
-        {post.title}
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-        {post.bhk      && <span style={pillStyle}>{post.bhk}</span>}
-        {post.locality && <span style={pillStyle}>{post.locality}</span>}
-        {(post.price || post.price_formatted) && (
-          <span style={{ ...pillStyle, color: '#f5a623', borderColor: 'rgba(245,166,35,0.3)', background: 'rgba(245,166,35,0.08)' }}>
-            {post.price_formatted || `₹${(post.price || 0).toLocaleString()}`}
-          </span>
-        )}
-        {post.furnishing && <span style={pillStyle}>{post.furnishing}</span>}
-        {created > 0 && <span style={{ ...pillStyle, marginLeft: 'auto' }}>{timeAgo(created)}</span>}
-      </div>
-    </a>
+      {/* Clickable area */}
+      <a
+        href={url || '#'}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ display: 'block', padding: '14px 16px 10px', textDecoration: 'none' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+          <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: color, flexShrink: 0 }} />
+          <span style={{ fontSize: '11px', color, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{source}</span>
+          {post.quality_score != null && (
+            <span style={{
+              marginLeft: 'auto', fontSize: '11px', fontWeight: '700',
+              color: post.quality_score >= 60 ? '#4ade80' : post.quality_score >= 40 ? '#f5a623' : 'var(--text-muted)',
+              background: post.quality_score >= 60 ? 'rgba(74,222,128,0.1)' : post.quality_score >= 40 ? 'rgba(245,166,35,0.1)' : 'var(--bg-secondary)',
+              border: `1px solid ${post.quality_score >= 60 ? 'rgba(74,222,128,0.25)' : post.quality_score >= 40 ? 'rgba(245,166,35,0.25)' : 'var(--border)'}`,
+              borderRadius: '4px', padding: '1px 6px',
+            }}>
+              {post.quality_score}
+            </span>
+          )}
+        </div>
+        <div style={{
+          fontSize: '13px', fontWeight: '500', color: 'var(--text-primary)',
+          lineHeight: '1.4', marginBottom: '10px',
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+        }}>
+          {post.title}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          {post.bhk      && <span style={pillStyle}>{post.bhk}</span>}
+          {post.locality && <span style={pillStyle}>{post.locality}</span>}
+          {(post.price || post.price_formatted) && (
+            <span style={{ ...pillStyle, color: '#f5a623', borderColor: 'rgba(245,166,35,0.3)', background: 'rgba(245,166,35,0.08)' }}>
+              {post.price_formatted || `₹${(post.price || 0).toLocaleString()}`}
+            </span>
+          )}
+          {post.furnishing && <span style={pillStyle}>{post.furnishing}</span>}
+          {created > 0 && <span style={{ ...pillStyle, marginLeft: 'auto' }}>{timeAgo(created)}</span>}
+        </div>
+      </a>
+
+      {/* Action row */}
+      {(onSave || onHide) && (
+        <div style={{
+          display: 'flex', gap: '6px', padding: '8px 16px 12px',
+          borderTop: '1px solid var(--border)',
+        }}>
+          {onSave && (
+            <button
+              onClick={handleSave}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '5px',
+                padding: '4px 10px', borderRadius: '6px', fontSize: '11px', cursor: 'pointer',
+                background: savedStatus ? 'rgba(245,166,35,0.12)' : 'transparent',
+                border: `1px solid ${savedStatus ? 'rgba(245,166,35,0.4)' : 'var(--border)'}`,
+                color: savedStatus ? '#f5a623' : 'var(--text-muted)',
+                fontWeight: savedStatus ? '600' : '400',
+              }}
+            >
+              <i className={savedStatus ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark'} style={{ fontSize: '10px' }} />
+              {savedStatus ? 'Saved' : 'Save'}
+            </button>
+          )}
+          {onHide && (
+            <button
+              onClick={handleHide}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '5px',
+                padding: '4px 10px', borderRadius: '6px', fontSize: '11px', cursor: 'pointer',
+                background: 'transparent', border: '1px solid var(--border)',
+                color: 'var(--text-muted)',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = '#ff6b6b'; e.currentTarget.style.borderColor = 'rgba(255,107,107,0.3)' }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)' }}
+            >
+              <i className="fa-regular fa-eye-slash" style={{ fontSize: '10px' }} /> Hide
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -215,154 +260,175 @@ function TrackingCard({ post, onStatusChange, onNotesChange, onUnsave }) {
     )
   }
 
+  const actionButtons = (
+    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+      {url && (
+        <a href={url} target="_blank" rel="noopener noreferrer" style={{
+          display: 'inline-flex', alignItems: 'center', gap: '5px',
+          padding: '5px 10px', borderRadius: '6px',
+          background: `${color}18`, border: `1px solid ${color}44`,
+          color, fontSize: '11px', fontWeight: '600', textDecoration: 'none',
+        }}>
+          <i className={icon} style={{ fontSize: '10px' }} /> Open listing
+        </a>
+      )}
+      {phone && (
+        <a href={`https://wa.me/91${phone}?text=${buildWhatsAppMessage(post)}`} target="_blank" rel="noopener noreferrer" style={{
+          display: 'inline-flex', alignItems: 'center', gap: '5px',
+          padding: '5px 10px', borderRadius: '6px',
+          background: 'rgba(37,211,102,0.1)', border: '1px solid rgba(37,211,102,0.3)',
+          color: '#25d366', fontSize: '11px', fontWeight: '600', textDecoration: 'none',
+        }}>
+          <i className="fa-brands fa-whatsapp" style={{ fontSize: '11px' }} /> WhatsApp
+        </a>
+      )}
+      <button onClick={handleCopyMessage} style={{
+        display: 'inline-flex', alignItems: 'center', gap: '5px',
+        padding: '5px 10px', borderRadius: '6px',
+        background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+        color: copyMsg ? '#4ade80' : 'var(--text-secondary)',
+        fontSize: '11px', cursor: 'pointer',
+      }}>
+        <i className={copyMsg ? 'fa-solid fa-check' : 'fa-regular fa-copy'} style={{ fontSize: '10px' }} />
+        {copyMsg ? 'Copied!' : 'Copy intro message'}
+      </button>
+      <button
+        onClick={() => onUnsave(post)}
+        style={{
+          marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '5px',
+          padding: '5px 10px', borderRadius: '6px',
+          background: 'transparent', border: '1px solid var(--border)',
+          color: 'var(--text-muted)', fontSize: '11px', cursor: 'pointer',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.color = '#ff6b6b'; e.currentTarget.style.borderColor = 'rgba(255,107,107,0.4)' }}
+        onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)' }}
+      >
+        <i className="fa-solid fa-xmark" style={{ fontSize: '10px' }} /> Remove
+      </button>
+    </div>
+  )
+
+  const statusPipeline = (
+    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+      {STATUS_STAGES.map(stage => {
+        const active = currentStatus === stage.key
+        return (
+          <button
+            key={stage.key}
+            onClick={() => handleStatusChange(post.id, stage.key)}
+            style={{
+              padding: '4px 10px', borderRadius: '20px',
+              border: `1px solid ${active ? stage.color : 'var(--border)'}`,
+              background: active ? `${stage.color}22` : 'transparent',
+              color: active ? stage.color : 'var(--text-muted)',
+              fontSize: '11px', fontWeight: active ? '600' : '400',
+              cursor: 'pointer', transition: 'all 0.15s',
+            }}
+          >
+            {active && '✓ '}{stage.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+
+  const notesField = (
+    <textarea
+      value={notes}
+      onChange={e => handleNotesChange(e.target.value)}
+      placeholder="Add notes (auto-saved)…"
+      rows={2}
+      style={{
+        width: '100%', background: 'var(--bg-secondary)',
+        border: '1px solid var(--border)', borderRadius: '8px',
+        padding: '8px 10px', color: 'var(--text-primary)',
+        fontSize: '12px', resize: 'vertical', outline: 'none',
+        fontFamily: 'inherit', boxSizing: 'border-box',
+      }}
+    />
+  )
+
   return (
-    <div style={{
-      background: 'var(--bg-card)',
-      border: '1px solid var(--border)',
-      borderRadius: '12px',
-      padding: '16px',
-      transition: 'border-color 0.2s',
-    }}>
-      {/* Header row */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '5px' }}>
-            <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: color, flexShrink: 0, display: 'inline-block' }} />
-            <span style={{ fontSize: '10px', color, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{source}</span>
-            {post._saved_at && (
-              <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-                Saved {timeAgo(post._saved_at)}
-              </span>
-            )}
+    <>
+      <style>{`
+        @media (min-width: 700px) {
+          .tracking-card-inner { display: grid !important; grid-template-columns: 1fr 280px !important; gap: 16px !important; }
+          .tracking-card-right { display: flex !important; flex-direction: column !important; gap: 10px !important; }
+          .tracking-card-status { margin-bottom: 0 !important; }
+          .tracking-card-notes { margin-bottom: 0 !important; }
+        }
+      `}</style>
+      <div style={{
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderRadius: '12px',
+        padding: '16px',
+        transition: 'border-color 0.2s',
+      }}>
+        <div className="tracking-card-inner">
+          {/* Left: listing info + status */}
+          <div>
+            {/* Source + time */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: color, flexShrink: 0, display: 'inline-block' }} />
+              <span style={{ fontSize: '10px', color, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{source}</span>
+              {post._saved_at && (
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                  Saved {timeAgo(post._saved_at)}
+                </span>
+              )}
+            </div>
+            {/* Title */}
+            <div style={{
+              fontSize: '13px', fontWeight: '500', color: 'var(--text-primary)',
+              lineHeight: '1.5', marginBottom: '8px',
+            }}>
+              {post.title}
+            </div>
+            {/* Pills */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '12px' }}>
+              {post.bhk      && <span style={pillStyle}>{post.bhk}</span>}
+              {post.locality && <span style={pillStyle}>{post.locality}</span>}
+              {(post.price || post.price_formatted) && (
+                <span style={{ ...pillStyle, color: '#f5a623', borderColor: 'rgba(245,166,35,0.3)', background: 'rgba(245,166,35,0.08)' }}>
+                  {post.price_formatted || `₹${(post.price || 0).toLocaleString()}`}
+                </span>
+              )}
+            </div>
+            {/* Status — always visible here */}
+            <div className="tracking-card-status" style={{ marginBottom: '12px' }}>
+              {statusPipeline}
+            </div>
+            {/* Actions always on left column */}
+            {actionButtons}
           </div>
-          <div style={{
-            fontSize: '13px', fontWeight: '500', color: 'var(--text-primary)',
-            lineHeight: '1.4', marginBottom: '8px',
-            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-          }}>
-            {post.title}
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-            {post.bhk      && <span style={pillStyle}>{post.bhk}</span>}
-            {post.locality && <span style={pillStyle}>{post.locality}</span>}
-            {(post.price || post.price_formatted) && (
-              <span style={{ ...pillStyle, color: '#f5a623', borderColor: 'rgba(245,166,35,0.3)', background: 'rgba(245,166,35,0.08)' }}>
-                {post.price_formatted || `₹${(post.price || 0).toLocaleString()}`}
-              </span>
-            )}
+
+          {/* Right: notes (desktop only column, hidden on mobile via CSS) */}
+          <div className="tracking-card-right" style={{ display: 'none' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '500', letterSpacing: '0.04em' }}>NOTES</div>
+            <textarea
+              value={notes}
+              onChange={e => handleNotesChange(e.target.value)}
+              placeholder="Add notes (auto-saved)…"
+              style={{
+                flex: 1, minHeight: '80px',
+                background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                borderRadius: '8px', padding: '8px 10px',
+                color: 'var(--text-primary)', fontSize: '12px',
+                resize: 'none', outline: 'none', fontFamily: 'inherit',
+                boxSizing: 'border-box', width: '100%',
+              }}
+            />
           </div>
         </div>
-      </div>
 
-      {/* Status pipeline */}
-      <div style={{ display: 'flex', gap: '4px', marginBottom: '12px', flexWrap: 'wrap' }}>
-        {STATUS_STAGES.map(stage => {
-          const active = currentStatus === stage.key
-          return (
-            <button
-              key={stage.key}
-              onClick={() => handleStatusChange(post.id, stage.key)}
-              style={{
-                padding: '4px 10px',
-                borderRadius: '20px',
-                border: `1px solid ${active ? stage.color : 'var(--border)'}`,
-                background: active ? `${stage.color}22` : 'transparent',
-                color: active ? stage.color : 'var(--text-muted)',
-                fontSize: '11px',
-                fontWeight: active ? '600' : '400',
-                cursor: 'pointer',
-                transition: 'all 0.15s',
-              }}
-            >
-              {active && '✓ '}{stage.label}
-            </button>
-          )
-        })}
+        {/* Notes for mobile (shown below, hidden on desktop) */}
+        <div className="tracking-card-notes" style={{ marginTop: '12px' }}>
+          <style>{`.tracking-card-notes { display: block; } @media (min-width: 700px) { .tracking-card-notes { display: none !important; } }`}</style>
+          {notesField}
+        </div>
       </div>
-
-      {/* Notes */}
-      <textarea
-        value={notes}
-        onChange={e => handleNotesChange(e.target.value)}
-        placeholder="Add notes (auto-saved)…"
-        rows={2}
-        style={{
-          width: '100%',
-          background: 'var(--bg-secondary)',
-          border: '1px solid var(--border)',
-          borderRadius: '8px',
-          padding: '8px 10px',
-          color: 'var(--text-primary)',
-          fontSize: '12px',
-          resize: 'vertical',
-          outline: 'none',
-          fontFamily: 'inherit',
-          boxSizing: 'border-box',
-          marginBottom: '10px',
-        }}
-      />
-
-      {/* Actions */}
-      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-        {url && (
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '5px',
-              padding: '5px 10px', borderRadius: '6px',
-              background: `${color}18`, border: `1px solid ${color}44`,
-              color, fontSize: '11px', fontWeight: '600', textDecoration: 'none',
-            }}
-          >
-            <i className={icon} style={{ fontSize: '10px' }} /> Open listing
-          </a>
-        )}
-        {phone && (
-          <a
-            href={`https://wa.me/91${phone}?text=${buildWhatsAppMessage(post)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '5px',
-              padding: '5px 10px', borderRadius: '6px',
-              background: 'rgba(37,211,102,0.1)', border: '1px solid rgba(37,211,102,0.3)',
-              color: '#25d366', fontSize: '11px', fontWeight: '600', textDecoration: 'none',
-            }}
-          >
-            <i className="fa-brands fa-whatsapp" style={{ fontSize: '11px' }} /> WhatsApp
-          </a>
-        )}
-        <button
-          onClick={handleCopyMessage}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: '5px',
-            padding: '5px 10px', borderRadius: '6px',
-            background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-            color: copyMsg ? '#4ade80' : 'var(--text-secondary)',
-            fontSize: '11px', cursor: 'pointer',
-          }}
-        >
-          <i className={copyMsg ? 'fa-solid fa-check' : 'fa-regular fa-copy'} style={{ fontSize: '10px' }} />
-          {copyMsg ? 'Copied!' : 'Copy intro message'}
-        </button>
-        <button
-          onClick={() => onUnsave(post)}
-          style={{
-            marginLeft: 'auto',
-            display: 'inline-flex', alignItems: 'center', gap: '5px',
-            padding: '5px 10px', borderRadius: '6px',
-            background: 'transparent', border: '1px solid var(--border)',
-            color: 'var(--text-muted)', fontSize: '11px', cursor: 'pointer',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.color = '#ff6b6b'; e.currentTarget.style.borderColor = 'rgba(255,107,107,0.4)' }}
-          onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)' }}
-        >
-          <i className="fa-regular fa-bookmark" style={{ fontSize: '10px' }} /> Remove
-        </button>
-      </div>
-    </div>
+    </>
   )
 }
 
@@ -373,9 +439,21 @@ export default function NewForYou() {
   const { user } = useAuth()
   const { savedSearches } = useSavedSearches(user)
   const { newListings, totalCount, loading, markAllSeen } = useNewListings(user, savedSearches)
-  const { savedListings, saveListing, updateStatus, updateNotes } = useSavedListings(user)
+  const { savedListings, isSaved, saveListing, updateStatus, updateNotes } = useSavedListings(user)
+  const [hiddenLeads, setHiddenLeads] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('nestiq_hub_hidden') || '[]')) } catch { return new Set() }
+  })
 
   const [activeTab, setActiveTab] = useState('saved')
+
+  const handleHideLead = (id) => {
+    setHiddenLeads(prev => {
+      const next = new Set(prev)
+      next.add(id)
+      localStorage.setItem('nestiq_hub_hidden', JSON.stringify([...next]))
+      return next
+    })
+  }
 
   // Switch to My Listings tab automatically when user saves something and comes here
   const savedCount = savedListings.length
@@ -589,7 +667,15 @@ export default function NewForYou() {
                     </button>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
-                    {listings.map(listing => <MiniCard key={listing.id} post={listing} />)}
+                    {listings.filter(l => !hiddenLeads.has(l.id)).map(listing => (
+                      <MiniCard
+                        key={listing.id}
+                        post={listing}
+                        onSave={saveListing}
+                        onHide={handleHideLead}
+                        savedStatus={isSaved(listing.id)}
+                      />
+                    ))}
                   </div>
                 </div>
               ))}
@@ -690,7 +776,7 @@ function StatusFilterBar({ listings: allListings, onStatusChange, onNotesChange,
           No listings with this status
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {filtered.map(post => (
             <TrackingCard
               key={post.id}
