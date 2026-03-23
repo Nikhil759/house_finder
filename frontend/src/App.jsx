@@ -270,37 +270,83 @@ function SourceBadge({ source }) {
   );
 }
 
-function AlsoOnBadges({ duplicateSources }) {
+function DuplicateBanner({ post, duplicateSources }) {
   if (!duplicateSources || duplicateSources.length === 0) return null;
+
+  const currentDef = SOURCE_DEFS.find(s => s.id === post.source) || SOURCE_DEFS[0];
+  const allSources = [
+    { source: post.source, url: post.url },
+    ...duplicateSources,
+  ];
+
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center", marginTop: "6px" }}>
-      <span style={{ color: "#444", fontSize: "9px", fontFamily: "monospace" }}>Also on:</span>
-      {duplicateSources.map((ds) => {
-        const def = SOURCE_DEFS.find(s => s.id === ds.source) || SOURCE_DEFS[0];
-        return (
-          <a
-            key={ds.source}
-            href={ds.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={e => e.stopPropagation()}
-            style={{
-              display: "inline-flex", alignItems: "center", gap: "3px",
-              background: `${def.color}12`,
-              color: def.color,
-              border: `1px solid ${def.color}30`,
-              fontSize: "9px", fontFamily: "monospace",
-              padding: "2px 6px", borderRadius: "4px",
-              textDecoration: "none",
-              transition: "background 0.15s",
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = `${def.color}25`}
-            onMouseLeave={e => e.currentTarget.style.background = `${def.color}12`}
-          >
-            <FaIcon name={def.iconClass} size={8} /> {def.label}
-          </a>
-        );
-      })}
+    <div
+      onClick={e => e.stopPropagation()}
+      style={{
+        margin: "8px 0",
+        padding: "8px 10px",
+        borderRadius: "6px",
+        border: "1px solid rgba(245,166,35,0.3)",
+        background: "rgba(245,166,35,0.06)",
+      }}
+    >
+      {/* Header row */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: "6px",
+        marginBottom: "8px",
+      }}>
+        <FaIcon name="fa-solid fa-copy" size={9} style={{ color: "#f5a623" }} />
+        <span style={{
+          color: "#f5a623", fontSize: "10px", fontFamily: "monospace",
+          letterSpacing: "0.04em",
+        }}>
+          Same flat on {allSources.length} sources — compare &amp; pick
+        </span>
+      </div>
+
+      {/* Source buttons */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+        {allSources.map((s) => {
+          const def = SOURCE_DEFS.find(d => d.id === s.source) || SOURCE_DEFS[0];
+          const isCurrent = s.source === post.source;
+          return (
+            <a
+              key={s.source}
+              href={s.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "5px",
+                background: isCurrent ? `${def.color}20` : `${def.color}10`,
+                color: def.color,
+                border: `1px solid ${isCurrent ? def.color + "60" : def.color + "35"}`,
+                fontSize: "10px", fontFamily: "monospace",
+                padding: "4px 10px", borderRadius: "5px",
+                textDecoration: "none",
+                transition: "all 0.15s",
+                fontWeight: isCurrent ? 600 : 400,
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = `${def.color}30`;
+                e.currentTarget.style.borderColor = `${def.color}80`;
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = isCurrent ? `${def.color}20` : `${def.color}10`;
+                e.currentTarget.style.borderColor = isCurrent ? `${def.color}60` : `${def.color}35`;
+              }}
+            >
+              <FaIcon name={def.iconClass} size={9} />
+              {def.label}
+              {isCurrent && (
+                <span style={{
+                  fontSize: "8px", opacity: 0.6, marginLeft: "2px",
+                }}>← this</span>
+              )}
+            </a>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -465,8 +511,8 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
         </div>
       </div>
 
-      {/* Duplicate cross-source badge */}
-      <AlsoOnBadges duplicateSources={post.duplicate_sources} />
+      {/* Duplicate cross-source banner */}
+      <DuplicateBanner post={post} duplicateSources={post.duplicate_sources} />
 
       {/* Telegram subtitle — only when it adds info beyond the title */}
       {isTelegram && post.subtitle &&
@@ -930,8 +976,8 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
         </div>
       )}
 
-      {/* Duplicate cross-source badge */}
-      <AlsoOnBadges duplicateSources={post.duplicate_sources} />
+      {/* Duplicate cross-source banner */}
+      <DuplicateBanner post={post} duplicateSources={post.duplicate_sources} />
 
       {/* Pills — priority: BHK > price > locality > furnished > badges */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "10px" }}>
