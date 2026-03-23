@@ -734,6 +734,29 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
           ) : (
             actionBtn(<FaIcon name="fa-solid fa-arrow-up-right-from-square" />, isTelegram ? "Open in Telegram" : "Open Post", handleOpen)
           )}
+
+          {/* Duplicate source links — one button per sibling source */}
+          {(post.duplicate_sources || []).map(ds => {
+            const def = SOURCE_DEFS.find(s => s.id === ds.source) || SOURCE_DEFS[0];
+            return (
+              <a
+                key={ds.source}
+                href={ds.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={stop}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: "5px",
+                  background: `${def.color}12`, border: `1px solid ${def.color}40`,
+                  borderRadius: "5px", padding: "5px 11px",
+                  color: def.color, fontSize: "10px", fontFamily: "monospace",
+                  textDecoration: "none", whiteSpace: "nowrap",
+                }}
+              >
+                <FaIcon name={def.iconClass} size={10} /> Also on {def.label}
+              </a>
+            );
+          })}
           {isHousing ? (
             <a
               href={post.url}
