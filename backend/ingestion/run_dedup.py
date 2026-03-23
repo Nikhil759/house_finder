@@ -7,12 +7,18 @@ and groups them under a shared duplicate_group_id. The listing with the highest
 quality_score in each group is the canonical one shown in search results.
 
 Matching strategy (strict single-pass, high confidence only):
-  same locality (case-insensitive) + same BHK + rent within 5%
-  + area_sqft present on BOTH sides and within 30 sqft
+  1. Same locality (exact, case-insensitive)
+  2. Same BHK (normalised)
+  3. Rent within 5%
+  4. area_sqft present on BOTH sides and within 30 sqft
+  5. Address token check:
+       - Extract meaningful tokens from each address (sector/phase numbers,
+         building names — stripping generic noise words).
+       - If BOTH addresses yield tokens AND those token sets share NO common
+         element → reject (different sub-locations, not the same flat).
+       - If either address is too sparse to yield tokens → allow (can't disprove).
 
-  area_sqft is REQUIRED — without it we can't be confident enough.
-  No soft/fuzzy matching to avoid Union-Find chaining false positives.
-  Only cross-source pairs are compared (same-source dupes handled by UNIQUE constraint).
+  "Better to miss a real duplicate than to hide a unique listing."
 
 Only scans listings from the last 48 hours so large re-scans are avoided.
 Safe to run multiple times — fully idempotent.
@@ -25,6 +31,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 from itertools import combinations
 
@@ -56,29 +63,122 @@ def _get_connection():
     return psycopg2.connect(url, connect_timeout=15)
 
 
+# ── Address token extraction ──────────────────────────────────────────────────
+
+# Words that appear in almost every Bangalore address — not useful for matching.
+# Also includes structural words whose numbered forms are captured by the regex
+# patterns below (e.g. "sector 3"), so the bare word adds no discriminating signal.
+_NOISE_WORDS = {
+    "bangalore", "bengaluru", "karnataka", "india", "independent", "house",
+    "standalone", "building", "flat", "apartment", "road", "rd",
+    "near", "opp", "opposite", "behind", "beside", "next",
+    "layout", "nagar", "colony", "area", "street", "st",
+    "and", "the", "of", "in", "at", "to", "for", "a", "an",
+    # Structural words — only meaningful with a number; bare word is noise
+    "sector", "phase", "block", "stage", "cross", "main", "part",
+}
+
+# Patterns that signal a meaningful sub-location token
+_SECTOR_RE   = re.compile(r"\bsector\s*\d+\b", re.I)
+_PHASE_RE    = re.compile(r"\b(?:phase|block|stage|part)\s*\d+\b", re.I)
+_ORDINAL_RE  = re.compile(r"\b\d+(?:st|nd|rd|th)\s+(?:block|stage|phase|cross|main)\b", re.I)
+_PINCODE_RE  = re.compile(r"\b\d{6}\b")
+
+
+def _address_tokens(address: str | None, locality: str | None = None) -> set[str]:
+    """
+    Extract meaningful sub-location tokens from an address string.
+
+    Two rules to avoid false positives:
+      1. Strip the locality name from the address first — it's already matched
+         in condition 1 and adds no discriminating signal.
+      2. Only accept NUMBERED sector/phase/block patterns (e.g. "sector 3",
+         "2nd stage") — bare words like "sector" or "phase" are discarded.
+
+    Returns a set of normalised token strings, or empty set if the address
+    is too sparse to be useful.
+    """
+    if not address:
+        return set()
+
+    addr = address.lower()
+
+    # Strip locality name to avoid it acting as a spurious shared token
+    if locality:
+        addr = addr.replace(locality.strip().lower(), "")
+
+    tokens: set[str] = set()
+
+    # Numbered sub-location patterns — these are specific enough to trust
+    for pat in (_SECTOR_RE, _PHASE_RE, _ORDINAL_RE):
+        for m in pat.finditer(addr):
+            tokens.add(re.sub(r"\s+", " ", m.group().strip()))
+
+    # 6-digit pincodes — very specific
+    for m in _PINCODE_RE.finditer(addr):
+        tokens.add(m.group())
+
+    # Named building/society: capitalised word runs in the ORIGINAL string
+    # that aren't noise words and are at least 4 chars long.
+    # Strip locality from original casing too before scanning.
+    orig = address
+    if locality:
+        orig = re.sub(re.escape(locality.strip()), "", orig, flags=re.I)
+    for word in re.findall(r"[A-Z][a-zA-Z]{3,}", orig):
+        w = word.lower()
+        if w not in _NOISE_WORDS:
+            tokens.add(w)
+
+    return tokens
+
+
+def _address_check(a: dict, b: dict) -> bool:
+    """
+    Token-based address gate.
+
+    Returns True (allow) if:
+      - Either address yields no meaningful tokens → too sparse, can't disprove
+      - Token sets share at least one element → same sub-location
+
+    Returns False (reject) if:
+      - Both sides have tokens AND they are completely disjoint
+        → confidently different sub-locations
+    """
+    tokens_a = _address_tokens(a["address"], a.get("locality"))
+    tokens_b = _address_tokens(b["address"], b.get("locality"))
+
+    # Can't conclude anything if either side is sparse
+    if not tokens_a or not tokens_b:
+        return True
+
+    # Reject only when both sides have tokens and they're disjoint
+    return bool(tokens_a & tokens_b)
+
+
 # ── Matching helpers ──────────────────────────────────────────────────────────
 
 def _is_match(a: dict, b: dict) -> bool:
     """
-    High-confidence duplicate check. ALL four conditions must hold:
+    High-confidence duplicate check. ALL five conditions must hold:
       1. Same locality (exact, case-insensitive)
       2. Same BHK (normalised)
       3. Rent within RENT_TOLERANCE (5%)
       4. area_sqft present on BOTH sides and within AREA_TOLERANCE_SQFT (30 sqft)
+      5. Address token check: not confidently different sub-locations
     """
-    # locality
+    # 1. locality
     if not a["locality"] or not b["locality"]:
         return False
     if a["locality"].strip().lower() != b["locality"].strip().lower():
         return False
 
-    # bhk
+    # 2. bhk
     if not a["bhk"] or not b["bhk"]:
         return False
     if a["bhk"].strip().lower().replace(" ", "") != b["bhk"].strip().lower().replace(" ", ""):
         return False
 
-    # rent (both must be present)
+    # 3. rent (both must be present)
     r1, r2 = a["rent"], b["rent"]
     if r1 is None or r2 is None:
         return False
@@ -86,11 +186,15 @@ def _is_match(a: dict, b: dict) -> bool:
     if (hi - min(r1, r2)) / hi > RENT_TOLERANCE:
         return False
 
-    # area (REQUIRED — no area = no match)
+    # 4. area (REQUIRED — no area = no match)
     a1, a2 = a["area_sqft"], b["area_sqft"]
     if a1 is None or a2 is None:
         return False
     if abs(a1 - a2) > AREA_TOLERANCE_SQFT:
+        return False
+
+    # 5. Address token gate
+    if not _address_check(a, b):
         return False
 
     return True
