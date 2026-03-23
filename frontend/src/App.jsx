@@ -2506,20 +2506,24 @@ export default function App() {
               <button
                 onClick={handleSave}
                 disabled={loading}
-                title="Save this search"
+                title="Save this search to get alerts for new matches"
                 className="save-search-btn"
                 style={{
-                  padding: "13px 18px",
-                  background: justSaved ? "rgba(74,222,128,0.15)" : "rgba(255,255,255,0.06)",
+                  padding: "13px 16px",
+                  background: justSaved ? "rgba(74,222,128,0.15)" : "rgba(245,166,35,0.08)",
                   color: justSaved ? "#4ade80" : "#f5a623",
-                  border: `1px solid ${justSaved ? "rgba(74,222,128,0.4)" : "rgba(245,166,35,0.35)"}`,
+                  border: `1px solid ${justSaved ? "rgba(74,222,128,0.4)" : "rgba(245,166,35,0.4)"}`,
                   borderRadius: "6px",
-                  fontSize: "14px", fontFamily: "monospace",
+                  fontSize: "12px", fontWeight: "600",
                   cursor: loading ? "not-allowed" : "pointer",
                   transition: "all 0.2s", flexShrink: 0,
+                  display: "inline-flex", alignItems: "center", gap: "6px",
                 }}
+                onMouseEnter={e => { if (!loading && !justSaved) { e.currentTarget.style.background = "rgba(245,166,35,0.15)"; e.currentTarget.style.borderColor = "rgba(245,166,35,0.7)"; } }}
+                onMouseLeave={e => { if (!justSaved) { e.currentTarget.style.background = "rgba(245,166,35,0.08)"; e.currentTarget.style.borderColor = "rgba(245,166,35,0.4)"; } }}
               >
-                {justSaved ? "✓" : "★"}
+                <i className={justSaved ? "fa-solid fa-check" : "fa-regular fa-bell"} style={{ fontSize: "11px" }} />
+                {justSaved ? "Saved!" : "Save search"}
               </button>
             </div>
             {showLoginPrompt && (

@@ -188,7 +188,10 @@ function MiniCard({ post, onSave, onHide, savedStatus }) {
                 border: `1px solid ${savedStatus ? 'rgba(245,166,35,0.4)' : 'var(--border)'}`,
                 color: savedStatus ? '#f5a623' : 'var(--text-muted)',
                 fontWeight: savedStatus ? '600' : '400',
+                transition: 'all 0.15s',
               }}
+              onMouseEnter={e => { if (!savedStatus) { e.currentTarget.style.color = '#f5a623'; e.currentTarget.style.borderColor = 'rgba(245,166,35,0.45)'; e.currentTarget.style.background = 'rgba(245,166,35,0.08)'; } }}
+              onMouseLeave={e => { if (!savedStatus) { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'transparent'; } }}
             >
               <i className={savedStatus ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark'} style={{ fontSize: '10px' }} />
               {savedStatus ? 'Saved' : 'Save'}
@@ -223,12 +226,22 @@ function TrackingCard({ post, onStatusChange, onNotesChange, onUnsave }) {
   const [countdown, setCountdown] = useState(null)
   const debounceRef = useRef(null)
   const dismissRef = useRef(null)
-  const source = post.source || 'reddit'
-  const color  = SOURCE_COLORS[source] || '#888'
-  const icon   = SOURCE_ICONS[source]  || 'fa-solid fa-link'
-  const url    = post.url || (post.permalink ? `https://reddit.com${post.permalink}` : null)
-  const phone  = extractPhone(post.title) || extractPhone(post.body)
+  const source      = post.source || 'reddit'
+  const color       = SOURCE_COLORS[source] || '#888'
+  const icon        = SOURCE_ICONS[source]  || 'fa-solid fa-link'
+  const url         = post.url || (post.permalink ? `https://reddit.com${post.permalink}` : null)
+  const phone       = extractPhone(post.title) || extractPhone(post.body)
   const currentStatus = post._status || 'interested'
+  const isHousing   = source === 'housing'
+  const isNoBroker  = source === 'nobroker'
+  const isStructured = isHousing || isNoBroker || source === 'telegram'
+  const displayPrice = isStructured
+    ? (post.price_formatted || (post.price ? `₹${post.price.toLocaleString()}` : null))
+    : null
+  const displayArea  = (isHousing || isNoBroker) && post.area_sqft ? `${post.area_sqft} sqft` : null
+  const displayFurnishing = (isHousing || isNoBroker) ? post.furnishing : null
+  const displayDeposit    = isHousing && post.deposit ? `₹${post.deposit.toLocaleString()} dep` : null
+  const sourceLabel = isHousing ? 'Housing.com' : isNoBroker ? 'NoBroker' : source
 
   const handleNotesChange = (val) => {
     setNotes(val)
@@ -327,26 +340,48 @@ function TrackingCard({ post, onStatusChange, onNotesChange, onUnsave }) {
   )
 
   return (
-    <div style={{
-      background: 'var(--bg-card)',
-      border: '1px solid var(--border)',
-      borderRadius: '12px',
-      padding: '14px 16px',
-      transition: 'border-color 0.2s',
-    }}>
+    <div
+      style={{
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderRadius: '12px',
+        padding: '14px 16px',
+        transition: 'border-color 0.2s, transform 0.15s, box-shadow 0.2s',
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.borderColor = 'rgba(245,166,35,0.35)'
+        e.currentTarget.style.transform = 'translateY(-1px)'
+        e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.15)'
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.borderColor = 'var(--border)'
+        e.currentTarget.style.transform = 'none'
+        e.currentTarget.style.boxShadow = 'none'
+      }}
+    >
       {/* Row 1: source · title · pills · time · remove */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '10px' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
             <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: color, flexShrink: 0, display: 'inline-block' }} />
-            <span style={{ fontSize: '10px', color, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{source}</span>
+            <span style={{ fontSize: '10px', color, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{sourceLabel}</span>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginLeft: '4px' }}>
-              {post.bhk      && <span style={{ ...pillStyle, padding: '1px 6px' }}>{post.bhk}</span>}
+              {post.bhk && displayArea
+                ? <span style={{ ...pillStyle, padding: '1px 6px' }}>{post.bhk} · {displayArea}</span>
+                : post.bhk && <span style={{ ...pillStyle, padding: '1px 6px' }}>{post.bhk}</span>}
               {post.locality && <span style={{ ...pillStyle, padding: '1px 6px' }}>{post.locality}</span>}
-              {(post.price || post.price_formatted) && (
+              {(displayPrice || post.price || post.price_formatted) && (
                 <span style={{ ...pillStyle, padding: '1px 6px', color: '#f5a623', borderColor: 'rgba(245,166,35,0.3)', background: 'rgba(245,166,35,0.08)' }}>
-                  {post.price_formatted || `₹${(post.price || 0).toLocaleString()}`}
+                  {displayPrice || post.price_formatted || `₹${(post.price || 0).toLocaleString()}`}
                 </span>
+              )}
+              {displayFurnishing && (
+                <span style={{ ...pillStyle, padding: '1px 6px', color: '#c084fc', borderColor: 'rgba(192,132,252,0.3)', background: 'rgba(192,132,252,0.08)' }}>
+                  {displayFurnishing}
+                </span>
+              )}
+              {displayDeposit && (
+                <span style={{ ...pillStyle, padding: '1px 6px', color: 'var(--text-muted)' }}>{displayDeposit}</span>
               )}
             </div>
             {post._saved_at && (
@@ -355,6 +390,19 @@ function TrackingCard({ post, onStatusChange, onNotesChange, onUnsave }) {
               </span>
             )}
           </div>
+          {/* Housing.com address line */}
+          {isHousing && post.address && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '4px',
+              fontSize: '10px', color: '#8b7cf8', marginBottom: '4px',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              <i className="fa-solid fa-location-dot" style={{ fontSize: '9px', flexShrink: 0 }} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {post.address.length > 70 ? post.address.slice(0, 70) + '…' : post.address}
+              </span>
+            </div>
+          )}
           <div style={{
             fontSize: '13px', fontWeight: '500', color: 'var(--text-primary)',
             lineHeight: '1.45',
