@@ -1143,13 +1143,35 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
           })()}
 
           {/* Action buttons */}
-          <button type="button" onClick={handleOpen} style={{ ...overlayBtnStyle(isNoBroker ? "#e63946" : "#f5a623"), display: "inline-flex", alignItems: "center", gap: "8px" }}>
-            <FaIcon name={isNoBroker ? "fa-solid fa-building" : "fa-solid fa-arrow-up-right-from-square"} />
-            {isNoBroker ? "View on NoBroker" : "Open Post"}
+          <button type="button" onClick={handleOpen} style={{ ...overlayBtnStyle(isNoBroker ? "#e63946" : isHousing ? "#7c3aed" : "#f5a623"), display: "inline-flex", alignItems: "center", gap: "8px" }}>
+            <FaIcon name={isNoBroker ? "fa-solid fa-building" : isHousing ? "fa-solid fa-house" : "fa-solid fa-arrow-up-right-from-square"} />
+            {isNoBroker ? "View on NoBroker" : isHousing ? "View on Housing.com" : "Open Post"}
           </button>
+
+          {/* Sibling source buttons for duplicate listings */}
+          {(post.duplicate_sources || []).map(ds => {
+            const def = SOURCE_DEFS.find(s => s.id === ds.source) || SOURCE_DEFS[0];
+            return (
+              <a
+                key={ds.source}
+                href={ds.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+                style={{ ...overlayBtnStyle(def.color), display: "inline-flex", alignItems: "center", gap: "8px", textDecoration: "none" }}
+              >
+                <FaIcon name={def.iconClass} /> Also on {def.label}
+              </a>
+            );
+          })}
+
           {isNoBroker ? (
             <button type="button" onClick={handleOpen} style={{ ...overlayBtnStyle("#555"), display: "inline-flex", alignItems: "center", gap: "8px" }}>
               <FaIcon name="fa-solid fa-phone" /> Contact via NoBroker <FaIcon name="fa-solid fa-arrow-up-right-from-square" size={9} />
+            </button>
+          ) : isHousing ? (
+            <button type="button" onClick={handleOpen} style={{ ...overlayBtnStyle("#555"), display: "inline-flex", alignItems: "center", gap: "8px" }}>
+              <FaIcon name="fa-solid fa-phone" /> Contact via Housing.com <FaIcon name="fa-solid fa-arrow-up-right-from-square" size={9} />
             </button>
           ) : displayContact && (
             <button type="button" onClick={handleCopy} style={{ ...overlayBtnStyle("#f5a623"), display: "inline-flex", alignItems: "center", gap: "8px" }}>
