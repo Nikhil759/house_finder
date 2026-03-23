@@ -26,10 +26,10 @@ const SOURCE_ICONS = {
 }
 
 const STATUS_STAGES = [
-  { key: 'interested', label: 'Interested',  color: '#f5a623' },
-  { key: 'contacted',  label: 'Contacted',   color: '#4ade80' },
-  { key: 'visited',    label: 'Visited',      color: '#60a5fa' },
-  { key: 'rejected',   label: 'Pass',         color: '#6b7280' },
+  { key: 'interested', label: 'Interested',     color: '#f5a623' },
+  { key: 'contacted',  label: 'Contacted',      color: '#4ade80' },
+  { key: 'visited',    label: 'Visited',        color: '#60a5fa' },
+  { key: 'rejected',   label: 'Not interested', color: '#6b7280' },
 ]
 
 function timeAgo(ts) {
@@ -47,13 +47,9 @@ function extractPhone(text) {
 }
 
 function buildWhatsAppMessage(post) {
-  const parts = []
-  if (post.bhk) parts.push(post.bhk)
-  if (post.locality) parts.push(`in ${post.locality}`)
-  const priceStr = post.price_formatted || (post.price ? `₹${post.price.toLocaleString()}` : null)
-  if (priceStr) parts.push(`for ${priceStr}/mo`)
-  const desc = parts.length ? parts.join(' ') : 'your listing'
-  return encodeURIComponent(`Hi, I'm interested in the ${desc}. Is it still available?`)
+  const bhk      = post.bhk ? `${post.bhk} ` : ''
+  const locality = post.locality ? ` in ${post.locality}` : ''
+  return encodeURIComponent(`Hi! Saw your listing for a ${bhk}flat${locality}. Is it still available? Would love to schedule a visit.`)
 }
 
 const pillStyle = {
@@ -139,7 +135,10 @@ function MiniCard({ post }) {
 function TrackingCard({ post, onStatusChange, onNotesChange, onUnsave }) {
   const [notes, setNotes] = useState(post._notes || '')
   const [copyMsg, setCopyMsg] = useState(false)
+  const [dismissing, setDismissing] = useState(false)
+  const [countdown, setCountdown] = useState(null)
   const debounceRef = useRef(null)
+  const dismissRef = useRef(null)
   const source = post.source || 'reddit'
   const color  = SOURCE_COLORS[source] || '#888'
   const icon   = SOURCE_ICONS[source]  || 'fa-solid fa-link'
@@ -153,12 +152,67 @@ function TrackingCard({ post, onStatusChange, onNotesChange, onUnsave }) {
     debounceRef.current = setTimeout(() => onNotesChange(post.id, val), 800)
   }
 
+  const handleStatusChange = (id, newStatus) => {
+    onStatusChange(id, newStatus)
+    if (newStatus === 'rejected') {
+      setDismissing(true)
+      setCountdown(2)
+      let t = 2
+      dismissRef.current = setInterval(() => {
+        t -= 1
+        setCountdown(t)
+        if (t <= 0) {
+          clearInterval(dismissRef.current)
+          onUnsave(post)
+        }
+      }, 1000)
+    }
+  }
+
+  const handleUndoDismiss = () => {
+    clearInterval(dismissRef.current)
+    setDismissing(false)
+    setCountdown(null)
+    onStatusChange(post.id, 'interested')
+  }
+
   const handleCopyMessage = () => {
     const msg = decodeURIComponent(buildWhatsAppMessage(post))
     navigator.clipboard.writeText(msg).then(() => {
       setCopyMsg(true)
       setTimeout(() => setCopyMsg(false), 2000)
     })
+  }
+
+  if (dismissing) {
+    return (
+      <div style={{
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderRadius: '12px',
+        padding: '16px',
+        opacity: 0.5,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+        transition: 'opacity 0.3s',
+      }}>
+        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+          Removing in {countdown}s…
+        </span>
+        <button
+          onClick={handleUndoDismiss}
+          style={{
+            padding: '4px 12px', borderRadius: '6px', fontSize: '11px', cursor: 'pointer',
+            background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+            color: 'var(--text-secondary)',
+          }}
+        >
+          Undo
+        </button>
+      </div>
+    )
   }
 
   return (
@@ -207,7 +261,7 @@ function TrackingCard({ post, onStatusChange, onNotesChange, onUnsave }) {
           return (
             <button
               key={stage.key}
-              onClick={() => onStatusChange(post.id, stage.key)}
+              onClick={() => handleStatusChange(post.id, stage.key)}
               style={{
                 padding: '4px 10px',
                 borderRadius: '20px',
@@ -291,7 +345,7 @@ function TrackingCard({ post, onStatusChange, onNotesChange, onUnsave }) {
           }}
         >
           <i className={copyMsg ? 'fa-solid fa-check' : 'fa-regular fa-copy'} style={{ fontSize: '10px' }} />
-          {copyMsg ? 'Copied!' : 'Copy message'}
+          {copyMsg ? 'Copied!' : 'Copy intro message'}
         </button>
         <button
           onClick={() => onUnsave(post)}
@@ -563,10 +617,12 @@ export default function NewForYou() {
                   </button>
                 </div>
               ) : (
-                <>
-                  {/* Status filter bar */}
-                  <StatusFilterBar listings={savedListings} />
-                </>
+                <StatusFilterBar
+                  listings={savedListings}
+                  onStatusChange={updateStatus}
+                  onNotesChange={updateNotes}
+                  onUnsave={saveListing}
+                />
               )}
             </>
           )}
@@ -579,10 +635,7 @@ export default function NewForYou() {
 }
 
 // ── Status filter bar + filtered list ──────────────────────────────────────
-function StatusFilterBar({ listings: allListings }) {
-  const navigate = useNavigate()
-  const { user } = useAuth()
-  const { updateStatus, updateNotes, saveListing } = useSavedListings(user)
+function StatusFilterBar({ listings: allListings, onStatusChange, onNotesChange, onUnsave }) {
   const [filter, setFilter] = useState('all')
 
   const counts = STATUS_STAGES.reduce((acc, s) => {
@@ -642,9 +695,9 @@ function StatusFilterBar({ listings: allListings }) {
             <TrackingCard
               key={post.id}
               post={post}
-              onStatusChange={updateStatus}
-              onNotesChange={updateNotes}
-              onUnsave={saveListing}
+              onStatusChange={onStatusChange}
+              onNotesChange={onNotesChange}
+              onUnsave={onUnsave}
             />
           ))}
         </div>
