@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTheme } from '../ThemeContext'
 import { useAuth } from '../hooks/useAuth'
@@ -496,11 +496,12 @@ export default function NewForYou() {
   const { user } = useAuth()
   const { savedSearches } = useSavedSearches(user)
   const [sinceWindow, setSinceWindow] = useState('7d')
-  const sinceOverride = sinceWindow === '24h'
-    ? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-    : sinceWindow === '3d'
-      ? new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
-      : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const sinceOverride = useMemo(() => {
+    const ms = sinceWindow === '24h' ? 24 * 60 * 60 * 1000
+             : sinceWindow === '3d'  ? 3 * 24 * 60 * 60 * 1000
+                                     : 7 * 24 * 60 * 60 * 1000
+    return new Date(Date.now() - ms).toISOString()
+  }, [sinceWindow])
   const { newListings, totalCount, badgeCount, loading, markAllSeen } = useNewListings(user, savedSearches, sinceOverride)
   const { savedListings, isSaved, saveListing, updateStatus, updateNotes } = useSavedListings(user)
   const [hiddenLeads, setHiddenLeads] = useState(() => {
