@@ -521,13 +521,38 @@ export default function NewForYou() {
         minHeight: '100vh', background: 'var(--bg-primary)',
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         justifyContent: 'center', gap: '16px', padding: '24px',
+        position: 'relative',
       }}>
+        <button
+          onClick={() => navigate(-1)}
+          style={{
+            position: 'absolute', top: '20px', left: '20px',
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            background: 'transparent',
+            border: '1px solid var(--border)',
+            borderRadius: '8px',
+            padding: '7px 12px',
+            fontSize: '13px',
+            color: 'var(--text-secondary)',
+            cursor: 'pointer',
+            transition: 'border-color 0.15s, color 0.15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--text-muted)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+        >
+          <i className="fa-solid fa-arrow-left" style={{ fontSize: '11px' }} />
+          Back
+        </button>
+
         <i className="fa-solid fa-layer-group" style={{ fontSize: '40px', color: '#f5a623' }} />
         <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '22px' }}>My Hub</h2>
-        <p style={{ color: 'var(--text-secondary)', textAlign: 'center', margin: 0, fontSize: '14px' }}>
+        <p style={{ color: 'var(--text-secondary)', textAlign: 'center', margin: 0, fontSize: '14px', maxWidth: '260px' }}>
           Sign in to track listings and see new matches for your searches
         </p>
         <AuthButton />
+        <p style={{ color: 'var(--text-muted)', fontSize: '11px', margin: 0, textAlign: 'center' }}>
+          Free · No spam · Sync across devices
+        </p>
       </div>
     )
   }
