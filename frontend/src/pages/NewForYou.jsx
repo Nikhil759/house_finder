@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo } from 'react'
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTheme } from '../ThemeContext'
 import { useAuth } from '../hooks/useAuth'
@@ -489,6 +489,18 @@ function TrackingCard({ post, onStatusChange, onNotesChange, onUnsave }) {
   )
 }
 
+function useNarrowScreen(maxWidth = 700) {
+  const [narrow, setNarrow] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${maxWidth}px)`)
+    const sync = () => setNarrow(mq.matches)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [maxWidth])
+  return narrow
+}
+
 // ── Main page ───────────────────────────────────────────────────────────────
 export default function NewForYou() {
   const navigate = useNavigate()
@@ -509,6 +521,7 @@ export default function NewForYou() {
   })
 
   const [activeTab, setActiveTab] = useState('saved')
+  const isNarrow = useNarrowScreen()
   const [expandedSearches, setExpandedSearches] = useState(new Set())
   const toggleExpand = (id) => setExpandedSearches(prev => {
     const next = new Set(prev)
@@ -765,7 +778,7 @@ export default function NewForYou() {
               {/* Listings grouped by saved search */}
               {Object.values(newListings).map(({ search, listings }) => {
                 const visible = listings.filter(l => !hiddenLeads.has(l.id))
-                const PAGE = 10
+                const PAGE = isNarrow ? 5 : 10
                 const isExpanded = expandedSearches.has(search.id)
                 const shown = isExpanded ? visible : visible.slice(0, PAGE)
                 const hiddenCount = visible.length - PAGE
