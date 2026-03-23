@@ -1844,97 +1844,119 @@ function formatBudget(val) {
 }
 
 function BudgetSlider({ minVal, maxVal, onChange }) {
-  const minIdx = BUDGET_STOPS.indexOf(minVal) === -1 ? 0 : BUDGET_STOPS.indexOf(minVal);
-  const maxIdx = maxVal === 0 ? BUDGET_STOPS.length - 1 : (BUDGET_STOPS.indexOf(maxVal) === -1 ? BUDGET_STOPS.length - 1 : BUDGET_STOPS.indexOf(maxVal));
-  const maxStop = BUDGET_STOPS.length - 1;
+  const trackRef = useRef(null);
+  const dragging = useRef(null);
+  const maxStop  = BUDGET_STOPS.length - 1;
 
-  const handleMin = (e) => {
-    const idx = Number(e.target.value);
-    if (idx >= maxIdx) return;
-    onChange(BUDGET_STOPS[idx], maxVal);
+  const minIdx = Math.max(0, BUDGET_STOPS.indexOf(minVal) === -1 ? 0 : BUDGET_STOPS.indexOf(minVal));
+  const maxIdx = maxVal === 0 ? maxStop : Math.max(0, BUDGET_STOPS.indexOf(maxVal) === -1 ? maxStop : BUDGET_STOPS.indexOf(maxVal));
+
+  const idxFromPointer = (e) => {
+    const rect = trackRef.current.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    return Math.round(pct * maxStop);
   };
 
-  const handleMax = (e) => {
-    const idx = Number(e.target.value);
-    if (idx <= minIdx) return;
-    const newMax = idx === maxStop ? 0 : BUDGET_STOPS[idx];
-    onChange(minVal, newMax);
+  const commit = (which, idx) => {
+    if (which === "min") {
+      const clamped = Math.min(idx, maxIdx - 1);
+      onChange(BUDGET_STOPS[clamped], maxVal);
+    } else {
+      const clamped = Math.max(idx, minIdx + 1);
+      const newMax  = clamped === maxStop ? 0 : BUDGET_STOPS[clamped];
+      onChange(minVal, newMax);
+    }
   };
+
+  const onPointerDown = (e) => {
+    e.preventDefault();
+    const idx = idxFromPointer(e);
+    // Assign to whichever thumb is closer
+    const distMin = Math.abs(idx - minIdx);
+    const distMax = Math.abs(idx - maxIdx);
+    dragging.current = distMin <= distMax ? "min" : "max";
+    trackRef.current.setPointerCapture(e.pointerId);
+    commit(dragging.current, idx);
+  };
+
+  const onPointerMove = (e) => {
+    if (!dragging.current) return;
+    commit(dragging.current, idxFromPointer(e));
+  };
+
+  const onPointerUp = () => { dragging.current = null; };
 
   const minPct = (minIdx / maxStop) * 100;
   const maxPct = (maxIdx / maxStop) * 100;
 
   const label = minVal === 0 && maxVal === 0
     ? "Any budget"
-    : minVal === 0
-      ? `Up to ${formatBudget(maxVal)}`
-      : maxVal === 0
-        ? `${formatBudget(minVal)}+`
-        : `${formatBudget(minVal)} – ${formatBudget(maxVal)}`;
+    : minVal === 0 ? `Up to ${formatBudget(maxVal)}`
+    : maxVal === 0 ? `${formatBudget(minVal)}+`
+    : `${formatBudget(minVal)} – ${formatBudget(maxVal)}`;
 
   return (
-    <div style={{ paddingTop: "4px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+    <div style={{ paddingTop: "2px", userSelect: "none" }}>
+      {/* Label row */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
         <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Budget</span>
         <span style={{
           fontSize: "12px", fontWeight: "600",
           color: (minVal > 0 || maxVal > 0) ? "#f5a623" : "var(--text-muted)",
+          transition: "color 0.15s",
         }}>
           {label}
         </span>
       </div>
-      <div style={{ position: "relative", height: "20px", marginBottom: "4px" }}>
-        {/* Track background */}
+
+      {/* Track */}
+      <div
+        ref={trackRef}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        style={{ position: "relative", height: "28px", cursor: "pointer", touchAction: "none" }}
+      >
+        {/* Track bg */}
         <div style={{
           position: "absolute", top: "50%", left: 0, right: 0, height: "4px",
-          transform: "translateY(-50%)", background: "var(--bg-secondary)",
-          borderRadius: "2px",
+          transform: "translateY(-50%)", background: "var(--bg-secondary)", borderRadius: "2px",
         }} />
-        {/* Active range highlight */}
+        {/* Active fill */}
         <div style={{
           position: "absolute", top: "50%", height: "4px",
           left: `${minPct}%`, width: `${maxPct - minPct}%`,
           transform: "translateY(-50%)", background: "#f5a623",
-          borderRadius: "2px",
+          borderRadius: "2px", transition: "left 0.05s, width 0.05s",
         }} />
-        {/* Min handle */}
-        <input
-          type="range" min={0} max={maxStop} step={1} value={minIdx}
-          onChange={handleMin}
-          style={{
-            position: "absolute", top: 0, left: 0, width: "100%", height: "100%",
-            opacity: 0, cursor: "pointer", zIndex: minIdx > maxIdx - 2 ? 5 : 3,
-          }}
-        />
-        {/* Max handle */}
-        <input
-          type="range" min={0} max={maxStop} step={1} value={maxIdx}
-          onChange={handleMax}
-          style={{
-            position: "absolute", top: 0, left: 0, width: "100%", height: "100%",
-            opacity: 0, cursor: "pointer", zIndex: 4,
-          }}
-        />
-        {/* Visible thumb min */}
+        {/* Min thumb */}
         <div style={{
           position: "absolute", top: "50%", left: `${minPct}%`,
-          width: "16px", height: "16px", borderRadius: "50%",
-          background: minVal > 0 ? "#f5a623" : "var(--bg-secondary)",
+          width: "18px", height: "18px", borderRadius: "50%",
+          background: minVal > 0 ? "#f5a623" : "var(--bg-card)",
           border: `2px solid ${minVal > 0 ? "#f5a623" : "var(--border)"}`,
           transform: "translate(-50%, -50%)",
-          pointerEvents: "none", transition: "left 0.1s",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.25)",
+          boxShadow: "0 1px 6px rgba(0,0,0,0.3)",
+          transition: "left 0.05s, background 0.15s, border-color 0.15s",
+          pointerEvents: "none",
         }} />
-        {/* Visible thumb max */}
+        {/* Max thumb */}
         <div style={{
           position: "absolute", top: "50%", left: `${maxPct}%`,
-          width: "16px", height: "16px", borderRadius: "50%",
-          background: "#f5a623",
-          border: "2px solid #f5a623",
+          width: "18px", height: "18px", borderRadius: "50%",
+          background: "#f5a623", border: "2px solid #f5a623",
           transform: "translate(-50%, -50%)",
-          pointerEvents: "none", transition: "left 0.1s",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.25)",
+          boxShadow: "0 1px 6px rgba(0,0,0,0.3)",
+          transition: "left 0.05s",
+          pointerEvents: "none",
         }} />
+      </div>
+
+      {/* Stop labels: just show min and max of the range */}
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: "2px" }}>
+        <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Any</span>
+        <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>₹1.5L</span>
       </div>
     </div>
   );

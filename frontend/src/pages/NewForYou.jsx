@@ -64,10 +64,20 @@ const pillStyle = {
 
 // ── New Leads: mini card ────────────────────────────────────────────────────
 function MiniCard({ post, onSave, onHide, savedStatus }) {
-  const source  = post.source || 'reddit'
-  const color   = SOURCE_COLORS[source] || '#888'
-  const created = post.created || post.created_utc || 0
-  const url     = post.url || (post.permalink ? `https://reddit.com${post.permalink}` : null)
+  const source    = post.source || 'reddit'
+  const color     = SOURCE_COLORS[source] || '#888'
+  const created   = post.created || post.created_utc || 0
+  const url       = post.url || (post.permalink ? `https://reddit.com${post.permalink}` : null)
+  const isHousing = source === 'housing'
+  const isNoBroker = source === 'nobroker'
+  const isStructured = isHousing || isNoBroker || source === 'telegram'
+
+  const displayPrice    = isStructured ? (post.price_formatted || (post.price ? `₹${post.price.toLocaleString()}` : null)) : null
+  const displayBhk      = post.bhk
+  const displayLocality = post.locality
+  const displayArea     = (isHousing || isNoBroker) && post.area_sqft ? `${post.area_sqft} sqft` : null
+  const displayFurnishing = (isHousing || isNoBroker) ? post.furnishing : null
+  const displayDeposit  = isHousing && post.deposit ? `₹${post.deposit.toLocaleString()} dep` : null
 
   const handleSave = (e) => {
     e.preventDefault()
@@ -98,9 +108,12 @@ function MiniCard({ post, onSave, onHide, savedStatus }) {
         rel="noopener noreferrer"
         style={{ display: 'block', padding: '14px 16px 10px', textDecoration: 'none' }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+        {/* Source row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '7px' }}>
           <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: color, flexShrink: 0 }} />
-          <span style={{ fontSize: '11px', color, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{source}</span>
+          <span style={{ fontSize: '11px', color, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            {isHousing ? 'Housing.com' : isNoBroker ? 'NoBroker' : source}
+          </span>
           {post.quality_score != null && (
             <span style={{
               marginLeft: 'auto', fontSize: '11px', fontWeight: '700',
@@ -113,22 +126,48 @@ function MiniCard({ post, onSave, onHide, savedStatus }) {
             </span>
           )}
         </div>
+
+        {/* Title */}
         <div style={{
           fontSize: '13px', fontWeight: '500', color: 'var(--text-primary)',
-          lineHeight: '1.4', marginBottom: '10px',
+          lineHeight: '1.4', marginBottom: isHousing && post.address ? '5px' : '9px',
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
         }}>
           {post.title}
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-          {post.bhk      && <span style={pillStyle}>{post.bhk}</span>}
-          {post.locality && <span style={pillStyle}>{post.locality}</span>}
-          {(post.price || post.price_formatted) && (
+
+        {/* Housing.com address line */}
+        {isHousing && post.address && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '4px',
+            fontSize: '10px', color: '#8b7cf8', marginBottom: '8px',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            <i className="fa-solid fa-location-dot" style={{ fontSize: '9px', flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {post.address.length > 60 ? post.address.slice(0, 60) + '…' : post.address}
+            </span>
+          </div>
+        )}
+
+        {/* Pills */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+          {displayBhk && displayArea
+            ? <span style={pillStyle}>{displayBhk} · {displayArea}</span>
+            : displayBhk && <span style={pillStyle}>{displayBhk}</span>}
+          {displayLocality && <span style={pillStyle}>{displayLocality}</span>}
+          {displayPrice && (
             <span style={{ ...pillStyle, color: '#f5a623', borderColor: 'rgba(245,166,35,0.3)', background: 'rgba(245,166,35,0.08)' }}>
-              {post.price_formatted || `₹${(post.price || 0).toLocaleString()}`}
+              {displayPrice}
             </span>
           )}
-          {post.furnishing && <span style={pillStyle}>{post.furnishing}</span>}
+          {!displayPrice && (post.price || post.price_formatted) && (
+            <span style={{ ...pillStyle, color: '#f5a623', borderColor: 'rgba(245,166,35,0.3)', background: 'rgba(245,166,35,0.08)' }}>
+              {post.price_formatted || `₹${post.price.toLocaleString()}`}
+            </span>
+          )}
+          {displayFurnishing && <span style={{ ...pillStyle, color: '#c084fc', borderColor: 'rgba(192,132,252,0.3)', background: 'rgba(192,132,252,0.08)' }}>{displayFurnishing}</span>}
+          {displayDeposit && <span style={{ ...pillStyle, color: 'var(--text-muted)' }}>{displayDeposit}</span>}
           {created > 0 && <span style={{ ...pillStyle, marginLeft: 'auto' }}>{timeAgo(created)}</span>}
         </div>
       </a>
@@ -260,56 +299,9 @@ function TrackingCard({ post, onStatusChange, onNotesChange, onUnsave }) {
     )
   }
 
-  const actionButtons = (
-    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-      {url && (
-        <a href={url} target="_blank" rel="noopener noreferrer" style={{
-          display: 'inline-flex', alignItems: 'center', gap: '5px',
-          padding: '5px 10px', borderRadius: '6px',
-          background: `${color}18`, border: `1px solid ${color}44`,
-          color, fontSize: '11px', fontWeight: '600', textDecoration: 'none',
-        }}>
-          <i className={icon} style={{ fontSize: '10px' }} /> Open listing
-        </a>
-      )}
-      {phone && (
-        <a href={`https://wa.me/91${phone}?text=${buildWhatsAppMessage(post)}`} target="_blank" rel="noopener noreferrer" style={{
-          display: 'inline-flex', alignItems: 'center', gap: '5px',
-          padding: '5px 10px', borderRadius: '6px',
-          background: 'rgba(37,211,102,0.1)', border: '1px solid rgba(37,211,102,0.3)',
-          color: '#25d366', fontSize: '11px', fontWeight: '600', textDecoration: 'none',
-        }}>
-          <i className="fa-brands fa-whatsapp" style={{ fontSize: '11px' }} /> WhatsApp
-        </a>
-      )}
-      <button onClick={handleCopyMessage} style={{
-        display: 'inline-flex', alignItems: 'center', gap: '5px',
-        padding: '5px 10px', borderRadius: '6px',
-        background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-        color: copyMsg ? '#4ade80' : 'var(--text-secondary)',
-        fontSize: '11px', cursor: 'pointer',
-      }}>
-        <i className={copyMsg ? 'fa-solid fa-check' : 'fa-regular fa-copy'} style={{ fontSize: '10px' }} />
-        {copyMsg ? 'Copied!' : 'Copy intro message'}
-      </button>
-      <button
-        onClick={() => onUnsave(post)}
-        style={{
-          marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '5px',
-          padding: '5px 10px', borderRadius: '6px',
-          background: 'transparent', border: '1px solid var(--border)',
-          color: 'var(--text-muted)', fontSize: '11px', cursor: 'pointer',
-        }}
-        onMouseEnter={e => { e.currentTarget.style.color = '#ff6b6b'; e.currentTarget.style.borderColor = 'rgba(255,107,107,0.4)' }}
-        onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)' }}
-      >
-        <i className="fa-solid fa-xmark" style={{ fontSize: '10px' }} /> Remove
-      </button>
-    </div>
-  )
 
   const statusPipeline = (
-    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', gap: '4px', flex: 1 }}>
       {STATUS_STAGES.map(stage => {
         const active = currentStatus === stage.key
         return (
@@ -317,12 +309,14 @@ function TrackingCard({ post, onStatusChange, onNotesChange, onUnsave }) {
             key={stage.key}
             onClick={() => handleStatusChange(post.id, stage.key)}
             style={{
-              padding: '4px 10px', borderRadius: '20px',
+              flex: 1,
+              padding: '5px 4px', borderRadius: '20px',
               border: `1px solid ${active ? stage.color : 'var(--border)'}`,
               background: active ? `${stage.color}22` : 'transparent',
               color: active ? stage.color : 'var(--text-muted)',
               fontSize: '11px', fontWeight: active ? '600' : '400',
               cursor: 'pointer', transition: 'all 0.15s',
+              textAlign: 'center', whiteSpace: 'nowrap',
             }}
           >
             {active && '✓ '}{stage.label}
@@ -332,103 +326,118 @@ function TrackingCard({ post, onStatusChange, onNotesChange, onUnsave }) {
     </div>
   )
 
-  const notesField = (
-    <textarea
-      value={notes}
-      onChange={e => handleNotesChange(e.target.value)}
-      placeholder="Add notes (auto-saved)…"
-      rows={2}
-      style={{
-        width: '100%', background: 'var(--bg-secondary)',
-        border: '1px solid var(--border)', borderRadius: '8px',
-        padding: '8px 10px', color: 'var(--text-primary)',
-        fontSize: '12px', resize: 'vertical', outline: 'none',
-        fontFamily: 'inherit', boxSizing: 'border-box',
-      }}
-    />
-  )
-
   return (
-    <>
-      <style>{`
-        @media (min-width: 700px) {
-          .tracking-card-inner { display: grid !important; grid-template-columns: 1fr 280px !important; gap: 16px !important; }
-          .tracking-card-right { display: flex !important; flex-direction: column !important; gap: 10px !important; }
-          .tracking-card-status { margin-bottom: 0 !important; }
-          .tracking-card-notes { margin-bottom: 0 !important; }
-        }
-      `}</style>
-      <div style={{
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
-        borderRadius: '12px',
-        padding: '16px',
-        transition: 'border-color 0.2s',
-      }}>
-        <div className="tracking-card-inner">
-          {/* Left: listing info + status */}
-          <div>
-            {/* Source + time */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: color, flexShrink: 0, display: 'inline-block' }} />
-              <span style={{ fontSize: '10px', color, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{source}</span>
-              {post._saved_at && (
-                <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-                  Saved {timeAgo(post._saved_at)}
-                </span>
-              )}
-            </div>
-            {/* Title */}
-            <div style={{
-              fontSize: '13px', fontWeight: '500', color: 'var(--text-primary)',
-              lineHeight: '1.5', marginBottom: '8px',
-            }}>
-              {post.title}
-            </div>
-            {/* Pills */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '12px' }}>
-              {post.bhk      && <span style={pillStyle}>{post.bhk}</span>}
-              {post.locality && <span style={pillStyle}>{post.locality}</span>}
+    <div style={{
+      background: 'var(--bg-card)',
+      border: '1px solid var(--border)',
+      borderRadius: '12px',
+      padding: '14px 16px',
+      transition: 'border-color 0.2s',
+    }}>
+      {/* Row 1: source · title · pills · time · remove */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '10px' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: color, flexShrink: 0, display: 'inline-block' }} />
+            <span style={{ fontSize: '10px', color, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{source}</span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginLeft: '4px' }}>
+              {post.bhk      && <span style={{ ...pillStyle, padding: '1px 6px' }}>{post.bhk}</span>}
+              {post.locality && <span style={{ ...pillStyle, padding: '1px 6px' }}>{post.locality}</span>}
               {(post.price || post.price_formatted) && (
-                <span style={{ ...pillStyle, color: '#f5a623', borderColor: 'rgba(245,166,35,0.3)', background: 'rgba(245,166,35,0.08)' }}>
+                <span style={{ ...pillStyle, padding: '1px 6px', color: '#f5a623', borderColor: 'rgba(245,166,35,0.3)', background: 'rgba(245,166,35,0.08)' }}>
                   {post.price_formatted || `₹${(post.price || 0).toLocaleString()}`}
                 </span>
               )}
             </div>
-            {/* Status — always visible here */}
-            <div className="tracking-card-status" style={{ marginBottom: '12px' }}>
-              {statusPipeline}
-            </div>
-            {/* Actions always on left column */}
-            {actionButtons}
+            {post._saved_at && (
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: 'auto', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {timeAgo(post._saved_at)}
+              </span>
+            )}
           </div>
-
-          {/* Right: notes (desktop only column, hidden on mobile via CSS) */}
-          <div className="tracking-card-right" style={{ display: 'none' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '500', letterSpacing: '0.04em' }}>NOTES</div>
-            <textarea
-              value={notes}
-              onChange={e => handleNotesChange(e.target.value)}
-              placeholder="Add notes (auto-saved)…"
-              style={{
-                flex: 1, minHeight: '80px',
-                background: 'var(--bg-secondary)', border: '1px solid var(--border)',
-                borderRadius: '8px', padding: '8px 10px',
-                color: 'var(--text-primary)', fontSize: '12px',
-                resize: 'none', outline: 'none', fontFamily: 'inherit',
-                boxSizing: 'border-box', width: '100%',
-              }}
-            />
+          <div style={{
+            fontSize: '13px', fontWeight: '500', color: 'var(--text-primary)',
+            lineHeight: '1.45',
+            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+          }}>
+            {post.title}
           </div>
         </div>
+        {/* Remove — top right */}
+        <button
+          onClick={() => onUnsave(post)}
+          title="Remove"
+          style={{
+            flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: '28px', height: '28px', borderRadius: '6px',
+            background: 'transparent', border: '1px solid var(--border)',
+            color: 'var(--text-muted)', fontSize: '12px', cursor: 'pointer',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = '#ff6b6b'; e.currentTarget.style.borderColor = 'rgba(255,107,107,0.4)' }}
+          onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border)' }}
+        >
+          <i className="fa-solid fa-xmark" />
+        </button>
+      </div>
 
-        {/* Notes for mobile (shown below, hidden on desktop) */}
-        <div className="tracking-card-notes" style={{ marginTop: '12px' }}>
-          <style>{`.tracking-card-notes { display: block; } @media (min-width: 700px) { .tracking-card-notes { display: none !important; } }`}</style>
-          {notesField}
+      {/* Row 2: status pipeline left · action buttons right */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: '8px', flexWrap: 'wrap',
+        paddingTop: '10px', paddingBottom: '10px',
+        borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)',
+        marginBottom: '10px',
+      }}>
+        {statusPipeline}
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
+          {url && (
+            <a href={url} target="_blank" rel="noopener noreferrer" style={{
+              display: 'inline-flex', alignItems: 'center', gap: '4px',
+              padding: '4px 9px', borderRadius: '6px',
+              background: `${color}18`, border: `1px solid ${color}44`,
+              color, fontSize: '11px', fontWeight: '600', textDecoration: 'none',
+            }}>
+              <i className={icon} style={{ fontSize: '10px' }} /> Open
+            </a>
+          )}
+          {phone && (
+            <a href={`https://wa.me/91${phone}?text=${buildWhatsAppMessage(post)}`} target="_blank" rel="noopener noreferrer" style={{
+              display: 'inline-flex', alignItems: 'center', gap: '4px',
+              padding: '4px 9px', borderRadius: '6px',
+              background: 'rgba(37,211,102,0.1)', border: '1px solid rgba(37,211,102,0.3)',
+              color: '#25d366', fontSize: '11px', fontWeight: '600', textDecoration: 'none',
+            }}>
+              <i className="fa-brands fa-whatsapp" style={{ fontSize: '10px' }} /> WhatsApp
+            </a>
+          )}
+          <button onClick={handleCopyMessage} style={{
+            display: 'inline-flex', alignItems: 'center', gap: '4px',
+            padding: '4px 9px', borderRadius: '6px',
+            background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+            color: copyMsg ? '#4ade80' : 'var(--text-secondary)',
+            fontSize: '11px', cursor: 'pointer',
+          }}>
+            <i className={copyMsg ? 'fa-solid fa-check' : 'fa-regular fa-copy'} style={{ fontSize: '10px' }} />
+            {copyMsg ? 'Copied!' : 'Copy outreach'}
+          </button>
         </div>
       </div>
-    </>
+
+      {/* Row 3: notes full width */}
+      <textarea
+        value={notes}
+        onChange={e => handleNotesChange(e.target.value)}
+        placeholder="Notes (auto-saved)…"
+        rows={2}
+        style={{
+          width: '100%', background: 'var(--bg-secondary)',
+          border: '1px solid var(--border)', borderRadius: '8px',
+          padding: '7px 10px', color: 'var(--text-primary)',
+          fontSize: '12px', resize: 'vertical', outline: 'none',
+          fontFamily: 'inherit', boxSizing: 'border-box',
+        }}
+      />
+    </div>
   )
 }
 
