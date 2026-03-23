@@ -6,11 +6,13 @@ Detects when the same flat appears on multiple sources (e.g. NoBroker + Housing.
 and groups them under a shared duplicate_group_id. The listing with the highest
 quality_score in each group is the canonical one shown in search results.
 
-Matching strategy (two-pass):
-  Pass 1 — Hard match (high confidence):
-    same locality (case-insensitive) + same BHK + rent within 10% + area within 50 sqft
-  Pass 2 — Soft match (medium confidence):
-    same locality + same BHK + rent within 15% + address similarity >= 70%
+Matching strategy (strict single-pass, high confidence only):
+  same locality (case-insensitive) + same BHK + rent within 5%
+  + area_sqft present on BOTH sides and within 30 sqft
+
+  area_sqft is REQUIRED — without it we can't be confident enough.
+  No soft/fuzzy matching to avoid Union-Find chaining false positives.
+  Only cross-source pairs are compared (same-source dupes handled by UNIQUE constraint).
 
 Only scans listings from the last 48 hours so large re-scans are avoided.
 Safe to run multiple times — fully idempotent.
@@ -24,7 +26,6 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from difflib import SequenceMatcher
 from itertools import combinations
 
 import psycopg2
@@ -39,10 +40,8 @@ logger = logging.getLogger("run_dedup")
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-RENT_TOLERANCE_HARD = 0.10   # 10% rent difference → hard match
-RENT_TOLERANCE_SOFT = 0.15   # 15% rent difference → soft match
-AREA_TOLERANCE_SQFT = 50     # ±50 sqft → hard match
-ADDRESS_SIM_THRESHOLD = 0.70  # 70% fuzzy similarity → soft match
+RENT_TOLERANCE = 0.05        # 5% rent difference max
+AREA_TOLERANCE_SQFT = 30     # ±30 sqft max; area MUST be present on both sides
 LOOKBACK_HOURS = 48          # only process listings seen in last 48h
 
 
@@ -59,80 +58,42 @@ def _get_connection():
 
 # ── Matching helpers ──────────────────────────────────────────────────────────
 
-def _rents_close(r1, r2, tolerance: float) -> bool:
+def _is_match(a: dict, b: dict) -> bool:
+    """
+    High-confidence duplicate check. ALL four conditions must hold:
+      1. Same locality (exact, case-insensitive)
+      2. Same BHK (normalised)
+      3. Rent within RENT_TOLERANCE (5%)
+      4. area_sqft present on BOTH sides and within AREA_TOLERANCE_SQFT (30 sqft)
+    """
+    # locality
+    if not a["locality"] or not b["locality"]:
+        return False
+    if a["locality"].strip().lower() != b["locality"].strip().lower():
+        return False
+
+    # bhk
+    if not a["bhk"] or not b["bhk"]:
+        return False
+    if a["bhk"].strip().lower().replace(" ", "") != b["bhk"].strip().lower().replace(" ", ""):
+        return False
+
+    # rent (both must be present)
+    r1, r2 = a["rent"], b["rent"]
     if r1 is None or r2 is None:
         return False
-    lo, hi = min(r1, r2), max(r1, r2)
-    return (hi - lo) / hi <= tolerance
+    hi = max(r1, r2)
+    if (hi - min(r1, r2)) / hi > RENT_TOLERANCE:
+        return False
 
-
-def _areas_close(a1, a2) -> bool:
+    # area (REQUIRED — no area = no match)
+    a1, a2 = a["area_sqft"], b["area_sqft"]
     if a1 is None or a2 is None:
         return False
-    return abs(a1 - a2) <= AREA_TOLERANCE_SQFT
-
-
-def _address_similarity(a1: str, a2: str) -> float:
-    if not a1 or not a2:
-        return 0.0
-    return SequenceMatcher(None, a1.lower().strip(), a2.lower().strip()).ratio()
-
-
-def _bhk_matches(b1, b2) -> bool:
-    """Case-insensitive BHK comparison, normalising spaces."""
-    if b1 is None or b2 is None:
+    if abs(a1 - a2) > AREA_TOLERANCE_SQFT:
         return False
-    return b1.strip().lower().replace(" ", "") == b2.strip().lower().replace(" ", "")
 
-
-def _locality_matches(l1, l2) -> bool:
-    if l1 is None or l2 is None:
-        return False
-    return l1.strip().lower() == l2.strip().lower()
-
-
-def _is_hard_match(a: dict, b: dict) -> bool:
-    return (
-        _locality_matches(a["locality"], b["locality"])
-        and _bhk_matches(a["bhk"], b["bhk"])
-        and _rents_close(a["rent"], b["rent"], RENT_TOLERANCE_HARD)
-        and _areas_close(a["area_sqft"], b["area_sqft"])
-    )
-
-
-def _is_soft_match(a: dict, b: dict) -> bool:
-    return (
-        _locality_matches(a["locality"], b["locality"])
-        and _bhk_matches(a["bhk"], b["bhk"])
-        and _rents_close(a["rent"], b["rent"], RENT_TOLERANCE_SOFT)
-        and _address_similarity(a["address"], b["address"]) >= ADDRESS_SIM_THRESHOLD
-    )
-
-
-# ── Union-Find (for grouping clusters of duplicates) ─────────────────────────
-
-class UnionFind:
-    def __init__(self):
-        self._parent: dict[int, int] = {}
-
-    def find(self, x: int) -> int:
-        self._parent.setdefault(x, x)
-        if self._parent[x] != x:
-            self._parent[x] = self.find(self._parent[x])
-        return self._parent[x]
-
-    def union(self, x: int, y: int):
-        self._parent[self.find(x)] = self.find(y)
-
-    def groups(self) -> dict[int, list[int]]:
-        """Returns {root_id: [member_ids]} for groups with >1 member."""
-        result: dict[int, list[int]] = {}
-        for x in self._parent:
-            root = self.find(x)
-            result.setdefault(root, [])
-            if x not in result[root]:
-                result[root].append(x)
-        return {k: v for k, v in result.items() if len(v) > 1}
+    return True
 
 
 # ── Main dedup logic ──────────────────────────────────────────────────────────
@@ -182,19 +143,32 @@ def run_dedup() -> dict:
             )
             buckets[key].append(dict(row))
 
-        uf = UnionFind()
+        # Strict pairwise grouping — no Union-Find chaining.
+        # Each listing can belong to at most one group.
+        # If a listing already has a group assignment, skip it to avoid
+        # pulling unrelated listings into the same group via a shared intermediary.
+        assigned: dict[int, int] = {}   # listing_id → group_id (= canonical listing_id)
+        groups: dict[int, list[int]] = {}  # group_id → [listing_ids]
 
         for key, group in buckets.items():
             if len(group) < 2:
                 continue
-            # Only compare across different sources — no point deduping within same source
             for a, b in combinations(group, 2):
+                # Cross-source only
                 if a["source"] == b["source"]:
                     continue
-                if _is_hard_match(a, b) or _is_soft_match(a, b):
-                    uf.union(a["id"], b["id"])
-
-        groups = uf.groups()
+                # Skip if either already assigned (prevents chaining)
+                if a["id"] in assigned or b["id"] in assigned:
+                    continue
+                if not _is_match(a, b):
+                    continue
+                # Use the higher-quality listing's id as group_id
+                canonical = a if a["quality_score"] >= b["quality_score"] else b
+                other = b if canonical is a else a
+                gid = canonical["id"]
+                assigned[canonical["id"]] = gid
+                assigned[other["id"]] = gid
+                groups[gid] = [canonical["id"], other["id"]]
         stats["groups_found"] = len(groups)
 
         if not groups:
