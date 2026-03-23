@@ -224,6 +224,10 @@ def query_listings(
             except ValueError:
                 pass
 
+        # Exclude obvious rent anomalies that slipped through ingestion
+        # (< ₹2k is garbage; > ₹1.5L is out of range for typical Bangalore rentals)
+        conditions.append("(rent IS NULL OR (rent >= 2000 AND rent <= 150000))")
+
         if since_utc is not None:
             conditions.append("EXTRACT(EPOCH FROM posted_at) > %s")
             params.append(since_utc)

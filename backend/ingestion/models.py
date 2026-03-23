@@ -87,6 +87,55 @@ class StandardListing(BaseModel):
             return int(nums) if nums else None
         return None
 
+    @field_validator("rent", mode="after")
+    @classmethod
+    def sanitize_rent(cls, v):
+        """
+        Tiered anomaly detection for Bangalore rental prices.
+
+        Tiers:
+          < 2,000              → garbage (test listings, data errors) → null
+          2,000 – 7,999        → suspicious but possible (PG/hostel) → keep
+          8,000 – 149,999      → normal range → keep
+          150,000 – 1,799,999  → likely annual quote → divide by 12 if result in range
+          >= 1,800,000         → clearly garbage → null
+        """
+        if v is None:
+            return None
+
+        # Garbage floor
+        if v < 2000:
+            return None
+
+        # Normal Bangalore rent range
+        if v <= 149_999:
+            return v
+
+        # Possible annual quote: 1.5L–18L range
+        if 150_000 <= v <= 1_799_999:
+            monthly = v // 12
+            if 8_000 <= monthly <= 149_999:
+                return monthly
+            return None
+
+        # > 18L — clearly garbage
+        return None
+
+    @field_validator("deposit", mode="after")
+    @classmethod
+    def sanitize_deposit(cls, v):
+        """
+        Deposits in Bangalore are typically 2–10 months rent (₹16k–₹10L).
+        Discard anything that looks like garbage.
+        """
+        if v is None:
+            return None
+        if v < 1000:
+            return None
+        if v > 5_000_000:
+            return None
+        return v
+
     @field_validator("area_sqft", mode="before")
     @classmethod
     def coerce_area(cls, v):

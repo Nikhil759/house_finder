@@ -61,7 +61,11 @@ def compute_quality_score(
     text = f"{title} {body}".lower()
 
     if rent:
-        score += 20
+        if rent < 7000:
+            # Suspiciously cheap for Bangalore — likely PG/hostel or data error
+            score += 5
+        else:
+            score += 20
     if contact_phone:
         score += 20
 
