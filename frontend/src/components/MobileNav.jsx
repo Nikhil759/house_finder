@@ -41,7 +41,7 @@ export function MobileNav() {
     },
     {
       id: 'new',
-      label: 'Alerts',
+      label: 'My Hub',
       path: '/new',
       badge: user && totalCount > 0 ? totalCount : null,
       icon: (active) => (
@@ -49,8 +49,9 @@ export function MobileNav() {
           fill="none" stroke="currentColor"
           strokeWidth={active ? 2.5 : 1.8}
           strokeLinecap="round" strokeLinejoin="round">
-          <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-          <path d="M13.73 21a2 2 0 01-3.46 0"/>
+          <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+          <polyline points="2 17 12 22 22 17"/>
+          <polyline points="2 12 12 17 22 12"/>
         </svg>
       ),
     },
@@ -101,10 +102,11 @@ export function MobileNav() {
               )}
             </div>
             <span style={{
-              fontSize: '10px',
-              fontWeight: active ? '600' : '400',
+              fontSize: '11px',
+              fontWeight: active ? '700' : '500',
               marginTop: '3px',
               letterSpacing: '0.2px',
+              color: active ? '#f5a623' : 'var(--text-secondary)',
             }}>
               {tab.label}
             </span>

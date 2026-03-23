@@ -42,22 +42,46 @@ const RadarLogo = () => (
  *   showAppCta — show an "Open App →" button linking to /app (for landing page)
  *   transparent — no background / border (for overlay on hero images)
  */
-function NotificationBell({ count, onClick }) {
+function HubButton({ count, onClick, isActive }) {
   return (
     <button
       onClick={onClick}
-      title="New listings for you"
-      className="shared-nav-theme-btn"
-      style={{ position: 'relative' }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = '#f5a623'; e.currentTarget.style.color = '#f5a623'; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.color = ''; }}
+      title="My Hub"
+      style={{
+        position: 'relative',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px',
+        padding: '6px 12px',
+        borderRadius: '8px',
+        background: isActive ? 'rgba(245,166,35,0.14)' : 'rgba(245,166,35,0.06)',
+        border: `1px solid ${isActive ? 'rgba(245,166,35,0.45)' : 'rgba(245,166,35,0.22)'}`,
+        color: isActive ? '#f5a623' : 'var(--text-secondary)',
+        fontSize: '12px',
+        fontWeight: isActive ? '600' : '500',
+        cursor: 'pointer',
+        transition: 'all 0.18s',
+        flexShrink: 0,
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.borderColor = 'rgba(245,166,35,0.45)'
+        e.currentTarget.style.color = '#f5a623'
+        e.currentTarget.style.background = 'rgba(245,166,35,0.08)'
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.borderColor = isActive ? 'rgba(245,166,35,0.45)' : 'var(--border)'
+        e.currentTarget.style.color = isActive ? '#f5a623' : 'var(--text-secondary)'
+        e.currentTarget.style.background = isActive ? 'rgba(245,166,35,0.14)' : 'rgba(245,166,35,0.06)'
+      }}
     >
-      <i className={count > 0 ? 'fa-solid fa-bell' : 'fa-regular fa-bell'} style={{ fontSize: '14px' }} />
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+        <polyline points="2 17 12 22 22 17"/>
+        <polyline points="2 12 12 17 22 12"/>
+      </svg>
+      My Hub
       {count > 0 && (
         <span style={{
-          position: 'absolute',
-          top: '-5px',
-          right: '-5px',
           background: '#f5a623',
           color: '#000',
           borderRadius: '10px',
@@ -67,7 +91,6 @@ function NotificationBell({ count, onClick }) {
           minWidth: '15px',
           textAlign: 'center',
           lineHeight: '15px',
-          pointerEvents: 'none',
         }}>
           {count > 99 ? '99+' : count}
         </span>
@@ -369,9 +392,10 @@ export default function Navbar({ subtitle, showAppCta = true, transparent = fals
             </button>
           )}
           {user && (
-            <NotificationBell
+            <HubButton
               count={newCount}
               onClick={() => navigate('/new')}
+              isActive={location.pathname === '/new'}
             />
           )}
           <Link to="/health" className="shared-nav-health" title="System health">

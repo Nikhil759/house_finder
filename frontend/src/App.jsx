@@ -8,6 +8,7 @@ import { MobileNav } from "./components/MobileNav";
 import { useAuth } from "./hooks/useAuth";
 import { useSavedSearches } from "./hooks/useSavedSearches";
 import { useNewListings } from "./hooks/useNewListings";
+import { useSavedListings } from "./hooks/useSavedListings";
 import { supabase } from "./lib/supabase";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -1855,11 +1856,11 @@ export default function App() {
   const { user }                            = useAuth();
   const { savedSearches, saveSearch, deleteSearch, clearAllSearches, updateLastRun } = useSavedSearches(user);
   const { totalCount: newListingsCount }    = useNewListings(user, savedSearches);
+  const { savedListings, isSaved, saveListing: saveSingleListing, clearAllSaved } = useSavedListings(user);
   const [savedPanelOpen, setSavedPanelOpen] = useState(false);
   const [justSaved,      setJustSaved]      = useState(false);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [lastVisit]                         = useState(loadLastVisit);
-  const [savedListings,  setSavedListings]  = useState(() => loadFromLS("savedListings", []));
   const [hiddenPosts,    setHiddenPosts]    = useState(() => new Set(loadFromLS("hiddenPosts", [])));
   const [activeTab,      setActiveTab]      = useState("results");
   const [viewMode,       setViewMode]       = useState("grid");
@@ -1911,12 +1912,7 @@ export default function App() {
   };
 
   const handleSaveListing = (post) => {
-    setSavedListings(prev => {
-      const exists  = prev.some(p => p.id === post.id);
-      const updated = exists ? prev.filter(p => p.id !== post.id) : [post, ...prev];
-      localStorage.setItem("savedListings", JSON.stringify(updated));
-      return updated;
-    });
+    saveSingleListing(post);
   };
 
   const handleHidePost = (id) => {
@@ -1929,8 +1925,7 @@ export default function App() {
   };
 
   const handleClearSavedListings = () => {
-    setSavedListings([]);
-    localStorage.removeItem("savedListings");
+    clearAllSaved();
     showToast("Cleared all saved listings");
   };
 
@@ -2659,7 +2654,7 @@ export default function App() {
                     sorted.map((post, i) => (
                       <PostCard
                         key={post.id} post={post} index={i} lastVisit={lastVisit}
-                        isSaved={savedListings.some(p => p.id === post.id)}
+                        isSaved={isSaved(post.id)}
                         onSave={handleSaveListing}
                         onHide={handleHidePost}
                         onToast={showToast}
@@ -2675,7 +2670,7 @@ export default function App() {
                           {paginated.map(post => (
                             <PostTile
                               key={post.id} post={post} lastVisit={lastVisit}
-                              isSaved={savedListings.some(p => p.id === post.id)}
+                              isSaved={isSaved(post.id)}
                               onSave={handleSaveListing}
                               onHide={handleHidePost}
                               onToast={showToast}
