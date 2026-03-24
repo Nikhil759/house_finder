@@ -139,6 +139,15 @@ def insert_articles(conn, locality: str, articles: list[dict]) -> tuple[int, int
             logger.debug("  %s: skipping article — missing url or removed title", locality)
             continue
 
+        # Skip articles whose title doesn't mention the locality or Bangalore/Bengaluru
+        # NewsAPI full-text search can match on body text, pulling in off-topic articles
+        title_lower = title.lower()
+        if (locality.lower() not in title_lower
+                and "bangalore" not in title_lower
+                and "bengaluru" not in title_lower):
+            logger.debug("  %s: skipping off-topic article — title: %.80s", locality, title)
+            continue
+
         source_id  = hashlib.md5(url.encode()).hexdigest()
         body       = (art.get("description") or "")[:1000]
         title      = title[:500]

@@ -16,6 +16,13 @@ function formatDeposit(amount) {
   return `₹${Number(amount).toLocaleString('en-IN')}`
 }
 
+function decodeHTML(str) {
+  if (!str) return str
+  const txt = document.createElement('textarea')
+  txt.innerHTML = str
+  return txt.value
+}
+
 function timeAgoFromDate(dateStr) {
   if (!dateStr) return null
   const diffMs = Date.now() - new Date(dateStr).getTime()
@@ -54,6 +61,24 @@ const TIER_CONFIG = {
   'Mid-range':{ bar: 'var(--lg-mid)'    },
   Affordable: { bar: 'var(--lg-aff)'    },
 }
+
+// ── Feed / Pulse constants ────────────────────────────────────────────────────
+
+const PALETTE = ['#FF6060', '#5AAFFF', '#F5A623', '#7C6AF5', '#34C773', '#FF9040', '#686670']
+
+const SOURCE_STYLES = {
+  reddit: { label: 'Reddit', bg: '#281408', color: '#FF7040' },
+  news:   { label: 'News',   bg: '#141428', color: '#9090E0' },
+  nestiq: { label: 'NestIQ', bg: '#16142A', color: '#7C6AF5' },
+}
+
+const SENTIMENT_STYLES = {
+  positive: { bg: '#0A1E12', color: '#34C773', label: 'Positive' },
+  neutral:  { bg: '#1E1608', color: '#F5A623', label: 'Neutral'  },
+  negative: { bg: '#1E0A0A', color: '#FF6060', label: 'Heads up' },
+}
+
+const FEED_FILTERS = ['All', 'Reddit', 'News']
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -121,6 +146,101 @@ function SkeletonDepositCard() {
   )
 }
 
+function SkeletonPostCard() {
+  return (
+    <div className="lg-post-card" style={{ pointerEvents: 'none' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div className="lg-skeleton" style={{ width: 52, height: 20, borderRadius: 100 }} />
+          <div className="lg-skeleton" style={{ width: 72, height: 14, borderRadius: 4, alignSelf: 'center' }} />
+        </div>
+        <div className="lg-skeleton" style={{ width: 48, height: 12, borderRadius: 4, alignSelf: 'center' }} />
+      </div>
+      <div className="lg-skeleton" style={{ width: '80%', height: 14, borderRadius: 4, marginBottom: 8 }} />
+      <div className="lg-skeleton" style={{ width: '100%', height: 11, borderRadius: 4, marginBottom: 4 }} />
+      <div className="lg-skeleton" style={{ width: '65%', height: 11, borderRadius: 4, marginBottom: 12 }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <div className="lg-skeleton" style={{ width: 52, height: 20, borderRadius: 4 }} />
+        <div className="lg-skeleton" style={{ width: 58, height: 20, borderRadius: 4 }} />
+      </div>
+    </div>
+  )
+}
+
+function TopicsBar({ topics, topicColorMap }) {
+  const maxCount = topics.length > 0 ? topics[0].count : 1
+  return (
+    <div className="lg-topics-bar">
+      <div className="lg-section-label" style={{ marginBottom: 14 }}>By topic</div>
+      {topics.map(({ topic, count }) => {
+        const color = topicColorMap[topic] || '#686670'
+        const label = topic.charAt(0).toUpperCase() + topic.slice(1)
+        const pct = (count / maxCount) * 100
+        return (
+          <div key={topic} className="lg-topic-row">
+            <div className="lg-topic-label">{label}</div>
+            <div className="lg-topic-track">
+              <div className="lg-topic-fill" style={{ width: `${pct}%`, background: color }} />
+            </div>
+            <div className="lg-topic-count" style={{ color }}>{count}</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function PostCard({ post, topicColorMap }) {
+  const src  = SOURCE_STYLES[post.source]  || { label: post.source, bg: '#1A1A22', color: '#686670' }
+  const sent = SENTIMENT_STYLES[post.sentiment] || SENTIMENT_STYLES.neutral
+  const topicColor = topicColorMap[post.topic] || '#686670'
+  const topicLabel = post.topic
+    ? post.topic.charAt(0).toUpperCase() + post.topic.slice(1)
+    : null
+
+  return (
+    <a
+      href={post.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="lg-post-card"
+    >
+      <div className="lg-post-top">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+          <span className="lg-source-pill" style={{ background: src.bg, color: src.color }}>
+            {src.label}
+          </span>
+          <span className="lg-post-author">{post.author}</span>
+          {post.locality && (
+            <span className="lg-post-locality">· {post.locality}</span>
+          )}
+        </div>
+        <span className="lg-post-time">{timeAgoFromDate(post.posted_at)}</span>
+      </div>
+
+      <div className="lg-post-title">{post.title}</div>
+
+      {post.body && (
+        <div className="lg-post-body">{decodeHTML(post.body)}</div>
+      )}
+
+      <div className="lg-post-bottom">
+        {topicLabel && (
+          <span
+            className="lg-topic-tag"
+            style={{ background: topicColor + '28', color: topicColor }}
+          >
+            {topicLabel}
+          </span>
+        )}
+        <span className="lg-sentiment-tag" style={{ background: sent.bg, color: sent.color }}>
+          {sent.label}
+        </span>
+      </div>
+    </a>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function LocalityGuide() {
@@ -132,6 +252,13 @@ export default function LocalityGuide() {
   const [showAll, setShowAll] = useState(false)
   const [showBars, setShowBars] = useState(false)
   const [updatedAt, setUpdatedAt] = useState(null)
+
+  // Feed state
+  const [feedPosts, setFeedPosts] = useState([])
+  const [topicCounts, setTopicCounts] = useState([])
+  const [feedLoading, setFeedLoading] = useState(true)
+  const [feedFilter, setFeedFilter] = useState('All')
+  const [feedShowAll, setFeedShowAll] = useState(false)
 
   // Fetch both cache tables once on mount
   useEffect(() => {
@@ -161,6 +288,51 @@ export default function LocalityGuide() {
       setLoading(false)
     }
     load()
+    return () => { cancelled = true }
+  }, [])
+
+  // Fetch locality feed (topics + posts)
+  useEffect(() => {
+    let cancelled = false
+    async function loadFeed() {
+      setFeedLoading(true)
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+      const [{ data: topicData }, { data: postsData }] = await Promise.all([
+        supabase
+          .from('locality_feed')
+          .select('topic')
+          .not('topic', 'is', null)
+          .gte('scraped_at', thirtyDaysAgo),
+        supabase
+          .from('locality_feed')
+          .select('id, source, author, locality, title, body, url, topic, sentiment, engagement, posted_at')
+          .not('topic', 'is', null)
+          .not('sentiment', 'is', null)
+          .order('posted_at', { ascending: false })
+          .limit(20),
+      ])
+      if (cancelled) return
+
+      // Aggregate topic counts client-side — "other" always pinned last
+      if (topicData) {
+        const counts = {}
+        for (const { topic } of topicData) {
+          counts[topic] = (counts[topic] || 0) + 1
+        }
+        const sorted = Object.entries(counts)
+          .map(([topic, count]) => ({ topic, count }))
+          .sort((a, b) => {
+            if (a.topic === 'other') return 1
+            if (b.topic === 'other') return -1
+            return b.count - a.count
+          })
+        setTopicCounts(sorted)
+      }
+
+      setFeedPosts(postsData || [])
+      setFeedLoading(false)
+    }
+    loadFeed()
     return () => { cancelled = true }
   }, [])
 
@@ -202,22 +374,56 @@ export default function LocalityGuide() {
 
   const TIER_ORDER = ['Premium', 'Mid-range', 'Affordable']
 
+  // Assign colours by position in sorted topic list — keeps consistency across bar and cards
+  const topicColorMap = useMemo(() => {
+    const map = {}
+    topicCounts.forEach(({ topic }, i) => {
+      map[topic] = PALETTE[i % PALETTE.length]
+    })
+    return map
+  }, [topicCounts])
+
+  // Interleave Reddit and News posts (Reddit, News, Reddit, News…)
+  const interleavedPosts = useMemo(() => {
+    const redditPosts = feedPosts.filter(p => p.source === 'reddit')
+    const newsPosts   = feedPosts.filter(p => p.source === 'news')
+    const result = []
+    const len = Math.max(redditPosts.length, newsPosts.length)
+    for (let i = 0; i < len; i++) {
+      if (i < redditPosts.length) result.push(redditPosts[i])
+      if (i < newsPosts.length)   result.push(newsPosts[i])
+    }
+    return result
+  }, [feedPosts])
+
+  const visibleFeedPosts = useMemo(() => {
+    const filtered = feedFilter === 'All'
+      ? interleavedPosts
+      : feedPosts.filter(p => p.source === feedFilter.toLowerCase())
+    return feedShowAll ? filtered : filtered.slice(0, 3)
+  }, [interleavedPosts, feedPosts, feedFilter, feedShowAll])
+
+  const filteredTotalCount = useMemo(() => {
+    if (feedFilter === 'All') return interleavedPosts.length
+    return feedPosts.filter(p => p.source === feedFilter.toLowerCase()).length
+  }, [interleavedPosts, feedPosts, feedFilter])
+
   return (
     <div className="app-page">
       <style>{CSS}</style>
       <BackgroundPattern theme={theme} />
 
       <div style={{ position: 'relative', zIndex: 1 }}>
-      <Navbar subtitle="Locality Guide" showAppCta />
+      <Navbar subtitle="Neighbourhood Pulse" showAppCta />
 
       <main className="lg-main">
         <div className="lg-container">
 
           {/* Page header */}
           <div className="lg-page-header">
-            <h1 className="lg-page-title">Locality Guide</h1>
+            <h1 className="lg-page-title">Neighbourhood Pulse</h1>
             <p className="lg-page-subtitle">
-              Rental data from active listings across Bengaluru
+              Live rental data and local insights across Bengaluru
             </p>
           </div>
 
@@ -340,6 +546,95 @@ export default function LocalityGuide() {
                 })
               )}
             </div>
+          </section>
+
+          {/* ── Section 3: What people are saying ── */}
+          <section className="lg-section">
+            {/* Section label + filter tabs on the same row */}
+            <div className="lg-section-header" style={{ marginBottom: 16 }}>
+              <div className="lg-section-label" style={{ marginBottom: 0 }}>
+                What people are saying
+              </div>
+              {!feedLoading && feedPosts.length > 0 && (
+                <div className="lg-feed-filters" role="group" aria-label="Source filter">
+                  {FEED_FILTERS.map(f => (
+                    <button
+                      key={f}
+                      className={`lg-feed-filter-btn${feedFilter === f ? ' active' : ''}`}
+                      onClick={() => { setFeedFilter(f); setFeedShowAll(false) }}
+                      aria-pressed={feedFilter === f}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {feedLoading ? (
+              <div className="lg-pulse-layout">
+                {/* Topics skeleton */}
+                <div className="lg-topics-col">
+                  <div className="lg-topics-bar">
+                    <div className="lg-section-label" style={{ marginBottom: 14 }}>By topic</div>
+                    {[80, 65, 50, 40, 30].map((w, i) => (
+                      <div key={i} className="lg-topic-row">
+                        <div className="lg-skeleton" style={{ width: '100%', height: 12, borderRadius: 4 }} />
+                        <div className="lg-skeleton" style={{ width: `${w}%`, height: 5, borderRadius: 3 }} />
+                        <div className="lg-skeleton" style={{ width: 18, height: 12, borderRadius: 4 }} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {/* Posts skeleton */}
+                <div className="lg-feed-col">
+                  <div className="lg-feed-posts">
+                    <SkeletonPostCard />
+                    <SkeletonPostCard />
+                    <SkeletonPostCard />
+                  </div>
+                </div>
+              </div>
+            ) : feedPosts.length === 0 ? (
+              <div className="lg-empty" style={{ border: '1px solid var(--lg-border)', borderRadius: 12 }}>
+                Local insights are being collected. Check back tomorrow.
+              </div>
+            ) : (
+              <div className="lg-pulse-layout">
+                {/* Left: topics bar */}
+                <div className="lg-topics-col">
+                  <TopicsBar topics={topicCounts} topicColorMap={topicColorMap} />
+                </div>
+
+                {/* Right: posts feed — starts flush with topics bar, no inner header */}
+                <div className="lg-feed-col">
+                  {/* Post cards */}
+                  {visibleFeedPosts.length === 0 ? (
+                    <div className="lg-empty" style={{ border: '1px solid var(--lg-border)', borderRadius: 12 }}>
+                      No {feedFilter} posts yet.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="lg-feed-posts">
+                        {visibleFeedPosts.map(post => (
+                          <PostCard key={post.id} post={post} topicColorMap={topicColorMap} />
+                        ))}
+                      </div>
+                      {filteredTotalCount > 3 && (
+                        <button
+                          className="lg-show-more-btn"
+                          onClick={() => setFeedShowAll(v => !v)}
+                        >
+                          {feedShowAll
+                            ? 'Show less ↑'
+                            : `Show ${filteredTotalCount - 3} more ↓`}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
           </section>
 
         </div>
@@ -771,6 +1066,255 @@ const CSS = `
   .lg-bhk-btn {
     padding: 5px 10px;
     font-size: 11px;
+  }
+}
+
+/* ── Pulse section layout ── */
+.lg-pulse-layout {
+  display: flex;
+  gap: 20px;
+  align-items: start;
+}
+
+.lg-topics-col {
+  width: 220px;
+  flex-shrink: 0;
+}
+
+.lg-feed-col {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Topics bar (left column) ── */
+.lg-topics-bar {
+  position: sticky;
+  top: 24px;
+  background: var(--lg-surface);
+  border: 1px solid var(--lg-border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.lg-topic-row {
+  display: grid;
+  grid-template-columns: 62px 1fr 24px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 11px;
+}
+
+.lg-topic-row:last-child {
+  margin-bottom: 0;
+}
+
+.lg-topic-label {
+  font-size: 12px;
+  color: var(--lg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lg-topic-track {
+  height: 5px;
+  background: var(--lg-surface2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.lg-topic-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.lg-topic-count {
+  font-size: 11px;
+  font-weight: 600;
+  text-align: right;
+}
+
+/* ── Feed filter tabs ── */
+.lg-feed-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.lg-feed-filters {
+  display: inline-flex;
+  background: var(--lg-surface2);
+  border-radius: 100px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.lg-feed-filter-btn {
+  border: none;
+  border-radius: 100px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  color: var(--lg-muted);
+  background: transparent;
+  white-space: nowrap;
+}
+
+.lg-feed-filter-btn.active {
+  background: var(--lg-surface);
+  color: var(--lg-text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* ── Post cards ── */
+.lg-feed-posts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lg-post-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--lg-surface);
+  border: 1px solid var(--lg-border);
+  border-radius: 10px;
+  padding: 16px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s, background 0.15s;
+  cursor: pointer;
+}
+
+.lg-post-card:hover {
+  border-color: var(--lg-border2);
+  background: var(--lg-surface2);
+}
+
+.lg-post-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 9px;
+  flex-wrap: wrap;
+}
+
+.lg-source-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 100px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.lg-post-author {
+  font-size: 11px;
+  color: var(--lg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lg-post-locality {
+  font-size: 11px;
+  color: var(--lg-muted2);
+  white-space: nowrap;
+}
+
+.lg-post-time {
+  font-size: 11px;
+  color: var(--lg-muted2);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.lg-post-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lg-text);
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.lg-post-body {
+  font-size: 12px;
+  color: var(--lg-muted);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+.lg-post-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 10px;
+}
+
+.lg-topic-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.lg-sentiment-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.lg-show-more-btn {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--lg-border);
+  border-radius: 10px;
+  background: var(--lg-surface);
+  color: var(--lg-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  text-align: center;
+  margin-top: 10px;
+}
+
+.lg-show-more-btn:hover {
+  background: var(--lg-surface2);
+  color: var(--lg-text);
+}
+
+@media (max-width: 600px) {
+  .lg-pulse-layout {
+    flex-direction: column;
+  }
+
+  .lg-topics-col {
+    width: 100%;
+  }
+
+  .lg-topics-bar {
+    position: static;
+  }
+
+  .lg-topic-row {
+    grid-template-columns: 58px 1fr 22px;
   }
 }
 `
