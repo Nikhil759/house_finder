@@ -107,7 +107,7 @@ export default function Navbar({ subtitle, showAppCta = true, transparent = fals
   const location = useLocation();
   const { user } = useAuth();
   const isSearchListingsPage = location.pathname === "/app";
-  const isLocalityGuidePage = location.pathname === "/locality-guide";
+  const isLocalityGuidePage = location.pathname === "/locality-guide" || location.pathname.startsWith("/neighbourhood-pulse");
   const shouldShowSearchCta = showAppCta && !isSearchListingsPage;
 
   return (
@@ -400,7 +400,7 @@ export default function Navbar({ subtitle, showAppCta = true, transparent = fals
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 3v18h18"/><path d="M7 16l4-6 4 4 4-8"/>
               </svg>
-              Locality Guide
+              Neighbourhood Pulse
             </Link>
           )}
           {shouldShowSearchCta && (

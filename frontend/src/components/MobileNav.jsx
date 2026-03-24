@@ -40,16 +40,15 @@ export function MobileNav() {
       ),
     },
     {
-      id: 'guide',
-      label: 'Guide',
+      id: 'pulse',
+      label: 'Pulse',
       path: '/locality-guide',
       icon: (active) => (
         <svg width="22" height="22" viewBox="0 0 24 24"
           fill="none" stroke="currentColor"
           strokeWidth={active ? 2.5 : 1.8}
           strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 3v18h18"/>
-          <path d="M7 16l4-6 4 4 4-8"/>
+          <polyline points="2 12 6 12 8 5 10 19 12 12 14 15 16 12 22 12"/>
         </svg>
       ),
     },
@@ -73,6 +72,9 @@ export function MobileNav() {
 
   const isActive = (path) => {
     if (path === '/') return location.pathname === '/'
+    if (path === '/locality-guide') {
+      return location.pathname === '/locality-guide' || location.pathname.startsWith('/neighbourhood-pulse')
+    }
     return location.pathname.startsWith(path)
   }
 
