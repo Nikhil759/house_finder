@@ -29,6 +29,7 @@ SOURCES = {
     "housing":   [sys.executable, "-m", "ingestion.ingest_housing"],
     "telegram":  [sys.executable, "-m", "ingestion.ingest_telegram"],
     "reddit":    [sys.executable, "-m", "ingestion.ingest_reddit"],
+    "news":      [sys.executable, "-m", "ingestion.scrape_news"],
 }
 
 
