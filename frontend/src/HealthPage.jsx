@@ -11,6 +11,11 @@ const SOURCE_META = {
   housing:  { label: "Housing.com", icon: "🏠", ttlHours: 4,  refreshLabel: "Background worker every 3h" },
 };
 
+const FEED_SOURCE_META = {
+  news:   { label: "News (NewsAPI)",          icon: "📰", refreshLabel: "GitHub Actions every 6h" },
+  reddit: { label: "Reddit Discussions",      icon: "💬", refreshLabel: "Local cron every 6h" },
+};
+
 function statusFor(source, info) {
   if (!info || info.count === 0) return "dead";
   const meta = SOURCE_META[source];
@@ -120,10 +125,60 @@ function LocalityTable({ byLocality, isDark }) {
   );
 }
 
+function FeedSourceCard({ sourceId, info, isDark }) {
+  const meta = FEED_SOURCE_META[sourceId] || { label: sourceId, icon: "●", refreshLabel: "" };
+  const hasData = info && info.last_24h > 0;
+  const untaggedRatio = info ? info.untagged / Math.max(info.total, 1) : 0;
+  const status = !info || info.total === 0 ? "dead" : !hasData ? "stale" : "ok";
+  const cfg = STATUS_CONFIG[status];
+
+  return (
+    <div style={{
+      background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+      border: `1px solid ${cfg.border}`,
+      borderRadius: 12,
+      padding: "20px 24px",
+      display: "flex",
+      alignItems: "center",
+      gap: 20,
+    }}>
+      <div style={{ fontSize: 28, lineHeight: 1 }}>{meta.icon}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+          <span style={{ fontWeight: 600, fontSize: 16 }}>{meta.label}</span>
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 5,
+            background: cfg.bg, border: `1px solid ${cfg.border}`,
+            borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 500,
+            color: cfg.dot,
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: cfg.dot, display: "inline-block" }} />
+            {cfg.label}
+          </span>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 20px", fontSize: 13, opacity: 0.7 }}>
+          <span><strong style={{ opacity: 1 }}>{(info?.total ?? 0).toLocaleString()}</strong> total posts</span>
+          <span><strong style={{ opacity: 1 }}>{(info?.last_24h ?? 0).toLocaleString()}</strong> in last 24h</span>
+          {info?.untagged > 0 && (
+            <span style={{ color: "#f59e0b" }}>
+              <strong style={{ opacity: 1 }}>{info.untagged}</strong> untagged
+            </span>
+          )}
+          {info?.newest_age_minutes != null && (
+            <span>Last fetched: <strong style={{ opacity: 1 }}>{formatAge(info.newest_age_minutes)}</strong></span>
+          )}
+        </div>
+        <div style={{ marginTop: 6, fontSize: 11, opacity: 0.45 }}>{meta.refreshLabel}</div>
+      </div>
+    </div>
+  );
+}
+
 export default function HealthPage() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const [data, setData] = useState(null);
+  const [feedData, setFeedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [lastRefreshed, setLastRefreshed] = useState(null);
@@ -132,10 +187,17 @@ export default function HealthPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_BASE}/api/ingestion/status`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
+      const [listingsRes, feedRes] = await Promise.all([
+        fetch(`${API_BASE}/api/ingestion/status`),
+        fetch(`${API_BASE}/api/locality-feed/status`),
+      ]);
+      if (!listingsRes.ok) throw new Error(`Listings API HTTP ${listingsRes.status}`);
+      const json = await listingsRes.json();
       setData(json);
+      if (feedRes.ok) {
+        const feedJson = await feedRes.json();
+        setFeedData(feedJson);
+      }
       setLastRefreshed(new Date());
     } catch (e) {
       setError(e.message);
@@ -255,6 +317,74 @@ export default function HealthPage() {
 
         {/* Locality breakdown */}
         {data?.by_locality && <LocalityTable byLocality={data.by_locality} isDark={isDark} />}
+
+        {/* Locality Feed section */}
+        <div style={{ marginTop: 40 }}>
+          <div style={{
+            fontSize: 11, fontWeight: 600, letterSpacing: "0.08em",
+            textTransform: "uppercase", opacity: 0.45, marginBottom: 16,
+          }}>
+            Locality Feed
+          </div>
+
+          {/* Summary */}
+          <div style={{
+            background: cardBg, border: `1px solid ${cardBord}`,
+            borderRadius: 12, padding: "16px 24px",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            marginBottom: 12, flexWrap: "wrap", gap: 12,
+          }}>
+            <div>
+              <span style={{ fontSize: 24, fontWeight: 700 }}>
+                {loading ? "—" : (feedData?.total_posts ?? 0).toLocaleString()}
+              </span>
+              <span style={{ fontSize: 13, opacity: 0.6, marginLeft: 8 }}>total feed posts</span>
+            </div>
+            <div style={{ fontSize: 12, color: muted }}>
+              news articles + Reddit discussions · tagged by Gemini
+            </div>
+          </div>
+
+          {/* Per-source cards */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
+            {Object.keys(FEED_SOURCE_META).map(src => (
+              <FeedSourceCard
+                key={src}
+                sourceId={src}
+                info={feedData?.by_source?.[src]}
+                isDark={isDark}
+              />
+            ))}
+          </div>
+
+          {/* Top localities in last 24h */}
+          {feedData?.by_locality_24h && Object.keys(feedData.by_locality_24h).length > 0 && (
+            <div style={{
+              background: cardBg, border: `1px solid ${cardBord}`,
+              borderRadius: 12, overflow: "hidden",
+            }}>
+              <div style={{
+                padding: "14px 20px",
+                borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}`,
+                fontWeight: 600, fontSize: 14,
+              }}>
+                Feed coverage — last 24h by locality
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
+                {Object.entries(feedData.by_locality_24h).map(([loc, count]) => (
+                  <div key={loc} style={{
+                    padding: "10px 20px",
+                    borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"}`,
+                    display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13,
+                  }}>
+                    <span style={{ opacity: 0.8 }}>{loc}</span>
+                    <span style={{ fontWeight: 600, color: "#7c6af5" }}>{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

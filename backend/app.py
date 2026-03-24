@@ -1394,6 +1394,64 @@ def ingestion_status():
     })
 
 
+@app.route("/api/locality-feed/status")
+def locality_feed_status():
+    """Stats for the locality_feed table (news + Reddit discussions)."""
+    try:
+        from ingestion.db import get_connection
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT
+                source,
+                COUNT(*)                                                        AS total,
+                COUNT(*) FILTER (WHERE scraped_at >= NOW() - INTERVAL '24 hours') AS last_24h,
+                COUNT(*) FILTER (WHERE topic IS NULL OR sentiment IS NULL)      AS untagged,
+                EXTRACT(EPOCH FROM MAX(scraped_at))::FLOAT                      AS newest_scraped,
+                EXTRACT(EPOCH FROM MIN(scraped_at))::FLOAT                      AS oldest_scraped
+            FROM locality_feed
+            GROUP BY source
+        """)
+        rows = cur.fetchall()
+
+        cur.execute("SELECT COUNT(*) FROM locality_feed")
+        total = cur.fetchone()[0]
+
+        cur.execute("""
+            SELECT locality, COUNT(*) AS cnt
+            FROM locality_feed
+            WHERE scraped_at >= NOW() - INTERVAL '24 hours'
+            GROUP BY locality
+            ORDER BY cnt DESC
+            LIMIT 20
+        """)
+        by_locality = {r[0]: r[1] for r in cur.fetchall()}
+
+        conn.close()
+
+        import time
+        now = time.time()
+        by_source = {}
+        for row in rows:
+            src, total_cnt, last_24h, untagged, newest, oldest = row
+            by_source[src] = {
+                "total": total_cnt,
+                "last_24h": last_24h,
+                "untagged": untagged,
+                "newest_age_minutes": round((now - newest) / 60, 1) if newest else None,
+                "oldest_age_minutes": round((now - oldest) / 60, 1) if oldest else None,
+            }
+
+        return jsonify({
+            "total_posts": total,
+            "by_source": by_source,
+            "by_locality_24h": by_locality,
+        })
+    except Exception as e:
+        logger.error("locality-feed/status error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/localities")
 def localities_endpoint():
     """Return all locality data for the frontend (coords, radius, aliases)."""
