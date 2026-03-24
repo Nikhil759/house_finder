@@ -2380,8 +2380,8 @@ export default function App() {
                 <option value="3BHK">3 BHK</option>
                 <option value="PG">PG / Hostel</option>
                 <option value="flatmate">Flatmate</option>
-                <option value="studio">Studio</option>
-                <option value="villa">Villa / Independent</option>
+
+
               </select>
             </div>
             <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
