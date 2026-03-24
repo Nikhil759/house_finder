@@ -30,6 +30,7 @@ SOURCES = {
     "telegram":  [sys.executable, "-m", "ingestion.ingest_telegram"],
     "reddit":    [sys.executable, "-m", "ingestion.ingest_reddit"],
     "news":      [sys.executable, "-m", "ingestion.scrape_news"],
+    "tag":       [sys.executable, "-m", "ingestion.tag_locality_feed"],
 }
 
 

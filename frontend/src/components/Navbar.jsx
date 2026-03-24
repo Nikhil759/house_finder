@@ -107,6 +107,7 @@ export default function Navbar({ subtitle, showAppCta = true, transparent = fals
   const location = useLocation();
   const { user } = useAuth();
   const isSearchListingsPage = location.pathname === "/app";
+  const isLocalityGuidePage = location.pathname === "/locality-guide";
   const shouldShowSearchCta = showAppCta && !isSearchListingsPage;
 
   return (
@@ -188,6 +189,30 @@ export default function Navbar({ subtitle, showAppCta = true, transparent = fals
         .shared-nav-cta:hover {
           background: rgba(245,166,35,0.1);
           border-color: rgba(245,166,35,0.6);
+        }
+        .shared-nav-guide {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 12px;
+          font-weight: 500;
+          color: var(--text-secondary);
+          text-decoration: none;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 6px 12px;
+          transition: background 0.15s, border-color 0.15s, color 0.15s;
+          letter-spacing: 0.2px;
+          white-space: nowrap;
+        }
+        .shared-nav-guide:hover,
+        .shared-nav-guide.active {
+          background: rgba(124,106,245,0.08);
+          border-color: rgba(124,106,245,0.4);
+          color: #7c6af5;
+        }
+        @media (max-width: 600px) {
+          .shared-nav-guide { display: none; }
         }
         .shared-nav-health {
           display: flex;
@@ -367,6 +392,17 @@ export default function Navbar({ subtitle, showAppCta = true, transparent = fals
 
         <div className="shared-nav-right">
           {subtitle && <span className="shared-nav-sub">{subtitle}</span>}
+          {!isLocalityGuidePage && (
+            <Link
+              to="/locality-guide"
+              className={`shared-nav-guide${isLocalityGuidePage ? ' active' : ''}`}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 3v18h18"/><path d="M7 16l4-6 4 4 4-8"/>
+              </svg>
+              Locality Guide
+            </Link>
+          )}
           {shouldShowSearchCta && (
             <Link to="/app" className="shared-nav-cta" style={{ alignItems: "center", gap: 6 }}>
               Search listings

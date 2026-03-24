@@ -26,3 +26,10 @@ jobs:
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
           GITHUB_RUN_ID: ${{ github.run_id }}
         run: python -m ingestion.scrape_news
+
+      - name: Tag locality feed
+        working-directory: backend
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python -m ingestion.tag_locality_feed

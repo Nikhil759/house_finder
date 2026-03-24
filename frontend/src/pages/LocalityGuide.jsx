@@ -1,0 +1,776 @@
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useTheme } from '../ThemeContext'
+import Navbar from '../components/Navbar'
+import { MobileNav } from '../components/MobileNav'
+import { BackgroundPattern } from '../components/BackgroundPattern'
+import { supabase } from '../lib/supabase'
+import '../global.css'
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatRent(amount) {
+  return `₹${Number(amount).toLocaleString('en-IN')}/mo`
+}
+
+function formatDeposit(amount) {
+  return `₹${Number(amount).toLocaleString('en-IN')}`
+}
+
+function timeAgoFromDate(dateStr) {
+  if (!dateStr) return null
+  const diffMs = Date.now() - new Date(dateStr).getTime()
+  const hours = Math.floor(diffMs / (1000 * 60 * 60))
+  if (hours < 1) return 'less than an hour ago'
+  if (hours === 1) return '1 hour ago'
+  if (hours < 24) return `${hours} hours ago`
+  const days = Math.floor(hours / 24)
+  return `${days} day${days > 1 ? 's' : ''} ago`
+}
+
+// Split a sorted-desc locality list into three tier groups by count.
+// Top 30% → Premium, middle 40% → Mid-range, bottom 30% → Affordable.
+function splitIntoTierGroups(localities) {
+  const total = localities.length
+  if (total === 0) return { Premium: [], 'Mid-range': [], Affordable: [] }
+
+  const premiumCount    = Math.round(total * 0.3)
+  const affordableCount = Math.round(total * 0.3)
+  const midCount        = total - premiumCount - affordableCount
+
+  return {
+    Premium:    localities.slice(0, premiumCount),
+    'Mid-range':localities.slice(premiumCount, premiumCount + midCount),
+    Affordable: localities.slice(premiumCount + midCount),
+  }
+}
+
+// How many rows to show per tier in the collapsed state (total = 5)
+const COLLAPSED_COUNTS = { Premium: 2, 'Mid-range': 2, Affordable: 1 }
+
+const BHK_OPTIONS = ['1 BHK', '2 BHK', '3 BHK']
+
+const TIER_CONFIG = {
+  Premium:    { bar: 'var(--lg-accent)' },
+  'Mid-range':{ bar: 'var(--lg-mid)'    },
+  Affordable: { bar: 'var(--lg-aff)'    },
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function TierGroupHeader({ tier }) {
+  return (
+    <div className={`lg-tier-header lg-tier-header--${tier.toLowerCase().replace('-', '')}`}>
+      {tier}
+    </div>
+  )
+}
+
+function LocalityRow({ row, tier, barWidth, showBar }) {
+  const tc = TIER_CONFIG[tier]
+  return (
+    <div
+      className="lg-row"
+      onMouseEnter={e => { e.currentTarget.style.background = 'var(--lg-surface2)' }}
+      onMouseLeave={e => { e.currentTarget.style.background = '' }}
+    >
+      <div className="lg-locality-name">{row.locality}</div>
+      <div className="lg-bar-track">
+        <div
+          className="lg-bar-fill"
+          style={{ width: showBar ? `${barWidth}%` : '0%', background: tc.bar }}
+        />
+      </div>
+      <div className="lg-rent-cell">
+        <div className="lg-rent-value">{formatRent(row.median_rent)}</div>
+        <div className="lg-listing-count">based on {row.listing_count} listings</div>
+      </div>
+      <button
+        className="lg-explore-btn"
+        onClick={() => console.log('Explore locality:', row.locality)}
+      >
+        Explore
+      </button>
+    </div>
+  )
+}
+
+function SkeletonRow() {
+  return (
+    <div className="lg-row lg-skeleton-row">
+      <div className="lg-skeleton" style={{ width: 100, height: 14, borderRadius: 4 }} />
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div className="lg-skeleton" style={{ width: '65%', height: 6, borderRadius: 3 }} />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+        <div className="lg-skeleton" style={{ width: 72, height: 14, borderRadius: 4 }} />
+        <div className="lg-skeleton" style={{ width: 88, height: 10, borderRadius: 4 }} />
+      </div>
+      <div className="lg-skeleton" style={{ width: 56, height: 26, borderRadius: 100 }} />
+    </div>
+  )
+}
+
+function SkeletonDepositCard() {
+  return (
+    <div className="lg-deposit-card">
+      <div className="lg-skeleton" style={{ width: 40, height: 10, borderRadius: 4, margin: '0 auto 10px' }} />
+      <div className="lg-skeleton" style={{ width: 72, height: 34, borderRadius: 4, margin: '0 auto 8px' }} />
+      <div className="lg-skeleton" style={{ width: 90, height: 12, borderRadius: 4, margin: '0 auto 4px' }} />
+      <div className="lg-skeleton" style={{ width: 70, height: 10, borderRadius: 4, margin: '0 auto' }} />
+    </div>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
+export default function LocalityGuide() {
+  const { theme } = useTheme()
+  const [selectedBhk, setSelectedBhk] = useState('2 BHK')
+  const [localityRows, setLocalityRows] = useState([])
+  const [depositRows, setDepositRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showAll, setShowAll] = useState(false)
+  const [showBars, setShowBars] = useState(false)
+  const [updatedAt, setUpdatedAt] = useState(null)
+
+  // Fetch both cache tables once on mount
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      const [{ data: lData }, { data: dData }] = await Promise.all([
+        supabase
+          .from('locality_stats_cache')
+          .select('*')
+          .order('median_rent', { ascending: false }),
+        supabase
+          .from('deposit_stats_cache')
+          .select('*')
+          .order('bhk'),
+      ])
+      if (cancelled) return
+      setLocalityRows(lData || [])
+      setDepositRows(dData || [])
+      if (lData && lData.length > 0) {
+        // Use the most recently updated row as the cache timestamp
+        const latest = lData.reduce((a, b) =>
+          new Date(a.updated_at) > new Date(b.updated_at) ? a : b
+        )
+        setUpdatedAt(latest.updated_at)
+      }
+      setLoading(false)
+    }
+    load()
+    return () => { cancelled = true }
+  }, [])
+
+  // Animate bars in after data loads
+  useEffect(() => {
+    if (!loading) {
+      setShowBars(false)
+      const raf = requestAnimationFrame(() => {
+        requestAnimationFrame(() => setShowBars(true))
+      })
+      return () => cancelAnimationFrame(raf)
+    }
+  }, [loading])
+
+  // Re-animate bars on BHK switch
+  const handleBhkChange = useCallback((bhk) => {
+    setSelectedBhk(bhk)
+    setShowAll(false)
+    setShowBars(false)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setShowBars(true))
+    })
+  }, [])
+
+  const filteredLocalities = useMemo(
+    () => localityRows.filter(r => r.bhk === selectedBhk),
+    [localityRows, selectedBhk]
+  )
+
+  const maxRent = useMemo(
+    () => filteredLocalities.length ? Math.max(...filteredLocalities.map(r => r.median_rent)) : 1,
+    [filteredLocalities]
+  )
+
+  const tierGroups = useMemo(
+    () => splitIntoTierGroups(filteredLocalities),
+    [filteredLocalities]
+  )
+
+  const TIER_ORDER = ['Premium', 'Mid-range', 'Affordable']
+
+  return (
+    <div className="app-page">
+      <style>{CSS}</style>
+      <BackgroundPattern theme={theme} />
+
+      <div style={{ position: 'relative', zIndex: 1 }}>
+      <Navbar subtitle="Locality Guide" showAppCta />
+
+      <main className="lg-main">
+        <div className="lg-container">
+
+          {/* Page header */}
+          <div className="lg-page-header">
+            <h1 className="lg-page-title">Locality Guide</h1>
+            <p className="lg-page-subtitle">
+              Rental data from active listings across Bengaluru
+            </p>
+          </div>
+
+          {/* ── Section 1: Average Rent ── */}
+          <section className="lg-section">
+            <div className="lg-section-header">
+              <div>
+                <div className="lg-section-label">Average rent</div>
+                {updatedAt && (
+                  <div className="lg-updated">Updated {timeAgoFromDate(updatedAt)}</div>
+                )}
+              </div>
+              <div className="lg-bhk-toggle" role="group" aria-label="BHK filter">
+                {BHK_OPTIONS.map(bhk => (
+                  <button
+                    key={bhk}
+                    className={`lg-bhk-btn${selectedBhk === bhk ? ' active' : ''}`}
+                    onClick={() => handleBhkChange(bhk)}
+                    aria-pressed={selectedBhk === bhk}
+                  >
+                    {bhk}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="lg-card">
+              {loading ? (
+                <>
+                  <div className="lg-tier-header lg-tier-header--premium lg-skeleton-header" />
+                  <SkeletonRow />
+                  <SkeletonRow />
+                  <div className="lg-tier-header lg-tier-header--midrange lg-skeleton-header" />
+                  <SkeletonRow />
+                  <SkeletonRow />
+                  <div className="lg-tier-header lg-tier-header--affordable lg-skeleton-header" />
+                  <SkeletonRow />
+                </>
+              ) : filteredLocalities.length === 0 ? (
+                <div className="lg-empty">
+                  No data available for {selectedBhk} yet.
+                </div>
+              ) : (
+                <>
+                  {TIER_ORDER.map(tier => {
+                    const allRows = tierGroups[tier]
+                    const rows = showAll
+                      ? allRows
+                      : allRows.slice(0, COLLAPSED_COUNTS[tier])
+                    if (rows.length === 0) return null
+                    return (
+                      <div key={tier}>
+                        <TierGroupHeader tier={tier} />
+                        {rows.map(row => (
+                          <LocalityRow
+                            key={row.locality}
+                            row={row}
+                            tier={tier}
+                            barWidth={(row.median_rent / maxRent) * 100}
+                            showBar={showBars}
+                          />
+                        ))}
+                      </div>
+                    )
+                  })}
+                  {filteredLocalities.length > 5 && (
+                    <button
+                      className="lg-view-all"
+                      onClick={() => setShowAll(v => !v)}
+                    >
+                      {showAll
+                        ? 'Show less ↑'
+                        : `View all ${filteredLocalities.length} localities ↓`}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </section>
+
+          {/* ── Section 2: Average Deposit ── */}
+          <section className="lg-section">
+            <div className="lg-section-label">Average deposit</div>
+            <div className="lg-deposit-subtitle">
+              What you'll need upfront before moving in
+            </div>
+            <div className="lg-deposit-grid">
+              {loading ? (
+                BHK_OPTIONS.map(bhk => <SkeletonDepositCard key={bhk} />)
+              ) : depositRows.length === 0 ? (
+                <div className="lg-empty" style={{ gridColumn: '1 / -1' }}>
+                  No deposit data available.
+                </div>
+              ) : (
+                BHK_OPTIONS.map(bhk => {
+                  const d = depositRows.find(r => r.bhk === bhk)
+                  if (!d) {
+                    return (
+                      <div key={bhk} className="lg-deposit-card">
+                        <div className="lg-deposit-bhk">{bhk}</div>
+                        <div className="lg-deposit-empty">No data</div>
+                      </div>
+                    )
+                  }
+                  return (
+                    <div key={bhk} className="lg-deposit-card">
+                      <div className="lg-deposit-bhk">{bhk}</div>
+                      <div className="lg-deposit-multiplier">
+                        <span className="lg-deposit-num">
+                          {Number(d.avg_multiplier).toFixed(1)}×
+                        </span>
+                        <span className="lg-deposit-rent-label">rent</span>
+                      </div>
+                      <div className="lg-deposit-amount">
+                        ≈ {formatDeposit(d.median_deposit)}
+                      </div>
+                      <div className="lg-deposit-label">median deposit</div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </section>
+
+        </div>
+      </main>
+
+      <MobileNav />
+      </div>
+    </div>
+  )
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+
+const CSS = `
+/* Design-system variables scoped to lg- components */
+:root,
+[data-theme="dark"] {
+  --lg-surface:    #141418;
+  --lg-surface2:   #1A1A22;
+  --lg-surface3:   #1E1E28;
+  --lg-border:     #22222C;
+  --lg-border2:    #2C2C3A;
+  --lg-text:       #E8E6E2;
+  --lg-muted:      #686670;
+  --lg-muted2:     #46444E;
+  --lg-accent:     #7C6AF5;   /* violet  — Premium   */
+  --lg-accent-bg:  #16142A;
+  --lg-mid:        #60A5FA;   /* blue    — Mid-range */
+  --lg-aff:        #34D399;   /* emerald — Affordable */
+}
+
+[data-theme="light"] {
+  --lg-surface:    #ffffff;
+  --lg-surface2:   #f6f8fa;
+  --lg-surface3:   #edf0f3;
+  --lg-border:     #e5e7eb;
+  --lg-border2:    #d1d5db;
+  --lg-text:       #111827;
+  --lg-muted:      #6b7280;
+  --lg-muted2:     #9ca3af;
+  --lg-accent:     #5B4FD4;
+  --lg-accent-bg:  #eeecfb;
+  --lg-mid:        #2563EB;
+  --lg-aff:        #059669;
+}
+
+/* ── Page layout ── */
+.lg-main {
+  padding: 40px 20px 60px;
+  min-height: calc(100vh - 57px);
+}
+
+.lg-container {
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+.lg-page-header {
+  margin-bottom: 36px;
+}
+
+.lg-page-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--lg-text);
+  margin: 0 0 6px;
+  line-height: 1.2;
+}
+
+.lg-page-subtitle {
+  font-size: 13px;
+  color: var(--lg-muted);
+  margin: 0;
+}
+
+/* ── Sections ── */
+.lg-section {
+  margin-bottom: 44px;
+}
+
+.lg-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.lg-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lg-muted2);
+  margin-bottom: 3px;
+}
+
+.lg-updated {
+  font-size: 11px;
+  color: var(--lg-muted);
+}
+
+/* ── BHK Toggle ── */
+.lg-bhk-toggle {
+  display: inline-flex;
+  background: var(--lg-surface2);
+  border-radius: 100px;
+  padding: 3px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.lg-bhk-btn {
+  border: none;
+  border-radius: 100px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  color: var(--lg-muted);
+  background: transparent;
+  white-space: nowrap;
+}
+
+.lg-bhk-btn.active {
+  background: var(--lg-surface);
+  color: var(--lg-text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* ── Bar card ── */
+.lg-card {
+  background: var(--lg-surface);
+  border: 1px solid var(--lg-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* ── Tier group headers ── */
+.lg-tier-header {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 10px 16px 6px;
+  border-bottom: 1px solid transparent;
+}
+
+.lg-tier-header--premium {
+  color: var(--lg-accent);
+  border-bottom-color: rgba(124, 106, 245, 0.2);
+}
+[data-theme="light"] .lg-tier-header--premium {
+  border-bottom-color: rgba(91, 79, 212, 0.2);
+}
+
+.lg-tier-header--midrange {
+  color: var(--lg-mid);
+  border-bottom-color: rgba(96, 165, 250, 0.2);
+}
+[data-theme="light"] .lg-tier-header--midrange {
+  border-bottom-color: rgba(37, 99, 235, 0.2);
+}
+
+.lg-tier-header--affordable {
+  color: var(--lg-aff);
+  border-bottom-color: rgba(52, 211, 153, 0.2);
+}
+[data-theme="light"] .lg-tier-header--affordable {
+  border-bottom-color: rgba(5, 150, 105, 0.2);
+}
+
+.lg-skeleton-header {
+  height: 32px;
+  background: var(--lg-surface);
+  animation: none;
+  border-bottom-color: var(--lg-border) !important;
+  color: transparent;
+  user-select: none;
+}
+
+/* ── Locality row (4 columns: name | bar | rent | explore) ── */
+.lg-row {
+  display: grid;
+  grid-template-columns: 130px 1fr 110px auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--lg-border);
+  transition: background 0.15s;
+  cursor: default;
+}
+
+.lg-row:last-child {
+  border-bottom: none;
+}
+
+.lg-locality-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--lg-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lg-bar-track {
+  height: 6px;
+  background: var(--lg-surface2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.lg-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+  will-change: width;
+}
+
+.lg-rent-cell {
+  text-align: right;
+}
+
+.lg-rent-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lg-text);
+  white-space: nowrap;
+}
+
+.lg-listing-count {
+  font-size: 10px;
+  color: var(--lg-muted2);
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+.lg-explore-btn {
+  padding: 4px 10px;
+  border-radius: 100px;
+  border: 1px solid var(--lg-border2);
+  background: var(--lg-surface2);
+  color: var(--lg-muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.lg-explore-btn:hover {
+  background: var(--lg-accent-bg);
+  border-color: var(--lg-accent);
+  color: var(--lg-accent);
+}
+
+/* ── View all button ── */
+.lg-view-all {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-top: 1px solid var(--lg-border);
+  border-radius: 0 0 12px 12px;
+  background: var(--lg-surface);
+  color: var(--lg-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  text-align: center;
+}
+
+.lg-view-all:hover {
+  background: var(--lg-surface2);
+  color: var(--lg-text);
+}
+
+/* ── Deposit section ── */
+.lg-deposit-subtitle {
+  font-size: 12px;
+  color: var(--lg-muted);
+  margin-top: 4px;
+  margin-bottom: 12px;
+}
+
+.lg-deposit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.lg-deposit-card {
+  background: var(--lg-surface2);
+  border: 1px solid var(--lg-border);
+  border-radius: 8px;
+  padding: 18px 16px 16px;
+  text-align: center;
+}
+
+.lg-deposit-bhk {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--lg-muted2);
+  margin-bottom: 10px;
+}
+
+.lg-deposit-multiplier {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.lg-deposit-num {
+  font-size: 28px;
+  font-weight: 300;
+  color: var(--lg-text);
+  line-height: 1;
+}
+
+.lg-deposit-rent-label {
+  font-size: 13px;
+  color: var(--lg-muted);
+}
+
+.lg-deposit-amount {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--lg-text);
+  margin-bottom: 2px;
+}
+
+.lg-deposit-label {
+  font-size: 10px;
+  color: var(--lg-muted2);
+}
+
+.lg-deposit-empty {
+  font-size: 12px;
+  color: var(--lg-muted);
+  padding: 12px 0;
+}
+
+/* ── Skeleton loader ── */
+.lg-skeleton {
+  background: var(--lg-surface2);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+[data-theme="light"] .lg-skeleton {
+  background: var(--lg-surface3);
+}
+
+.lg-skeleton-row {
+  pointer-events: none;
+}
+
+/* ── Empty state ── */
+.lg-empty {
+  padding: 32px;
+  text-align: center;
+  color: var(--lg-muted);
+  font-size: 13px;
+}
+
+/* ── Mobile responsive ── */
+@media (max-width: 600px) {
+  .lg-main {
+    padding: 24px 14px 80px;
+  }
+
+  .lg-page-title {
+    font-size: 22px;
+  }
+
+  .lg-tier-header {
+    padding: 9px 14px 5px;
+  }
+
+  .lg-row {
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto auto;
+    row-gap: 8px;
+    column-gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .lg-locality-name {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .lg-bar-track {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .lg-rent-cell {
+    grid-column: 1;
+    grid-row: 3;
+    text-align: left;
+  }
+
+  .lg-explore-btn {
+    grid-column: 2;
+    grid-row: 3;
+    align-self: center;
+  }
+
+  .lg-deposit-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .lg-section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 420px) {
+  .lg-bhk-btn {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+}
+`
