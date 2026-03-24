@@ -10,6 +10,7 @@ import NewForYou from "./pages/NewForYou";
 import Profile from "./pages/Profile";
 import Stats from "./pages/Stats";
 import LocalityGuide from "./pages/LocalityGuide";
+import LocalityDetail from "./pages/LocalityDetail";
 import InstallBanner from "./components/InstallBanner";
 import PostHogRouteTracker from "./components/PostHogRouteTracker";
 import { initPostHog } from "./lib/posthog";
@@ -36,6 +37,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="/health" element={<HealthPage />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/locality-guide" element={<LocalityGuide />} />
+          <Route path="/neighbourhood-pulse/:locality" element={<LocalityDetail />} />
         </Routes>
         <InstallBanner />
       </BrowserRouter>

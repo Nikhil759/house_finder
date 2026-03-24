@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTheme } from '../ThemeContext'
 import Navbar from '../components/Navbar'
 import { MobileNav } from '../components/MobileNav'
@@ -92,6 +93,8 @@ function TierGroupHeader({ tier }) {
 
 function LocalityRow({ row, tier, barWidth, showBar }) {
   const tc = TIER_CONFIG[tier]
+  const navigate = useNavigate()
+  const slug = row.locality.toLowerCase().replace(/\s+/g, '-')
   return (
     <div
       className="lg-row"
@@ -111,7 +114,7 @@ function LocalityRow({ row, tier, barWidth, showBar }) {
       </div>
       <button
         className="lg-explore-btn"
-        onClick={() => console.log('Explore locality:', row.locality)}
+        onClick={() => navigate(`/neighbourhood-pulse/${slug}`)}
       >
         Explore
       </button>
@@ -186,6 +189,22 @@ function TopicsBar({ topics, topicColorMap }) {
           </div>
         )
       })}
+      <div style={{
+        marginTop: 14,
+        paddingTop: 10,
+        borderTop: '1px solid var(--lg-border)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 5,
+        opacity: 0.5,
+      }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        <span style={{ fontSize: 9, letterSpacing: '0.04em', color: 'var(--lg-muted)', whiteSpace: 'nowrap' }}>
+          Powered by Gemini
+        </span>
+      </div>
     </div>
   )
 }
@@ -238,6 +257,103 @@ function PostCard({ post, topicColorMap }) {
         </span>
       </div>
     </a>
+  )
+}
+
+function NewsCard({ post, topicColorMap }) {
+  const topicColor = topicColorMap[post.topic] || '#686670'
+  const topicLabel = post.topic
+    ? post.topic.charAt(0).toUpperCase() + post.topic.slice(1)
+    : null
+  const src = SOURCE_STYLES[post.source] || { label: post.source, bg: '#1A1A22', color: '#686670' }
+
+  return (
+    <a
+      href={post.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="lg-news-card"
+    >
+      <div className="lg-post-top">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+          <span className="lg-source-pill" style={{ background: src.bg, color: src.color }}>
+            {src.label}
+          </span>
+          {post.locality && (
+            <span className="lg-post-locality">{post.locality}</span>
+          )}
+        </div>
+        <span className="lg-post-time" style={{ flexShrink: 0 }}>{timeAgoFromDate(post.posted_at)}</span>
+      </div>
+
+      <div className="lg-news-card-title">{post.title}</div>
+
+      {post.body && (
+        <div className="lg-news-card-body">{decodeHTML(post.body)}</div>
+      )}
+
+      <div className="lg-post-bottom">
+        {topicLabel && (
+          <span className="lg-topic-tag" style={{ background: topicColor + '28', color: topicColor }}>
+            {topicLabel}
+          </span>
+        )}
+        <span className="lg-post-time">{post.author}</span>
+      </div>
+    </a>
+  )
+}
+
+function NewsCarousel({ newsPosts, topicColorMap }) {
+  const scrollRef = useRef(null)
+  const [canScrollLeft,  setCanScrollLeft]  = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(newsPosts.length > 2)
+
+  function updateArrows() {
+    const el = scrollRef.current
+    if (!el) return
+    setCanScrollLeft(el.scrollLeft > 4)
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4)
+  }
+
+  // Scroll by one visible page (exactly what's visible in the track)
+  function slide(dir) {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollBy({ left: dir * el.clientWidth, behavior: 'smooth' })
+  }
+
+  if (!newsPosts.length) return null
+
+  return (
+    <div className="lg-news-carousel-wrap">
+      {/* Arrow + track + arrow in a single row */}
+      <div className="lg-carousel-outer">
+        <button
+          className="lg-carousel-arrow"
+          onClick={() => slide(-1)}
+          disabled={!canScrollLeft}
+          aria-label="Previous"
+        >‹</button>
+
+        <div
+          className="lg-carousel-track"
+          ref={scrollRef}
+          onScroll={updateArrows}
+        >
+          {newsPosts.map(post => (
+            <NewsCard key={post.id} post={post} topicColorMap={topicColorMap} />
+          ))}
+        </div>
+
+        <button
+          className="lg-carousel-arrow"
+          onClick={() => slide(1)}
+          disabled={!canScrollRight}
+          aria-label="Next"
+        >›</button>
+      </div>
+    </div>
   )
 }
 
@@ -383,30 +499,21 @@ export default function LocalityGuide() {
     return map
   }, [topicCounts])
 
-  // Interleave Reddit and News posts (Reddit, News, Reddit, News…)
-  const interleavedPosts = useMemo(() => {
-    const redditPosts = feedPosts.filter(p => p.source === 'reddit')
-    const newsPosts   = feedPosts.filter(p => p.source === 'news')
+  // Interleave Reddit and News for the carousel (Reddit, News, Reddit, News…)
+  const carouselPosts = useMemo(() => {
+    const reddit = feedPosts.filter(p => p.source === 'reddit')
+    const news   = feedPosts.filter(p => p.source === 'news')
+    if (feedFilter === 'Reddit') return reddit
+    if (feedFilter === 'News')   return news
+    // All: interleave
     const result = []
-    const len = Math.max(redditPosts.length, newsPosts.length)
+    const len = Math.max(reddit.length, news.length)
     for (let i = 0; i < len; i++) {
-      if (i < redditPosts.length) result.push(redditPosts[i])
-      if (i < newsPosts.length)   result.push(newsPosts[i])
+      if (i < reddit.length) result.push(reddit[i])
+      if (i < news.length)   result.push(news[i])
     }
     return result
-  }, [feedPosts])
-
-  const visibleFeedPosts = useMemo(() => {
-    const filtered = feedFilter === 'All'
-      ? interleavedPosts
-      : feedPosts.filter(p => p.source === feedFilter.toLowerCase())
-    return feedShowAll ? filtered : filtered.slice(0, 3)
-  }, [interleavedPosts, feedPosts, feedFilter, feedShowAll])
-
-  const filteredTotalCount = useMemo(() => {
-    if (feedFilter === 'All') return interleavedPosts.length
-    return feedPosts.filter(p => p.source === feedFilter.toLowerCase()).length
-  }, [interleavedPosts, feedPosts, feedFilter])
+  }, [feedPosts, feedFilter])
 
   return (
     <div className="app-page">
@@ -586,12 +693,21 @@ export default function LocalityGuide() {
                     ))}
                   </div>
                 </div>
-                {/* Posts skeleton */}
+                {/* Carousel skeleton */}
                 <div className="lg-feed-col">
-                  <div className="lg-feed-posts">
-                    <SkeletonPostCard />
-                    <SkeletonPostCard />
-                    <SkeletonPostCard />
+                  <div className="lg-carousel-track" style={{ overflow: 'hidden' }}>
+                    {[1, 2, 3].map(i => (
+                      <div key={i} className="lg-news-card" style={{ pointerEvents: 'none' }}>
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                          <div className="lg-skeleton" style={{ width: 52, height: 20, borderRadius: 100 }} />
+                          <div className="lg-skeleton" style={{ width: 60, height: 14, borderRadius: 4, alignSelf: 'center' }} />
+                        </div>
+                        <div className="lg-skeleton" style={{ width: '90%', height: 14, borderRadius: 4, marginBottom: 6 }} />
+                        <div className="lg-skeleton" style={{ width: '70%', height: 14, borderRadius: 4, marginBottom: 10 }} />
+                        <div className="lg-skeleton" style={{ width: '100%', height: 11, borderRadius: 4, marginBottom: 4 }} />
+                        <div className="lg-skeleton" style={{ width: '80%', height: 11, borderRadius: 4 }} />
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -606,31 +722,14 @@ export default function LocalityGuide() {
                   <TopicsBar topics={topicCounts} topicColorMap={topicColorMap} />
                 </div>
 
-                {/* Right: posts feed — starts flush with topics bar, no inner header */}
+                {/* Right: unified carousel (news + reddit) */}
                 <div className="lg-feed-col">
-                  {/* Post cards */}
-                  {visibleFeedPosts.length === 0 ? (
+                  {carouselPosts.length === 0 ? (
                     <div className="lg-empty" style={{ border: '1px solid var(--lg-border)', borderRadius: 12 }}>
-                      No {feedFilter} posts yet.
+                      No posts yet. Check back soon.
                     </div>
                   ) : (
-                    <>
-                      <div className="lg-feed-posts">
-                        {visibleFeedPosts.map(post => (
-                          <PostCard key={post.id} post={post} topicColorMap={topicColorMap} />
-                        ))}
-                      </div>
-                      {filteredTotalCount > 3 && (
-                        <button
-                          className="lg-show-more-btn"
-                          onClick={() => setFeedShowAll(v => !v)}
-                        >
-                          {feedShowAll
-                            ? 'Show less ↑'
-                            : `Show ${filteredTotalCount - 3} more ↓`}
-                        </button>
-                      )}
-                    </>
+                    <NewsCarousel newsPosts={carouselPosts} topicColorMap={topicColorMap} />
                   )}
                 </div>
               </div>
@@ -1073,7 +1172,7 @@ const CSS = `
 .lg-pulse-layout {
   display: flex;
   gap: 20px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .lg-topics-col {
@@ -1084,6 +1183,8 @@ const CSS = `
 .lg-feed-col {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── Topics bar (left column) ── */
@@ -1315,6 +1416,131 @@ const CSS = `
 
   .lg-topic-row {
     grid-template-columns: 58px 1fr 22px;
+  }
+}
+
+/* ── News carousel — stretches to match sidebar height ── */
+.lg-news-carousel-wrap {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Arrow + track in a single flex row */
+.lg-carousel-outer {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+  flex: 1;
+}
+
+.lg-carousel-track {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 4px 0 8px;
+}
+
+.lg-carousel-track::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Arrow buttons — inline, not absolute ── */
+.lg-carousel-arrow {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--lg-border2);
+  background: var(--lg-surface2);
+  color: var(--lg-text);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+  padding: 0;
+  align-self: center;
+  margin-top: 4px;
+}
+
+.lg-carousel-arrow:hover:not(:disabled) {
+  background: var(--lg-surface3);
+  border-color: var(--lg-accent);
+}
+
+.lg-carousel-arrow:disabled {
+  opacity: 0.22;
+  cursor: default;
+}
+
+/* ── News card — fills 50% of track (2 visible), height matches sidebar ── */
+.lg-news-card {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  /* Show 2 cards at a time: half track width minus half the gap */
+  min-width: calc(50% - 5px);
+  max-width: calc(50% - 5px);
+  scroll-snap-align: start;
+  background: var(--lg-surface);
+  border: 1px solid var(--lg-border);
+  border-radius: 10px;
+  padding: 13px 14px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.lg-news-card:hover {
+  border-color: var(--lg-border2);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.lg-news-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lg-text);
+  line-height: 1.4;
+  margin: 7px 0 5px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.lg-news-card-body {
+  font-size: 11px;
+  color: var(--lg-muted);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex: 1;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 600px) {
+  .lg-news-card {
+    /* 1 card visible on mobile */
+    min-width: calc(100% - 0px);
+    max-width: calc(100% - 0px);
+    height: auto;
+    min-height: 150px;
   }
 }
 `
