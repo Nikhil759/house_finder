@@ -3,8 +3,13 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Analytics } from "@vercel/analytics/react";
 import { ThemeProvider } from "./ThemeContext";
-import LandingPage from "./LandingPage";
+import LandingPage from "./pages/Landing";
 import App from "./App";
+import Search from "./pages/Search";
+import Pulse from "./pages/Pulse";
+import PulseLocality from "./pages/PulseLocality";
+import MyHub from "./pages/MyHub";
+import ListingDetail from "./pages/ListingDetail";
 import HealthPage from "./HealthPage";
 import NewForYou from "./pages/NewForYou";
 import Profile from "./pages/Profile";
@@ -31,13 +36,14 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <PostHogRouteTracker />
         <Routes>
           <Route path="/" element={<LandingPage />} />
-          <Route path="/app" element={<App />} />
-          <Route path="/new" element={<NewForYou />} />
+          <Route path="/app" element={<Search />} />
+          <Route path="/new" element={<MyHub />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/health" element={<HealthPage />} />
           <Route path="/stats" element={<Stats />} />
-          <Route path="/locality-guide" element={<LocalityGuide />} />
-          <Route path="/neighbourhood-pulse/:locality" element={<LocalityDetail />} />
+          <Route path="/listing/:id" element={<ListingDetail />} />
+          <Route path="/locality-guide" element={<Pulse />} />
+          <Route path="/neighbourhood-pulse/:locality" element={<PulseLocality />} />
         </Routes>
         <InstallBanner />
       </BrowserRouter>

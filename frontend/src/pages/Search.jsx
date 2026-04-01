@@ -7,6 +7,10 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
+import Toast from '../components/Toast';
+import { useAuth } from '../hooks/useAuth';
+import { useSavedListings } from '../hooks/useSavedListings';
+import { useSearchLogs } from '../hooks/useSearchLogs';
 
 // ── Locality autocomplete list (mirrors App.jsx) ──────────────────────────────
 const BANGALORE_AREAS = [
@@ -927,7 +931,22 @@ export default function Search() {
   const [total, setTotal]             = useState(0);
   const [sourceCounts, setSourceCounts] = useState({});
   const [loading, setLoading]         = useState(false);
+  // savedIds kept for optimistic UI before useSavedListings hydrates
   const [savedIds, setSavedIds]       = useState(new Set());
+
+  // ── Auth + search logging ───────────────────────────────────────────────────
+  const { user, signInWithGoogle }    = useAuth();
+  const { isSaved, saveListing }      = useSavedListings(user);
+  const {
+    logSearch, runTriggerChecks, onListingSaved,
+    toast, dismissToast,
+  } = useSearchLogs(user);
+
+  // Refs so doSearch (useCallback []) always calls the latest log functions
+  const logSearchRef        = useRef(logSearch);
+  const runTriggerRef       = useRef(runTriggerChecks);
+  useEffect(() => { logSearchRef.current = logSearch; },        [logSearch]);
+  useEffect(() => { runTriggerRef.current = runTriggerChecks; }, [runTriggerChecks]);
 
   // ── Fetch ───────────────────────────────────────────────────────────────────
   const doSearch = useCallback(async (area) => {
@@ -951,6 +970,9 @@ export default function Search() {
         counts[label] = (counts[label] || 0) + 1;
       });
       setSourceCounts(counts);
+      // Log the search and check auto-save triggers
+      await logSearchRef.current(area, {});
+      runTriggerRef.current(area);
     } catch (err) {
       console.error('Search failed', err);
     } finally {
@@ -975,12 +997,34 @@ export default function Search() {
     }
   }, [loading]);
 
-  function toggleSave(id) {
+  function toggleSave(listing) {
+    // Optimistic local state
     setSavedIds(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      next.has(listing.id) ? next.delete(listing.id) : next.add(listing.id);
       return next;
     });
+
+    // Persist to Supabase (or localStorage if anonymous)
+    saveListing({
+      id:            listing.id,
+      title:         listing.title,
+      source:        listing.rawSource,
+      url:           listing.url,
+      price:         listing.rawRent,
+      rent:          listing.rawRent,
+      locality:      listing.location,
+      bhk:           listing.bhk,
+      area_sqft:     listing.sqft ? listing.sqft.replace(/,/g, '') : null,
+      furnishing:    listing.furnished,
+      quality_score: listing.score,
+      created:       listing.rawCreated,
+    });
+
+    // Trigger 1 — auto-save the current search when user saves a listing
+    if (!isSaved(listing.id)) {
+      onListingSaved(query);
+    }
   }
 
   // ── Derive display pills from activeFilters ─────────────────────────────────
@@ -1605,8 +1649,8 @@ export default function Search() {
               <ListingCard
                 key={listing.id}
                 listing={listing}
-                saved={savedIds.has(listing.id)}
-                onToggleSave={() => toggleSave(listing.id)}
+                saved={isSaved(listing.id) || savedIds.has(listing.id)}
+                onToggleSave={() => toggleSave(listing)}
               />
             ))}
           </div>
@@ -1616,8 +1660,8 @@ export default function Search() {
               <GridCard
                 key={listing.id}
                 listing={listing}
-                saved={savedIds.has(listing.id)}
-                onToggleSave={() => toggleSave(listing.id)}
+                saved={isSaved(listing.id) || savedIds.has(listing.id)}
+                onToggleSave={() => toggleSave(listing)}
               />
             ))}
           </div>
@@ -1636,6 +1680,13 @@ export default function Search() {
         initialFilters={activeFilters}
         initialSort={sort}
         onApply={handleApply}
+      />
+
+      {/* ── SEARCH LOG TOAST ── */}
+      <Toast
+        toast={toast}
+        onDismiss={dismissToast}
+        onSignIn={signInWithGoogle}
       />
     </div>
   );
