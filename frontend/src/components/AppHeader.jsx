@@ -67,6 +67,7 @@ export default function AppHeader({ backTo = false, transparent = false }) {
       ) : (
         <Link
           to="/"
+          className="nestiq-header-logo"
           style={{
             display: 'flex',
             alignItems: 'center',

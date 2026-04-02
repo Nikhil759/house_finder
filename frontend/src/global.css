@@ -186,6 +186,41 @@ body { transition: background 0.25s ease, color 0.25s ease; }
   100% { background-position:  300% center; }
 }
 
+/* ── Desktop sidebar (hidden on mobile) ────────────────────────────────────── */
+.nestiq-desktop-sidebar {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .nestiq-desktop-sidebar {
+    display: flex;
+  }
+
+  /* Hide bottom nav on desktop */
+  .nestiq-bottom-nav {
+    display: none !important;
+  }
+
+  /* Hide the logo inside AppHeader on desktop (sidebar has it) */
+  .nestiq-header-logo {
+    display: none;
+  }
+
+  /* Push page content right to clear sidebar */
+  .nestiq-page-body {
+    margin-left: 240px;
+  }
+}
+
+/* ── Desktop search 3-col grid ─────────────────────────────────────────────── */
+@media (min-width: 1024px) {
+  .nestiq-results-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 12px !important;
+  }
+}
+
 .hero-badge-shimmer {
   background: linear-gradient(
     90deg,

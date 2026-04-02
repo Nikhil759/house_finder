@@ -2,8 +2,10 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
+import DesktopSidebar from '../components/DesktopSidebar';
 import { useAuth } from '../hooks/useAuth';
 import { useSavedSearches } from '../hooks/useSavedSearches';
+import { useDesktop } from '../hooks/useDesktop';
 
 function formatSavedOn(iso) {
   if (!iso) return '';
@@ -63,19 +65,22 @@ export default function Profile() {
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const { savedSearches, deleteSearch } = useSavedSearches(user);
+  const isDesktop = useDesktop();
 
   function removeSearch(id) {
     deleteSearch(id);
   }
 
   if (loading) return (
-    <div style={s.page}>
+    <div style={{ ...s.page, marginLeft: isDesktop ? 240 : 0 }}>
+      <DesktopSidebar />
       <AppHeader />
     </div>
   );
 
   if (!user) return (
-    <div style={s.page}>
+    <div style={{ ...s.page, marginLeft: isDesktop ? 240 : 0 }}>
+      <DesktopSidebar />
       <AppHeader />
       <div style={{ padding: '48px 16px', textAlign: 'center' }}>
         <p style={{ ...s.monoSmall, marginBottom: 16 }}>Sign in to view your profile.</p>
@@ -100,11 +105,16 @@ export default function Profile() {
   }
 
   return (
-    <div style={s.page}>
+    <div style={{ ...s.page, marginLeft: isDesktop ? 240 : 0, paddingBottom: isDesktop ? 40 : 100 }}>
+      <DesktopSidebar />
 
       <AppHeader />
 
-      <div style={{ padding: '24px 16px 0' }}>
+      <div style={{
+        padding: '24px 16px 0',
+        maxWidth: isDesktop ? 600 : undefined,
+        margin: isDesktop ? '0 auto' : undefined,
+      }}>
 
         {/* ── USER CARD ── */}
         <section style={s.section}>

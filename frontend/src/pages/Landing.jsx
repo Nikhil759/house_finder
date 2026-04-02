@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
+import DesktopSidebar from '../components/DesktopSidebar';
+import { useDesktop } from '../hooks/useDesktop';
 
 const SAMPLE_LISTINGS = [
   { score: '9.2', title: 'Spacious 2BHK with Balcony', location: 'HSR Sect 2', price: '₹32,000', source: 'Reddit' },
@@ -35,7 +37,7 @@ const s = {
   },
   section: {
     padding: '80px 24px',
-    maxWidth: 600,
+    maxWidth: 800,
     margin: '0 auto',
   },
   eyebrow: {
@@ -139,11 +141,13 @@ function SectionDivider() {
 export default function Landing() {
   const [activeLocality, setActiveLocality] = useState('Koramangala');
   const [searchValue, setSearchValue] = useState('');
+  const isDesktop = useDesktop();
 
   const locality = LOCALITY_DATA[activeLocality];
 
   return (
-    <div style={s.page}>
+    <div style={{ ...s.page, marginLeft: isDesktop ? 240 : 0, paddingBottom: isDesktop ? 40 : 80 }}>
+      <DesktopSidebar />
 
       <AppHeader transparent />
 
@@ -282,7 +286,7 @@ export default function Landing() {
           </p>
 
           {/* Search pill */}
-          <div style={{ width: '100%', maxWidth: 340, position: 'relative', marginBottom: 12 }}>
+          <div style={{ width: '100%', maxWidth: isDesktop ? 560 : 340, position: 'relative', marginBottom: 12 }}>
             <div style={{
               display: 'flex',
               alignItems: 'center',

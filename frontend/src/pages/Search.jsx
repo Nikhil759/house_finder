@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faLaptopCode, faBuilding, faTree, faBeerMugEmpty,
@@ -7,10 +7,12 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
+import DesktopSidebar from '../components/DesktopSidebar';
 import Toast from '../components/Toast';
 import { useAuth } from '../hooks/useAuth';
 import { useSavedListings } from '../hooks/useSavedListings';
 import { useSearchLogs } from '../hooks/useSearchLogs';
+import { useDesktop } from '../hooks/useDesktop';
 
 // ── Locality autocomplete list (mirrors App.jsx) ──────────────────────────────
 const BANGALORE_AREAS = [
@@ -97,10 +99,24 @@ function scoreColor(score) {
   return '#555555';                               // muted gray
 }
 
+const KNOWN_SOURCES = new Set(['reddit', 'nobroker', 'telegram', 'housing']);
+
+// Always returns a stable compound ID: "{source}_{source_id}"
+// Handles: DB listings (already compound), live NoBroker cache (nb_xxx), live Reddit (bare id)
+function stableListingId(p) {
+  const raw = (p.id || '').toString();
+  const src = (p.source || '').toLowerCase();
+  const prefix = raw.split('_')[0];
+  if (KNOWN_SOURCES.has(prefix)) return raw;              // already compound from DB
+  if (raw.startsWith('nb_')) return `nobroker_${raw.slice(3)}`; // NoBroker live cache
+  if (src) return `${src}_${raw}`;                         // live Reddit / Telegram
+  return raw;
+}
+
 function normalizePost(p) {
   const cfg = SOURCE_CONFIG[p.source] || { label: p.source, color: '#666', icon: 'fa-solid fa-circle' };
   return {
-    id:          p.id,
+    id:          stableListingId(p),
     source:      cfg.label,
     sourceColor: cfg.color,
     sourceIcon:  cfg.icon,
@@ -118,6 +134,7 @@ function normalizePost(p) {
     location:    p.locality || null,
     url:         p.url || p.source_url || null,
     rawCreated:  p.created || p.created_utc || 0,
+    _raw:        p,
   };
 }
 
@@ -685,7 +702,7 @@ function ListingCard({ listing, saved, onToggleSave }) {
       )}
 
       {/* Actions */}
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <button
           onClick={handleSaveClick}
           style={{
@@ -700,6 +717,7 @@ function ListingCard({ listing, saved, onToggleSave }) {
             color: saved ? '#E8394D' : 'var(--color-text-muted)',
             borderRadius: 6,
             padding: '7px 14px',
+            height: 32,
             cursor: 'pointer',
             transition: 'border-color 0.2s, color 0.2s',
           }}
@@ -710,13 +728,36 @@ function ListingCard({ listing, saved, onToggleSave }) {
           />
           {saved ? 'Saved' : 'Save'}
         </button>
+        <Link
+          to={`/listing/${listing.id}`}
+          state={{ listing: listing._raw }}
+          style={{
+            marginLeft: 'auto',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.04em',
+            background: 'none',
+            color: 'var(--color-text-muted)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 6,
+            padding: '0 14px',
+            height: 32,
+            display: 'inline-flex',
+            alignItems: 'center',
+            textDecoration: 'none',
+            transition: 'border-color 0.2s, color 0.2s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-text-muted)'; e.currentTarget.style.color = 'var(--color-text-primary)'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-muted)'; }}
+        >
+          Details
+        </Link>
         {listing.url ? (
           <a
             href={listing.url}
             target="_blank"
             rel="noopener noreferrer"
             style={{
-              marginLeft: 'auto',
               fontFamily: 'var(--font-mono)',
               fontSize: 12,
               letterSpacing: '0.04em',
@@ -724,18 +765,19 @@ function ListingCard({ listing, saved, onToggleSave }) {
               color: '#1a0a00',
               border: 'none',
               borderRadius: 6,
-              padding: '8px 18px',
+              padding: '0 16px',
+              height: 32,
               cursor: 'pointer',
               fontWeight: 500,
               textDecoration: 'none',
-              display: 'inline-block',
+              display: 'inline-flex',
+              alignItems: 'center',
             }}
           >
             Open →
           </a>
         ) : (
           <button style={{
-            marginLeft: 'auto',
             fontFamily: 'var(--font-mono)',
             fontSize: 12,
             letterSpacing: '0.04em',
@@ -743,7 +785,8 @@ function ListingCard({ listing, saved, onToggleSave }) {
             color: '#1a0a00',
             border: 'none',
             borderRadius: 6,
-            padding: '8px 18px',
+            padding: '0 16px',
+            height: 32,
             cursor: 'pointer',
             fontWeight: 500,
           }}>
@@ -919,6 +962,7 @@ export default function Search() {
     sources: { ...DEFAULT_FILTERS.sources },
   }));
   const [sheetOpen, setSheetOpen]     = useState(false);
+  const isDesktop = useDesktop();
   const [activeLocality, setActiveLocality] = useState(null);
   const [quickFilters, setQuickFilters]     = useState(new Set());
   const [areaSuggestions, setAreaSuggestions] = useState([]);
@@ -1138,15 +1182,320 @@ export default function Search() {
     { key: 'map',  label: '⊙' },
   ];
 
+  const monoLabel = {
+    fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em',
+    textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 10,
+  };
+
   return (
     <div style={{
       background: 'var(--color-bg-primary)',
       color: 'var(--color-text-primary)',
       fontFamily: 'var(--font-sans)',
       minHeight: '100vh',
-      paddingBottom: 80,
+      paddingBottom: isDesktop ? 0 : 80,
+      marginLeft: isDesktop ? 240 : 0,
     }}>
+      <DesktopSidebar />
       <AppHeader />
+
+      {isDesktop ? (
+        /* ══════════════════════ DESKTOP TWO-COLUMN ══════════════════════ */
+        <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+
+          {/* ── LEFT PANEL: search + filters ── */}
+          <div style={{
+            width: 320, flexShrink: 0,
+            position: 'sticky', top: 56,
+            height: 'calc(100vh - 56px)',
+            overflowY: 'auto',
+            borderRight: '0.5px solid var(--color-border)',
+            padding: '16px 16px 32px',
+            scrollbarWidth: 'none',
+            background: 'var(--color-bg-primary)',
+          }}>
+
+            {/* Search input */}
+            <div style={{ position: 'relative', marginBottom: 14 }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                background: 'var(--color-bg-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-pill)',
+                padding: '10px 14px',
+              }}>
+                <i className="fa-solid fa-location-dot" style={{ color: 'var(--color-text-muted)', fontSize: 13 }} />
+                <input
+                  ref={areaInputRef}
+                  type="search"
+                  value={query}
+                  autoComplete="off"
+                  onChange={e => {
+                    const val = e.target.value;
+                    setQuery(val);
+                    setActiveSuggestion(-1);
+                    if (val.trim().length >= 2) {
+                      const lower = val.toLowerCase();
+                      const matches = BANGALORE_AREAS.filter(a => a.toLowerCase().includes(lower)).slice(0, 8);
+                      setAreaSuggestions(matches);
+                      setShowSuggestions(matches.length > 0);
+                    } else {
+                      setAreaSuggestions([]);
+                      setShowSuggestions(false);
+                    }
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') { setShowSuggestions(false); doSearch(query); }
+                    else if (e.key === 'Escape') setShowSuggestions(false);
+                  }}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                  placeholder="Locality…"
+                  style={{
+                    flex: 1, background: 'transparent', border: 'none', outline: 'none',
+                    fontFamily: 'var(--font-sans)', fontSize: 14,
+                    color: 'var(--color-text-primary)', minWidth: 0,
+                  }}
+                />
+                <button
+                  onClick={() => { setShowSuggestions(false); doSearch(query); }}
+                  style={{
+                    background: 'var(--color-amber)', color: '#1a0a00',
+                    border: 'none', borderRadius: 20, padding: '6px 14px',
+                    cursor: 'pointer', fontFamily: 'var(--font-mono)',
+                    fontSize: 11, fontWeight: 500, letterSpacing: '0.04em', flexShrink: 0,
+                  }}
+                >
+                  Search
+                </button>
+              </div>
+              {/* Suggestions */}
+              {showSuggestions && areaSuggestions.length > 0 && (
+                <ul style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0,
+                  background: '#1a1a1a', border: '1px solid var(--color-border)',
+                  borderRadius: 10, zIndex: 200, listStyle: 'none',
+                  margin: '4px 0 0', padding: 0, overflow: 'hidden',
+                }}>
+                  {areaSuggestions.map((s, i) => (
+                    <li
+                      key={s}
+                      onMouseDown={() => { setQuery(s); setShowSuggestions(false); doSearch(s); }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '10px 14px', fontSize: 13, cursor: 'pointer',
+                        background: i === activeSuggestion ? 'rgba(232,160,32,0.1)' : 'transparent',
+                        color: i === activeSuggestion ? 'var(--color-amber)' : 'var(--color-text-primary)',
+                        borderBottom: i < areaSuggestions.length - 1 ? '1px solid var(--color-border)' : 'none',
+                      }}
+                    >
+                      <i className="fa-solid fa-location-dot" style={{ fontSize: 11, color: 'var(--color-text-muted)' }} />
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* Locality quick-chips */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 20 }}>
+              {LOCALITY_CHIPS.map(({ label, icon }) => {
+                const active = activeLocality === label;
+                return (
+                  <button
+                    key={label}
+                    onClick={() => {
+                      if (active) { setActiveLocality(null); setQuery(''); doSearch(''); }
+                      else { setActiveLocality(label); setQuery(label); doSearch(label); }
+                    }}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      height: 30, fontFamily: 'var(--font-sans)', fontSize: 12,
+                      background: active ? '#1A1200' : '#120F00',
+                      color: active ? '#E8A020' : '#AAA',
+                      border: active ? '0.5px solid #E8A020' : '0.5px solid #3A3000',
+                      borderRadius: 8, padding: '0 10px', cursor: 'pointer', whiteSpace: 'nowrap',
+                      transition: 'background 0.15s, color 0.15s',
+                    }}
+                  >
+                    <FontAwesomeIcon icon={icon} style={{ fontSize: 11 }} />
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* ─ FILTERS ─ */}
+            <div style={{ borderTop: '0.5px solid var(--color-border)', paddingTop: 16 }}>
+              <p style={{ ...monoLabel, marginBottom: 14 }}>Filters</p>
+
+              {/* BHK */}
+              <div style={{ marginBottom: 16 }}>
+                <p style={monoLabel}>BHK</p>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {BHK_OPTIONS.map(opt => (
+                    <PillToggle
+                      key={opt} label={opt}
+                      active={activeFilters.bhk.includes(opt)}
+                      onClick={() => setActiveFilters(f => ({
+                        ...f,
+                        bhk: f.bhk.includes(opt) ? f.bhk.filter(b => b !== opt) : [...f.bhk, opt],
+                      }))}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Budget */}
+              <div style={{ marginBottom: 16 }}>
+                <p style={monoLabel}>Budget</p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <BudgetInput placeholder="Min ₹" value={activeFilters.minBudget} onChange={v => setActiveFilters(f => ({ ...f, minBudget: v }))} />
+                  <BudgetInput placeholder="Max ₹" value={activeFilters.maxBudget} onChange={v => setActiveFilters(f => ({ ...f, maxBudget: v }))} />
+                </div>
+              </div>
+
+              {/* Furnished */}
+              <div style={{ marginBottom: 16 }}>
+                <p style={monoLabel}>Furnished</p>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {FURNISHED_OPTIONS.map(opt => (
+                    <PillToggle
+                      key={opt} label={opt}
+                      active={activeFilters.furnished === opt}
+                      onClick={() => setActiveFilters(f => ({ ...f, furnished: opt }))}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Sources */}
+              <div style={{ marginBottom: 16 }}>
+                <p style={monoLabel}>Sources</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {Object.entries(SOURCE_CONFIG).map(([key, cfg]) => (
+                    <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={activeFilters.sources[key] !== false}
+                        onChange={() => setActiveFilters(f => ({ ...f, sources: { ...f.sources, [key]: !f.sources[key] } }))}
+                        style={{ accentColor: 'var(--color-amber)', width: 14, height: 14 }}
+                      />
+                      <i className={cfg.icon} style={{ fontSize: 12, color: cfg.color, width: 14, textAlign: 'center' }} />
+                      <span style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--color-text-muted)' }}>{cfg.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sort */}
+              <div style={{ marginBottom: 20 }}>
+                <p style={monoLabel}>Sort</p>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {SORT_OPTIONS.map(opt => (
+                    <PillToggle key={opt} label={opt} active={sort === opt} onClick={() => setSort(opt)} />
+                  ))}
+                </div>
+              </div>
+
+              {/* Reset */}
+              <button
+                onClick={() => {
+                  setActiveFilters({ ...DEFAULT_FILTERS, sources: { ...DEFAULT_FILTERS.sources } });
+                  setQuickFilters(new Set());
+                  setSort('Score');
+                }}
+                style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
+                  textTransform: 'uppercase', background: 'none',
+                  border: '1px solid var(--color-border)', borderRadius: 8,
+                  padding: '7px 14px', cursor: 'pointer', color: 'var(--color-text-muted)',
+                  width: '100%', transition: 'border-color 0.2s, color 0.2s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-text-muted)'; e.currentTarget.style.color = 'var(--color-text-primary)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-muted)'; }}
+              >
+                Reset filters
+              </button>
+            </div>
+
+          </div>{/* end left panel */}
+
+          {/* ── RIGHT PANEL: results ── */}
+          <div style={{ flex: 1, minWidth: 0, padding: '16px 20px 40px' }}>
+
+            {/* Results header */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <h1 style={{ fontWeight: 300, fontSize: 20, letterSpacing: '-0.025em', marginBottom: 4 }}>
+                  {loading ? '…' : query.trim() ? `${displayed.length} homes in ${query.trim()}` : `${displayed.length} homes`}
+                </h1>
+                {!loading && (() => {
+                  const searched = query.trim().toLowerCase();
+                  const others = [...new Set(displayed.map(l => l.location).filter(loc => loc && loc.toLowerCase() !== searched))].slice(0, 4);
+                  if (others.length === 0) return null;
+                  return <NearbyDropdown localities={others} />;
+                })()}
+              </div>
+              <div style={{ display: 'flex', gap: 2, background: 'var(--color-bg-surface)', borderRadius: 8, padding: 3 }}>
+                {viewIcons.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => setView(key)}
+                    style={{
+                      background: view === key ? 'var(--color-bg-card)' : 'transparent',
+                      border: 'none', borderRadius: 6, padding: '5px 10px',
+                      cursor: 'pointer', color: view === key ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+                      fontSize: 16, transition: 'background 0.15s, color 0.15s',
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Source breakdown */}
+            {!loading && Object.keys(sourceCounts).length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', marginBottom: 12 }}>
+                {Object.entries(sourceCounts).map(([label, count]) => {
+                  const cfg = Object.values(SOURCE_CONFIG).find(c => c.label === label) || { color: '#666', icon: 'fa-solid fa-circle' };
+                  return (
+                    <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em', color: 'var(--color-text-muted)' }}>
+                      <i className={cfg.icon} style={{ fontSize: 10, color: cfg.color }} />
+                      <span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{count}</span>
+                      <span>{label}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Results */}
+            {loading ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+              </div>
+            ) : view === 'map' ? (
+              <MapPlaceholder />
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: view === 'list' ? '1fr' : 'repeat(3, 1fr)', gap: 12 }}>
+                {displayed.map(listing => (
+                  <ListingCard
+                    key={listing.id}
+                    listing={listing}
+                    saved={isSaved(listing.id) || savedIds.has(listing.id)}
+                    onToggleSave={() => toggleSave(listing)}
+                  />
+                ))}
+              </div>
+            )}
+
+          </div>{/* end right panel */}
+
+        </div>/* end desktop two-column */
+      ) : (
+        /* ══════════════════════ MOBILE LAYOUT ══════════════════════════ */
+        <>
 
       {/* ── STICKY SEARCH BAR ── */}
       <div style={{
@@ -1681,6 +2030,9 @@ export default function Search() {
         initialSort={sort}
         onApply={handleApply}
       />
+
+        </>/* end mobile layout */
+      )}{/* end isDesktop conditional */}
 
       {/* ── SEARCH LOG TOAST ── */}
       <Toast

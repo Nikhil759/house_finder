@@ -37,6 +37,7 @@ from listing_store import (
     init_listings_table,
     upsert_listings_batch,
     query_listings,
+    get_listing_by_id,
     get_listing_counts,
     get_locality_counts,
     purge_old_listings,
@@ -1222,6 +1223,16 @@ def search():
         "locality_suggestion": locality_suggestion,
         "from_db":             from_db,
     })
+
+
+@app.route("/api/listing/<path:listing_id>")
+def get_listing(listing_id):
+    """Return a single listing by composite ID (source_sourceid)."""
+    listing = get_listing_by_id(listing_id)
+    if not listing:
+        return jsonify({"error": "Listing not found"}), 404
+    listing["quality_score"] = score_post(listing)
+    return jsonify(listing)
 
 
 @app.route("/api/search/new")

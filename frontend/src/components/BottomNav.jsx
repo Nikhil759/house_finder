@@ -32,7 +32,7 @@ export default function BottomNav() {
   const { pathname } = useLocation();
 
   return (
-    <nav style={{
+    <nav className="nestiq-bottom-nav" style={{
       position: 'fixed',
       bottom: 0,
       left: 0,

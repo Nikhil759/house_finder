@@ -2,10 +2,12 @@ import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
+import DesktopSidebar from '../components/DesktopSidebar';
 import { useAuth } from '../hooks/useAuth';
 import { useSavedListings } from '../hooks/useSavedListings';
 import { useSavedSearches } from '../hooks/useSavedSearches';
 import { useNewListings } from '../hooks/useNewListings';
+import { useDesktop } from '../hooks/useDesktop';
 
 // ── Static data ───────────────────────────────────────────────────────────────
 const PIPELINE_STAGES = ['Saved', 'Interested', 'Contacted', 'Visited'];
@@ -52,11 +54,23 @@ function formatPriceStr(val) {
   return `₹${n.toLocaleString('en-IN')}`;
 }
 
+const KNOWN_SOURCES = new Set(['reddit', 'nobroker', 'telegram', 'housing']);
+
+function stableListingId(p) {
+  const raw = (p.id || p.listing_id || '').toString();
+  const src = (p.source || '').toLowerCase();
+  const prefix = raw.split('_')[0];
+  if (KNOWN_SOURCES.has(prefix)) return raw;
+  if (raw.startsWith('nb_')) return `nobroker_${raw.slice(3)}`;
+  if (src) return `${src}_${raw}`;
+  return raw;
+}
+
 // Map a saved_listings row (with _status, _notes spread in) → card props
 function normalizeRow(row) {
   const STAGE_MAP = { saved: 'Saved', interested: 'Interested', contacted: 'Contacted', visited: 'Visited' };
   return {
-    id:        row.id,
+    id:        stableListingId(row),
     source:    normalizeSource(row.source),
     price:     formatPriceStr(row.price ?? row.rent) || 'Price on request',
     timeAgo:   timeAgo(row.created || row.created_utc),
@@ -68,13 +82,15 @@ function normalizeRow(row) {
     stage:     STAGE_MAP[(row._status || 'saved').toLowerCase()] || 'Saved',
     note:      row._notes || '',
     phone:     row.contact_phone || null,
+    url:       row.url || row.source_url || null,
+    _raw:      row,
   };
 }
 
 // Map a /api/search/new listing → NewLeadCard props
 function normalizeNewLead(listing) {
   return {
-    id:      listing.id,
+    id:      stableListingId(listing),
     source:  normalizeSource(listing.source),
     score:   Math.round(listing.quality_score || 0),
     title:   listing.title || '(no title)',
@@ -440,14 +456,46 @@ function MyListingCard({ listing, onRemove, onStageChange, onNoteSave }) {
             <i className="fa-solid fa-trash" style={{ fontSize: 12 }} />
           </button>
 
-          <button style={{
-            marginLeft: 'auto',
-            fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 500,
-            background: 'var(--color-amber)', color: '#1a0a00', border: 'none',
-            borderRadius: 6, padding: '0 16px', height: 30, cursor: 'pointer',
-          }}>
-            Open →
-          </button>
+          <Link
+            to={`/listing/${listing.id}`}
+            state={{ listing: listing._raw }}
+            style={{
+              marginLeft: 'auto',
+              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
+              background: 'none', color: 'var(--color-text-muted)',
+              border: '0.5px solid #2A2A2A', borderRadius: 6,
+              padding: '0 14px', height: 30,
+              display: 'inline-flex', alignItems: 'center',
+              textDecoration: 'none', transition: 'border-color 0.2s, color 0.2s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#444'; e.currentTarget.style.color = 'var(--color-text-primary)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#2A2A2A'; e.currentTarget.style.color = 'var(--color-text-muted)'; }}
+          >
+            Details
+          </Link>
+          {listing.url ? (
+            <a
+              href={listing.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 500,
+                background: 'var(--color-amber)', color: '#1a0a00', border: 'none',
+                borderRadius: 6, padding: '0 16px', height: 30, cursor: 'pointer',
+                textDecoration: 'none', display: 'inline-flex', alignItems: 'center',
+              }}
+            >
+              Open →
+            </a>
+          ) : (
+            <button style={{
+              fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 500,
+              background: 'var(--color-amber)', color: '#1a0a00', border: 'none',
+              borderRadius: 6, padding: '0 16px', height: 30, cursor: 'pointer',
+            }}>
+              Open →
+            </button>
+          )}
         </div>
 
       </div>
@@ -561,6 +609,7 @@ function NewLeadCard({ listing, onSave, onHide, isSavedFn }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function MyHub() {
   const { user, loading: authLoading, signInWithGoogle } = useAuth();
+  const isDesktop = useDesktop();
 
   // ── Real data hooks ───────────────────────────────────────────────────────
   const {
@@ -650,7 +699,8 @@ export default function MyHub() {
       { icon: 'fa-solid fa-chart-simple',   label: 'Track your search progress' },
     ];
     return (
-      <div style={s.page}>
+      <div style={{ ...s.page, marginLeft: isDesktop ? 240 : 0 }}>
+        <DesktopSidebar />
         <AppHeader />
         <div style={{
           display: 'flex',
@@ -759,13 +809,14 @@ export default function MyHub() {
   }
 
   return (
-    <div style={s.page}>
+    <div style={{ ...s.page, marginLeft: isDesktop ? 240 : 0, paddingBottom: isDesktop ? 40 : undefined }}>
+      <DesktopSidebar />
 
       <AppHeader />
 
       {/* ── STICKY TAB BAR ── */}
       <div style={{
-        position: 'sticky', top: 56, zIndex: 50,
+        position: 'sticky', top: isDesktop ? 0 : 56, zIndex: 50,
         background: 'rgba(10,10,10,0.92)',
         backdropFilter: 'blur(24px)',
         WebkitBackdropFilter: 'blur(24px)',
@@ -808,80 +859,96 @@ export default function MyHub() {
         </div>
       </div>
 
-      <div style={{ padding: '20px 16px 0' }}>
+      <div style={{
+        padding: isDesktop ? '20px 24px 0' : '20px 16px 0',
+        maxWidth: isDesktop ? 1440 : undefined,
+        margin: isDesktop ? '0 auto' : undefined,
+      }}>
 
         {/* ════════════════════════════════ MY LISTINGS ═══════════════════════════ */}
         {mainTab === 'My Listings' && (
-          <>
-            {/* Summary row */}
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 16 }}>
-              <h1 style={{ fontWeight: 300, fontSize: 22, letterSpacing: '-0.025em' }}>
-                {savedListings.length} saved
-              </h1>
-              <span style={{ ...s.monoSmall }}>across {PIPELINE_STAGES.length} stages</span>
-            </div>
+          <div style={isDesktop ? { display: 'flex', gap: 32, alignItems: 'flex-start' } : {}}>
 
-            {/* Pipeline progress tracker */}
-            <PipelineTracker listings={normalizedListings} activeStage={stageFilter} />
-
-            {/* Stage filter chips */}
-            <div style={{ display: 'flex', gap: 6, marginBottom: 20, overflowX: 'auto', scrollbarWidth: 'none' }}>
-              <button onClick={() => setStageFilter('All')} style={s.stagePill(stageFilter === 'All')}>
-                All
-              </button>
-              {PIPELINE_STAGES.map(stage => {
-                const count = normalizedListings.filter(l => l.stage === stage).length;
-                return (
-                  <button
-                    key={stage}
-                    onClick={() => setStageFilter(stage)}
-                    style={s.stagePill(stageFilter === stage)}
-                  >
-                    {stage}
-                    {count > 0 && (
-                      <span style={{
-                        marginLeft: 5, fontFamily: 'var(--font-mono)', fontSize: 9,
-                        opacity: stageFilter === stage ? 0.7 : 0.5,
-                      }}>
-                        {count}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Listing cards */}
-            {savedLoading ? (
-              [1, 2, 3].map(i => <SkeletonCard key={i} />)
-            ) : filteredListings.length === 0 ? (
-              <div style={{
-                textAlign: 'center', padding: '48px 24px',
-                background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)',
-              }}>
-                <p style={{ ...s.monoSmall, fontSize: 13 }}>
-                  {stageFilter === 'All' ? 'No saved listings yet.' : `No listings in ${stageFilter} stage.`}
-                </p>
-                <Link to="/search" style={{
-                  display: 'inline-block', marginTop: 16,
-                  fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.06em',
-                  color: 'var(--color-amber)', textDecoration: 'none',
-                }}>
-                  Search listings →
-                </Link>
+            {/* ── LEFT: pipeline + stage filters ── */}
+            <div style={isDesktop ? {
+              width: 360, flexShrink: 0,
+              position: 'sticky', top: 52,
+              background: 'var(--color-bg-primary)',
+              paddingBottom: 16,
+            } : {}}>
+              {/* Summary row */}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 16 }}>
+                <h1 style={{ fontWeight: 300, fontSize: 22, letterSpacing: '-0.025em' }}>
+                  {savedListings.length} saved
+                </h1>
+                <span style={{ ...s.monoSmall }}>across {PIPELINE_STAGES.length} stages</span>
               </div>
-            ) : (
-              filteredListings.map(listing => (
-                <MyListingCard
-                  key={listing.id}
-                  listing={listing}
-                  onRemove={handleRemove}
-                  onStageChange={handleStageChange}
-                  onNoteSave={handleNoteSave}
-                />
-              ))
-            )}
-          </>
+
+              {/* Pipeline progress tracker */}
+              <PipelineTracker listings={normalizedListings} activeStage={stageFilter} />
+
+              {/* Stage filter chips */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 20, overflowX: 'auto', scrollbarWidth: 'none' }}>
+                <button onClick={() => setStageFilter('All')} style={s.stagePill(stageFilter === 'All')}>
+                  All
+                </button>
+                {PIPELINE_STAGES.map(stage => {
+                  const count = normalizedListings.filter(l => l.stage === stage).length;
+                  return (
+                    <button
+                      key={stage}
+                      onClick={() => setStageFilter(stage)}
+                      style={s.stagePill(stageFilter === stage)}
+                    >
+                      {stage}
+                      {count > 0 && (
+                        <span style={{
+                          marginLeft: 5, fontFamily: 'var(--font-mono)', fontSize: 9,
+                          opacity: stageFilter === stage ? 0.7 : 0.5,
+                        }}>
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ── RIGHT: listing cards ── */}
+            <div style={isDesktop ? { flex: 1, minWidth: 0 } : {}}>
+              {savedLoading ? (
+                [1, 2, 3].map(i => <SkeletonCard key={i} />)
+              ) : filteredListings.length === 0 ? (
+                <div style={{
+                  textAlign: 'center', padding: '48px 24px',
+                  background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)',
+                }}>
+                  <p style={{ ...s.monoSmall, fontSize: 13 }}>
+                    {stageFilter === 'All' ? 'No saved listings yet.' : `No listings in ${stageFilter} stage.`}
+                  </p>
+                  <Link to="/search" style={{
+                    display: 'inline-block', marginTop: 16,
+                    fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.06em',
+                    color: 'var(--color-amber)', textDecoration: 'none',
+                  }}>
+                    Search listings →
+                  </Link>
+                </div>
+              ) : (
+                filteredListings.map(listing => (
+                  <MyListingCard
+                    key={listing.id}
+                    listing={listing}
+                    onRemove={handleRemove}
+                    onStageChange={handleStageChange}
+                    onNoteSave={handleNoteSave}
+                  />
+                ))
+              )}
+            </div>
+
+          </div>
         )}
 
         {/* ════════════════════════════════ NEW LEADS ═════════════════════════════ */}
