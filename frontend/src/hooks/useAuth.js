@@ -30,11 +30,11 @@ export function useAuth() {
     return () => subscription.unsubscribe()
   }, [])
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (redirectPath) => {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin + '/app'
+        redirectTo: window.location.origin + (redirectPath ?? window.location.pathname),
       }
     })
   }

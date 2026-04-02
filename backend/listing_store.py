@@ -428,6 +428,110 @@ def _query_listings_sqlite(conn, localities, sources, bhk, budget, min_budget, l
         conn.close()
 
 
+_SOURCE_ALIAS = {
+    "nb": "nobroker",
+}
+
+
+_LISTING_SELECT = """
+    SELECT source, source_id, source_url, source_group,
+           title, body, bhk, property_type, furnishing,
+           rent, deposit, maintenance,
+           locality, address, latitude, longitude, maps_url,
+           area_sqft, floor_info, amenities, lease_type,
+           contact_phone, contact_name, is_broker, no_brokerage,
+           is_flatmate, is_sponsored, thumbnail_url,
+           EXTRACT(EPOCH FROM posted_at)::FLOAT as posted_epoch,
+           quality_score, raw_payload,
+           id, duplicate_group_id
+    FROM listings
+"""
+
+
+def _row_to_listing(row):
+    base = _row_to_dict(row[30]) or {}
+    base.update({
+        "id": f"{row[0]}_{row[1]}",
+        "source": row[0],
+        "source_id": row[1],
+        "url": row[2],
+        "source_url": row[2],
+        "source_group": row[3],
+        "title": row[4] or "",
+        "body": row[5] or "",
+        "selftext": row[5] or "",
+        "bhk": row[6],
+        "property_type": row[7],
+        "furnishing": row[8],
+        "price": row[9],
+        "rent": row[9],
+        "deposit": row[10],
+        "maintenance": row[11],
+        "locality": row[12],
+        "address": row[13],
+        "latitude": row[14],
+        "longitude": row[15],
+        "maps_url": row[16],
+        "area_sqft": row[17],
+        "floor_info": row[18],
+        "amenities": row[19] or [],
+        "lease_type": row[20],
+        "contact": row[21],
+        "contact_phone": row[21],
+        "contact_name": row[22],
+        "is_broker": row[23],
+        "no_brokerage": row[24],
+        "is_flatmate": row[25],
+        "is_sponsored": row[26],
+        "thumbnail_url": row[27],
+        "created": row[28] or 0,
+        "created_utc": row[28] or 0,
+        "quality_score": row[29] or 0,
+    })
+    return base
+
+
+def _query_single_by_source_id(source_id: str, source: str = None):
+    """Look up a listing by source_id, optionally filtered by source."""
+    conn, is_pg = _get_conn()
+    if not is_pg:
+        return None
+    try:
+        cur = conn.cursor()
+        if source:
+            cur.execute(
+                _LISTING_SELECT + " WHERE source = %s AND source_id = %s LIMIT 1",
+                (source, source_id),
+            )
+        else:
+            cur.execute(
+                _LISTING_SELECT + " WHERE source_id = %s LIMIT 1",
+                (source_id,),
+            )
+        row = cur.fetchone()
+        return _row_to_listing(row) if row else None
+    except Exception as e:
+        logger.error("_query_single_by_source_id failed: %s", e)
+        return None
+    finally:
+        _put_conn(conn)
+
+
+def get_listing_by_id(composite_id: str):
+    """Return a single listing dict by composite ID (source_sourceid)."""
+    if not composite_id:
+        return None
+
+    if '_' not in composite_id:
+        # Bare ID with no source prefix (e.g. live Reddit post ID)
+        return _query_single_by_source_id(composite_id, source=None)
+
+    source, source_id = composite_id.split('_', 1)
+    # Map abbreviated source names (e.g. live NoBroker cache uses "nb_<id>")
+    source = _SOURCE_ALIAS.get(source, source)
+    return _query_single_by_source_id(source_id, source=source)
+
+
 def get_listing_counts():
     conn, is_pg = _get_conn()
     try:
