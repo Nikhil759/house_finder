@@ -21,10 +21,8 @@ export default function DesktopSidebar() {
       width: 240,
       background: '#111111',
       borderRight: '0.5px solid #222222',
-      display: 'flex',
       flexDirection: 'column',
       zIndex: 200,
-      // Only visible on desktop — CSS handles hide/show
     }} className="nestiq-desktop-sidebar">
 
       {/* Logo */}
