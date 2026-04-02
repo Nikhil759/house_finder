@@ -14,6 +14,8 @@ import { useSavedListings } from '../hooks/useSavedListings';
 import { useSearchLogs } from '../hooks/useSearchLogs';
 import { useDesktop } from '../hooks/useDesktop';
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 // ── Locality autocomplete list (mirrors App.jsx) ──────────────────────────────
 const BANGALORE_AREAS = [
   'Indiranagar', 'Whitefield', 'Koramangala', 'HSR Layout', 'HSR',
@@ -1003,7 +1005,7 @@ export default function Search() {
       ...(area ? { area } : {}),
     });
     try {
-      const res  = await fetch(`/api/search?${params}`);
+      const res  = await fetch(`${API_BASE}/api/search?${params}`);
       const data = await res.json();
       const posts = (data.posts || []).map(normalizePost);
       setListings(posts);
