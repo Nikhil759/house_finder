@@ -546,6 +546,69 @@ function FilterBottomSheet({ open, onClose, initialFilters, initialSort, onApply
 }
 
 // ── Nearby areas collapsible ──────────────────────────────────────────────────
+function PaginationBar({ page, pageCount, onPageChange }) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      marginTop: 20,
+      marginBottom: 8,
+    }}>
+      <button
+        onClick={() => { onPageChange(p => p - 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+        disabled={page === 1}
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+          letterSpacing: '0.04em',
+          background: 'none',
+          border: '1px solid var(--color-border)',
+          color: page === 1 ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
+          borderRadius: 8,
+          padding: '7px 14px',
+          cursor: page === 1 ? 'not-allowed' : 'pointer',
+          opacity: page === 1 ? 0.35 : 1,
+          transition: 'border-color 0.15s',
+        }}
+      >
+        ← Prev
+      </button>
+      <span style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 11,
+        letterSpacing: '0.06em',
+        color: 'var(--color-text-muted)',
+        minWidth: 60,
+        textAlign: 'center',
+      }}>
+        {page} / {pageCount}
+      </span>
+      <button
+        onClick={() => { onPageChange(p => p + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+        disabled={page === pageCount}
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+          letterSpacing: '0.04em',
+          background: page === pageCount ? 'none' : 'var(--color-amber)',
+          border: page === pageCount ? '1px solid var(--color-border)' : 'none',
+          color: page === pageCount ? 'var(--color-text-muted)' : '#1a0a00',
+          borderRadius: 8,
+          padding: '7px 14px',
+          cursor: page === pageCount ? 'not-allowed' : 'pointer',
+          opacity: page === pageCount ? 0.35 : 1,
+          fontWeight: page === pageCount ? 400 : 500,
+          transition: 'background 0.15s',
+        }}
+      >
+        Next →
+      </button>
+    </div>
+  );
+}
+
 function NearbyDropdown({ localities }) {
   const [open, setOpen] = useState(false);
   return (
@@ -592,7 +655,9 @@ function NearbyDropdown({ localities }) {
 function ListingCard({ listing, saved, onToggleSave }) {
   const [popped, setPopped] = useState(false);
 
-  function handleSaveClick() {
+  function handleSaveClick(e) {
+    e.preventDefault();
+    e.stopPropagation();
     onToggleSave();
     if (!saved) {
       setPopped(true);
@@ -601,37 +666,220 @@ function ListingCard({ listing, saved, onToggleSave }) {
   }
 
   return (
-    <article style={{
-      background: 'var(--color-bg-surface)',
-      borderRadius: 'var(--radius-card)',
-      padding: '18px 20px',
-    }}>
-      {/* Header row: source + time + score */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <SourceBadge source={listing.source} color={listing.sourceColor} icon={listing.sourceIcon} />
+    <Link
+      to={`/listing/${listing.id}`}
+      state={{ listing: listing._raw }}
+      style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+    >
+      <article style={{
+        background: 'var(--color-bg-surface)',
+        borderRadius: 'var(--radius-card)',
+        padding: '18px 20px',
+        cursor: 'pointer',
+        transition: 'background 0.15s',
+      }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-bg-card)'; }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-bg-surface)'; }}
+      >
+        {/* Header row: source + time + score */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <SourceBadge source={listing.source} color={listing.sourceColor} icon={listing.sourceIcon} />
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              color: 'var(--color-text-muted)',
+              letterSpacing: '0.03em',
+            }}>
+              {listing.timeAgo}
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 9,
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              color: 'var(--color-text-muted)',
+            }}>
+              Score
+            </span>
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 22,
+              fontWeight: 500,
+              color: scoreColor(listing.score),
+              letterSpacing: '-0.03em',
+              lineHeight: 1,
+            }}>
+              {listing.score}
+            </span>
+          </div>
+        </div>
+
+        {/* Title */}
+        <h3 style={{
+          fontWeight: 300,
+          fontSize: 16,
+          lineHeight: 1.4,
+          letterSpacing: '-0.01em',
+          marginBottom: 12,
+        }}>
+          {listing.title}
+        </h3>
+
+        {/* Spec row */}
+        <div style={{
+          display: 'flex',
+          gap: 6,
+          flexWrap: 'wrap',
+          marginBottom: 10,
+          alignItems: 'center',
+        }}>
+          {[listing.bhk, listing.sqft && `${listing.sqft} sqft`, listing.furnished]
+            .filter(Boolean)
+            .map(spec => (
+              <span key={spec} style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                letterSpacing: '0.05em',
+                color: 'var(--color-text-muted)',
+                background: 'var(--color-bg-card)',
+                borderRadius: 4,
+                padding: '3px 8px',
+              }}>
+                {spec}
+              </span>
+            ))}
           <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 13,
+            fontWeight: listing.price ? 500 : 400,
+            color: listing.price ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+            marginLeft: 'auto',
+            letterSpacing: '-0.01em',
+            fontStyle: listing.price ? 'normal' : 'italic',
+          }}>
+            {listing.price || 'Price on request'}
+          </span>
+        </div>
+
+        {/* Location */}
+        {listing.location && (
+          <p style={{
             fontFamily: 'var(--font-mono)',
             fontSize: 11,
             color: 'var(--color-text-muted)',
-            letterSpacing: '0.03em',
+            letterSpacing: '0.04em',
+            marginBottom: 14,
           }}>
-            {listing.timeAgo}
-          </span>
+            <i className="fa-solid fa-location-dot" style={{ marginRight: 5, color: 'var(--color-text-muted)' }} />
+            {listing.location}
+          </p>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            onClick={handleSaveClick}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.06em',
+              background: 'none',
+              border: `1px solid ${saved ? '#E8394D' : 'var(--color-border)'}`,
+              color: saved ? '#E8394D' : 'var(--color-text-muted)',
+              borderRadius: 6,
+              padding: '7px 14px',
+              height: 32,
+              cursor: 'pointer',
+              transition: 'border-color 0.2s, color 0.2s',
+            }}
+          >
+            <i
+              className={saved ? 'fa-solid fa-heart' : 'fa-regular fa-heart'}
+              style={{ animation: popped ? 'heartPop 0.35s ease' : 'none' }}
+            />
+            {saved ? 'Saved' : 'Save'}
+          </button>
+          {listing.url && (
+            <a
+              href={listing.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              style={{
+                marginLeft: 'auto',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                fontWeight: 500,
+                letterSpacing: '0.06em',
+                background: 'none',
+                color: 'var(--color-amber)',
+                border: '1px solid rgba(232,160,32,0.3)',
+                background: 'rgba(232,160,32,0.05)',
+                borderRadius: 6,
+                padding: '0 14px',
+                height: 34,
+                textDecoration: 'none',
+                transition: 'border-color 0.2s, color 0.2s, background 0.2s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-amber)'; e.currentTarget.style.background = 'rgba(232,160,32,0.12)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(232,160,32,0.3)'; e.currentTarget.style.background = 'rgba(232,160,32,0.05)'; }}
+            >
+              <i className="fa-solid fa-arrow-up-right-from-square" style={{ fontSize: 12 }} />
+              Source
+            </a>
+          )}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+      </article>
+    </Link>
+  );
+}
+
+function GridCard({ listing, saved, onToggleSave }) {
+  const [popped, setPopped] = useState(false);
+
+  function handleSaveClick(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    onToggleSave();
+    if (!saved) {
+      setPopped(true);
+      setTimeout(() => setPopped(false), 350);
+    }
+  }
+
+  return (
+    <Link
+      to={`/listing/${listing.id}`}
+      state={{ listing: listing._raw }}
+      style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+    >
+      <article style={{
+        background: 'var(--color-bg-surface)',
+        borderRadius: 'var(--radius-card)',
+        padding: '16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        cursor: 'pointer',
+        transition: 'background 0.15s',
+      }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-bg-card)'; }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-bg-surface)'; }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <SourceBadge source={listing.source} color={listing.sourceColor} icon={listing.sourceIcon} />
           <span style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 9,
-            letterSpacing: '0.14em',
-            textTransform: 'uppercase',
-            color: 'var(--color-text-muted)',
-          }}>
-            Score
-          </span>
-          <span style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 22,
+            fontSize: 20,
             fontWeight: 500,
             color: scoreColor(listing.score),
             letterSpacing: '-0.03em',
@@ -640,249 +888,57 @@ function ListingCard({ listing, saved, onToggleSave }) {
             {listing.score}
           </span>
         </div>
-      </div>
 
-      {/* Title */}
-      <h3 style={{
-        fontWeight: 300,
-        fontSize: 16,
-        lineHeight: 1.4,
-        letterSpacing: '-0.01em',
-        marginBottom: 12,
-      }}>
-        {listing.title}
-      </h3>
-
-      {/* Spec row */}
-      <div style={{
-        display: 'flex',
-        gap: 6,
-        flexWrap: 'wrap',
-        marginBottom: 10,
-        alignItems: 'center',
-      }}>
-        {[listing.bhk, listing.sqft && `${listing.sqft} sqft`, listing.furnished]
-          .filter(Boolean)
-          .map(spec => (
-            <span key={spec} style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              letterSpacing: '0.05em',
-              color: 'var(--color-text-muted)',
-              background: 'var(--color-bg-card)',
-              borderRadius: 4,
-              padding: '3px 8px',
-            }}>
-              {spec}
-            </span>
-          ))}
-        <span style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 13,
-          fontWeight: listing.price ? 500 : 400,
-          color: listing.price ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
-          marginLeft: 'auto',
+        <h3 style={{
+          fontWeight: 300,
+          fontSize: 14,
+          lineHeight: 1.4,
           letterSpacing: '-0.01em',
-          fontStyle: listing.price ? 'normal' : 'italic',
+          flex: 1,
         }}>
-          {listing.price || 'Price on request'}
-        </span>
-      </div>
+          {listing.title}
+        </h3>
 
-      {/* Location */}
-      {listing.location && (
-        <p style={{
+        <div style={{
           fontFamily: 'var(--font-mono)',
           fontSize: 11,
           color: 'var(--color-text-muted)',
           letterSpacing: '0.04em',
-          marginBottom: 14,
         }}>
-          <i className="fa-solid fa-location-dot" style={{ marginRight: 5, color: 'var(--color-text-muted)' }} />
-          {listing.location}
-        </p>
-      )}
+          {[listing.bhk, listing.location].filter(Boolean).join(' · ')}
+        </div>
 
-      {/* Actions */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <button
-          onClick={handleSaveClick}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 5,
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+          <span style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            letterSpacing: '0.06em',
-            background: 'none',
-            border: `1px solid ${saved ? '#E8394D' : 'var(--color-border)'}`,
-            color: saved ? '#E8394D' : 'var(--color-text-muted)',
-            borderRadius: 6,
-            padding: '7px 14px',
-            height: 32,
-            cursor: 'pointer',
-            transition: 'border-color 0.2s, color 0.2s',
-          }}
-        >
-          <i
-            className={saved ? 'fa-solid fa-heart' : 'fa-regular fa-heart'}
-            style={{ animation: popped ? 'heartPop 0.35s ease' : 'none' }}
-          />
-          {saved ? 'Saved' : 'Save'}
-        </button>
-        <Link
-          to={`/listing/${listing.id}`}
-          state={{ listing: listing._raw }}
-          style={{
-            marginLeft: 'auto',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            letterSpacing: '0.04em',
-            background: 'none',
-            color: 'var(--color-text-muted)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 6,
-            padding: '0 14px',
-            height: 32,
-            display: 'inline-flex',
-            alignItems: 'center',
-            textDecoration: 'none',
-            transition: 'border-color 0.2s, color 0.2s',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-text-muted)'; e.currentTarget.style.color = 'var(--color-text-primary)'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-muted)'; }}
-        >
-          Details
-        </Link>
-        {listing.url ? (
-          <a
-            href={listing.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 12,
-              letterSpacing: '0.04em',
-              background: 'var(--color-amber)',
-              color: '#1a0a00',
-              border: 'none',
-              borderRadius: 6,
-              padding: '0 16px',
-              height: 32,
-              cursor: 'pointer',
-              fontWeight: 500,
-              textDecoration: 'none',
-              display: 'inline-flex',
-              alignItems: 'center',
-            }}
-          >
-            Open →
-          </a>
-        ) : (
-          <button style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 12,
-            letterSpacing: '0.04em',
-            background: 'var(--color-amber)',
-            color: '#1a0a00',
-            border: 'none',
-            borderRadius: 6,
-            padding: '0 16px',
-            height: 32,
-            cursor: 'pointer',
-            fontWeight: 500,
+            fontSize: listing.price ? 15 : 11,
+            fontWeight: listing.price ? 500 : 400,
+            color: listing.price ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+            fontStyle: listing.price ? 'normal' : 'italic',
           }}>
-            Open →
+            {listing.price || 'Price on request'}
+          </span>
+          <button
+            onClick={handleSaveClick}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: saved ? '#E8394D' : 'var(--color-text-muted)',
+              fontSize: 16,
+              padding: 0,
+              transition: 'color 0.2s',
+            }}
+            aria-label={saved ? 'Unsave listing' : 'Save listing'}
+          >
+            <i
+              className={saved ? 'fa-solid fa-heart' : 'fa-regular fa-heart'}
+              style={{ animation: popped ? 'heartPop 0.35s ease' : 'none' }}
+            />
           </button>
-        )}
-      </div>
-    </article>
-  );
-}
-
-function GridCard({ listing, saved, onToggleSave }) {
-  const [popped, setPopped] = useState(false);
-
-  function handleSaveClick() {
-    onToggleSave();
-    if (!saved) {
-      setPopped(true);
-      setTimeout(() => setPopped(false), 350);
-    }
-  }
-
-  return (
-    <article style={{
-      background: 'var(--color-bg-surface)',
-      borderRadius: 'var(--radius-card)',
-      padding: '16px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 8,
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <SourceBadge source={listing.source} color={listing.sourceColor} icon={listing.sourceIcon} />
-        <span style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 20,
-          fontWeight: 500,
-          color: scoreColor(listing.score),
-          letterSpacing: '-0.03em',
-          lineHeight: 1,
-        }}>
-          {listing.score}
-        </span>
-      </div>
-
-      <h3 style={{
-        fontWeight: 300,
-        fontSize: 14,
-        lineHeight: 1.4,
-        letterSpacing: '-0.01em',
-        flex: 1,
-      }}>
-        {listing.title}
-      </h3>
-
-      <div style={{
-        fontFamily: 'var(--font-mono)',
-        fontSize: 11,
-        color: 'var(--color-text-muted)',
-        letterSpacing: '0.04em',
-      }}>
-        {[listing.bhk, listing.location].filter(Boolean).join(' · ')}
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-        <span style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: listing.price ? 15 : 11,
-          fontWeight: listing.price ? 500 : 400,
-          color: listing.price ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
-          fontStyle: listing.price ? 'normal' : 'italic',
-        }}>
-          {listing.price || 'Price on request'}
-        </span>
-        <button
-          onClick={handleSaveClick}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: saved ? '#E8394D' : 'var(--color-text-muted)',
-            fontSize: 16,
-            padding: 0,
-            transition: 'color 0.2s',
-          }}
-          aria-label={saved ? 'Unsave listing' : 'Save listing'}
-        >
-          <i
-            className={saved ? 'fa-solid fa-heart' : 'fa-regular fa-heart'}
-            style={{ animation: popped ? 'heartPop 0.35s ease' : 'none' }}
-          />
-        </button>
-      </div>
-    </article>
+        </div>
+      </article>
+    </Link>
   );
 }
 
@@ -977,6 +1033,9 @@ export default function Search() {
   const [total, setTotal]             = useState(0);
   const [sourceCounts, setSourceCounts] = useState({});
   const [loading, setLoading]         = useState(false);
+  const [isTopPicks, setIsTopPicks]   = useState(false);
+  const [page, setPage]               = useState(1);
+  const PAGE_SIZE = isDesktop ? 12 : 10;
   // savedIds kept for optimistic UI before useSavedListings hydrates
   const [savedIds, setSavedIds]       = useState(new Set());
 
@@ -997,11 +1056,12 @@ export default function Search() {
   // ── Fetch ───────────────────────────────────────────────────────────────────
   const doSearch = useCallback(async (area) => {
     setLoading(true);
+    const isDefaultLoad = !area;
     const params = new URLSearchParams({
       sources:   'reddit,telegram,nobroker,housing',
       sort:      'score',
-      min_score: 20,
-      limit:     50,
+      min_score: isDefaultLoad ? 60 : 20,
+      limit:     isDefaultLoad ? 20 : 50,
       ...(area ? { area } : {}),
     });
     try {
@@ -1010,6 +1070,8 @@ export default function Search() {
       const posts = (data.posts || []).map(normalizePost);
       setListings(posts);
       setTotal(data.total ?? posts.length);
+      setIsTopPicks(isDefaultLoad);
+      setPage(1);
       const counts = {};
       (data.posts || []).forEach(p => {
         const label = SOURCE_LABELS[p.source] || p.source;
@@ -1107,6 +1169,15 @@ export default function Search() {
   function handleApply({ filters, sort: newSort }) {
     setActiveFilters(filters);
     setSort(newSort);
+    setPage(1);
+  }
+
+  function toggleSourceFilter(rawSource) {
+    setActiveFilters(prev => ({
+      ...prev,
+      sources: { ...prev.sources, [rawSource]: !prev.sources[rawSource] },
+    }));
+    setPage(1);
   }
 
   // ── Client-side sort ────────────────────────────────────────────────────────
@@ -1177,6 +1248,9 @@ export default function Search() {
     }
     return true;
   });
+
+  const pageCount  = Math.ceil(displayed.length / PAGE_SIZE);
+  const paginated  = displayed.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const viewIcons = [
     { key: 'list', label: '≡' },
@@ -1429,9 +1503,9 @@ export default function Search() {
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <h1 style={{ fontWeight: 300, fontSize: 20, letterSpacing: '-0.025em', marginBottom: 4 }}>
-                  {loading ? '…' : query.trim() ? `${displayed.length} homes in ${query.trim()}` : `${displayed.length} homes`}
+                  {loading ? '…' : query.trim() ? `${displayed.length} homes in ${query.trim()}` : isTopPicks ? 'Top picks · Bangalore' : `${displayed.length} homes`}
                 </h1>
-                {!loading && (() => {
+                {!loading && !isTopPicks && (() => {
                   const searched = query.trim().toLowerCase();
                   const others = [...new Set(displayed.map(l => l.location).filter(loc => loc && loc.toLowerCase() !== searched))].slice(0, 4);
                   if (others.length === 0) return null;
@@ -1458,15 +1532,30 @@ export default function Search() {
 
             {/* Source breakdown */}
             {!loading && Object.keys(sourceCounts).length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', marginBottom: 12 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
                 {Object.entries(sourceCounts).map(([label, count]) => {
-                  const cfg = Object.values(SOURCE_CONFIG).find(c => c.label === label) || { color: '#666', icon: 'fa-solid fa-circle' };
+                  const rawSource = Object.keys(SOURCE_CONFIG).find(k => SOURCE_CONFIG[k].label === label);
+                  const cfg = (rawSource && SOURCE_CONFIG[rawSource]) || { color: '#666', icon: 'fa-solid fa-circle' };
+                  const active = rawSource ? activeFilters.sources[rawSource] !== false : true;
                   return (
-                    <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em', color: 'var(--color-text-muted)' }}>
-                      <i className={cfg.icon} style={{ fontSize: 10, color: cfg.color }} />
-                      <span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{count}</span>
+                    <button
+                      key={label}
+                      onClick={() => rawSource && toggleSourceFilter(rawSource)}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 5,
+                        fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
+                        border: `1px solid ${active ? cfg.color + '55' : 'var(--color-border)'}`,
+                        background: active ? cfg.color + '11' : 'transparent',
+                        color: active ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+                        borderRadius: 20, padding: '4px 10px', cursor: 'pointer',
+                        opacity: active ? 1 : 0.45,
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      <i className={cfg.icon} style={{ fontSize: 10, color: active ? cfg.color : 'inherit' }} />
+                      <span style={{ fontWeight: 500 }}>{count}</span>
                       <span>{label}</span>
-                    </span>
+                    </button>
                   );
                 })}
               </div>
@@ -1480,16 +1569,19 @@ export default function Search() {
             ) : view === 'map' ? (
               <MapPlaceholder />
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: view === 'list' ? '1fr' : 'repeat(3, 1fr)', gap: 12 }}>
-                {displayed.map(listing => (
-                  <ListingCard
-                    key={listing.id}
-                    listing={listing}
-                    saved={isSaved(listing.id) || savedIds.has(listing.id)}
-                    onToggleSave={() => toggleSave(listing)}
-                  />
-                ))}
-              </div>
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: view === 'list' ? '1fr' : 'repeat(3, 1fr)', gap: 12 }}>
+                  {paginated.map(listing => (
+                    <ListingCard
+                      key={listing.id}
+                      listing={listing}
+                      saved={isSaved(listing.id) || savedIds.has(listing.id)}
+                      onToggleSave={() => toggleSave(listing)}
+                    />
+                  ))}
+                </div>
+                {pageCount > 1 && <PaginationBar page={page} pageCount={pageCount} onPageChange={setPage} />}
+              </>
             )}
 
           </div>{/* end right panel */}
@@ -1818,9 +1910,21 @@ export default function Search() {
               onClick={() => {
                 setQuickFilters(prev => {
                   const next = new Set(prev);
-                  next.has(key) ? next.delete(key) : next.add(key);
+                  const turning_on = !next.has(key);
+                  turning_on ? next.add(key) : next.delete(key);
+                  if (key === 'community') {
+                    setActiveFilters(f => ({
+                      ...f,
+                      sources: {
+                        ...f.sources,
+                        nobroker: !turning_on,
+                        housing:  !turning_on,
+                      },
+                    }));
+                  }
                   return next;
                 });
+                setPage(1);
               }}
               style={{
                 flexShrink: 0,
@@ -1875,9 +1979,11 @@ export default function Search() {
                 ? '…'
                 : query.trim()
                   ? `${displayed.length} homes found in ${query.trim()}`
-                  : `${displayed.length} homes found`}
+                  : isTopPicks
+                    ? 'Top picks · Bangalore'
+                    : `${displayed.length} homes found`}
             </h1>
-            {!loading && (() => {
+            {!loading && !isTopPicks && (() => {
               const searched = query.trim().toLowerCase();
               const others = [...new Set(
                 displayed
@@ -1921,24 +2027,30 @@ export default function Search() {
 
         {/* Source breakdown */}
         {!loading && Object.keys(sourceCounts).length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', marginBottom: 14 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
             {Object.entries(sourceCounts).map(([label, count]) => {
-              const cfg = Object.values(SOURCE_CONFIG).find(c => c.label === label)
-                       || { color: '#666', icon: 'fa-solid fa-circle' };
+              const rawSource = Object.keys(SOURCE_CONFIG).find(k => SOURCE_CONFIG[k].label === label);
+              const cfg = (rawSource && SOURCE_CONFIG[rawSource]) || { color: '#666', icon: 'fa-solid fa-circle' };
+              const active = rawSource ? activeFilters.sources[rawSource] !== false : true;
               return (
-                <span key={label} style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 11,
-                  letterSpacing: '0.04em',
-                  color: 'var(--color-text-muted)',
-                }}>
-                  <i className={cfg.icon} style={{ fontSize: 10, color: cfg.color }} />
-                  <span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{count}</span>
+                <button
+                  key={label}
+                  onClick={() => rawSource && toggleSourceFilter(rawSource)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
+                    border: `1px solid ${active ? cfg.color + '55' : 'var(--color-border)'}`,
+                    background: active ? cfg.color + '11' : 'transparent',
+                    color: active ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+                    borderRadius: 20, padding: '4px 10px', cursor: 'pointer',
+                    opacity: active ? 1 : 0.45,
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <i className={cfg.icon} style={{ fontSize: 10, color: active ? cfg.color : 'inherit' }} />
+                  <span style={{ fontWeight: 500 }}>{count}</span>
                   <span>{label}</span>
-                </span>
+                </button>
               );
             })}
           </div>
@@ -1995,27 +2107,33 @@ export default function Search() {
             {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
         ) : view === 'list' ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {displayed.map(listing => (
-              <ListingCard
-                key={listing.id}
-                listing={listing}
-                saved={isSaved(listing.id) || savedIds.has(listing.id)}
-                onToggleSave={() => toggleSave(listing)}
-              />
-            ))}
-          </div>
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {paginated.map(listing => (
+                <ListingCard
+                  key={listing.id}
+                  listing={listing}
+                  saved={isSaved(listing.id) || savedIds.has(listing.id)}
+                  onToggleSave={() => toggleSave(listing)}
+                />
+              ))}
+            </div>
+            {pageCount > 1 && <PaginationBar page={page} pageCount={pageCount} onPageChange={setPage} />}
+          </>
         ) : view === 'grid' ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-            {displayed.map(listing => (
-              <GridCard
-                key={listing.id}
-                listing={listing}
-                saved={isSaved(listing.id) || savedIds.has(listing.id)}
-                onToggleSave={() => toggleSave(listing)}
-              />
-            ))}
-          </div>
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+              {paginated.map(listing => (
+                <GridCard
+                  key={listing.id}
+                  listing={listing}
+                  saved={isSaved(listing.id) || savedIds.has(listing.id)}
+                  onToggleSave={() => toggleSave(listing)}
+                />
+              ))}
+            </div>
+            {pageCount > 1 && <PaginationBar page={page} pageCount={pageCount} onPageChange={setPage} />}
+          </>
         ) : (
           <MapPlaceholder />
         )}

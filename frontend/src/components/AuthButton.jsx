@@ -1,50 +1,63 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
+function Avatar({ user }) {
+  const [imgError, setImgError] = useState(false);
+  const avatarUrl = user.user_metadata?.avatar_url;
+  const initial = (user.user_metadata?.full_name?.[0] || user.email?.[0] || 'U').toUpperCase();
+
+  const fallbackStyle = {
+    width: 30,
+    height: 30,
+    borderRadius: '50%',
+    background: 'rgba(232,160,32,0.12)',
+    border: '1px solid rgba(232,160,32,0.3)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontFamily: 'var(--font-mono)',
+    fontSize: 12,
+    fontWeight: 500,
+    color: 'var(--color-amber)',
+    letterSpacing: '0.05em',
+    flexShrink: 0,
+  };
+
+  if (avatarUrl && !imgError) {
+    return (
+      <img
+        src={avatarUrl}
+        alt="avatar"
+        referrerPolicy="no-referrer"
+        onError={() => setImgError(true)}
+        style={{
+          width: 30,
+          height: 30,
+          borderRadius: '50%',
+          border: '1px solid var(--color-border)',
+          flexShrink: 0,
+        }}
+      />
+    );
+  }
+
+  return <div style={fallbackStyle}>{initial}</div>;
+}
+
 export function AuthButton() {
-  const { user, loading, signInWithGoogle, signOut } = useAuth()
+  const { user, loading, signInWithGoogle } = useAuth()
 
   if (loading) return null
 
   if (user) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Link
-          to="/profile"
-          style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}
-        >
-          {user.user_metadata?.avatar_url ? (
-            <img
-              src={user.user_metadata.avatar_url}
-              alt="avatar"
-              style={{
-                width: 30,
-                height: 30,
-                borderRadius: '50%',
-                border: '1px solid var(--color-border)',
-              }}
-            />
-          ) : (
-            <div style={{
-              width: 30,
-              height: 30,
-              borderRadius: '50%',
-              background: 'rgba(232,160,32,0.12)',
-              border: '1px solid rgba(232,160,32,0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 12,
-              fontWeight: 500,
-              color: 'var(--color-amber)',
-              letterSpacing: '0.05em',
-            }}>
-              {(user.user_metadata?.full_name?.[0] || user.email?.[0] || 'U').toUpperCase()}
-            </div>
-          )}
-        </Link>
-      </div>
+      <Link
+        to="/profile"
+        style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}
+      >
+        <Avatar user={user} />
+      </Link>
     )
   }
 

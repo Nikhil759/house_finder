@@ -461,40 +461,41 @@ function MyListingCard({ listing, onRemove, onStageChange, onNoteSave }) {
             state={{ listing: listing._raw }}
             style={{
               marginLeft: 'auto',
-              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
-              background: 'none', color: 'var(--color-text-muted)',
-              border: '0.5px solid #2A2A2A', borderRadius: 6,
-              padding: '0 14px', height: 30,
+              fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500,
+              letterSpacing: '0.06em',
+              color: 'var(--color-amber)',
+              border: '1px solid rgba(232,160,32,0.3)',
+              background: 'rgba(232,160,32,0.05)',
+              borderRadius: 6, padding: '0 14px', height: 34,
               display: 'inline-flex', alignItems: 'center',
-              textDecoration: 'none', transition: 'border-color 0.2s, color 0.2s',
+              textDecoration: 'none', transition: 'border-color 0.2s, background 0.2s',
             }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#444'; e.currentTarget.style.color = 'var(--color-text-primary)'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#2A2A2A'; e.currentTarget.style.color = 'var(--color-text-muted)'; }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-amber)'; e.currentTarget.style.background = 'rgba(232,160,32,0.12)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(232,160,32,0.3)'; e.currentTarget.style.background = 'rgba(232,160,32,0.05)'; }}
           >
             Details
           </Link>
-          {listing.url ? (
+          {listing.url && (
             <a
               href={listing.url}
               target="_blank"
               rel="noopener noreferrer"
               style={{
-                fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 500,
-                background: 'var(--color-amber)', color: '#1a0a00', border: 'none',
-                borderRadius: 6, padding: '0 16px', height: 30, cursor: 'pointer',
-                textDecoration: 'none', display: 'inline-flex', alignItems: 'center',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500,
+                letterSpacing: '0.06em',
+                color: 'var(--color-amber)',
+                border: '1px solid rgba(232,160,32,0.3)',
+                background: 'rgba(232,160,32,0.05)',
+                borderRadius: 6, padding: '0 14px', height: 34,
+                textDecoration: 'none', transition: 'border-color 0.2s, background 0.2s',
               }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-amber)'; e.currentTarget.style.background = 'rgba(232,160,32,0.12)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(232,160,32,0.3)'; e.currentTarget.style.background = 'rgba(232,160,32,0.05)'; }}
             >
-              Open →
+              <i className="fa-solid fa-arrow-up-right-from-square" style={{ fontSize: 12 }} />
+              Source
             </a>
-          ) : (
-            <button style={{
-              fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 500,
-              background: 'var(--color-amber)', color: '#1a0a00', border: 'none',
-              borderRadius: 6, padding: '0 16px', height: 30, cursor: 'pointer',
-            }}>
-              Open →
-            </button>
           )}
         </div>
 
@@ -521,87 +522,122 @@ function NewLeadCard({ listing, onSave, onHide, isSavedFn }) {
   const alreadySaved = isSavedFn?.(listing.id);
 
   return (
-    <article style={{ ...s.card, marginBottom: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <SourceBadge source={listing.source} />
-          <span style={{ ...s.monoSmall }}>{listing.timeAgo}</span>
+    <Link
+      to={`/listing/${listing.id}`}
+      state={{ listing: listing._raw }}
+      style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+    >
+      <article
+        style={{ ...s.card, marginBottom: 8, cursor: 'pointer', transition: 'background 0.15s' }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-bg-card)'; }}
+        onMouseLeave={e => { e.currentTarget.style.background = s.card.background; }}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <SourceBadge source={listing.source} />
+            <span style={{ ...s.monoSmall }}>{listing.timeAgo}</span>
+          </div>
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2,
+            border: '1px solid var(--color-border)', borderRadius: 6, padding: '6px 10px',
+          }}>
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 500,
+              color: scoreColor(listing.score), letterSpacing: '-0.03em', lineHeight: 1,
+            }}>
+              {listing.score}
+            </span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-muted)', letterSpacing: '0.1em' }}>
+              IQ SCORE
+            </span>
+          </div>
         </div>
-        <div style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2,
-          border: '1px solid var(--color-border)', borderRadius: 6, padding: '6px 10px',
-        }}>
+
+        <h3 style={{ fontWeight: 300, fontSize: 15, lineHeight: 1.4, marginBottom: 10 }}>
+          {listing.title}
+        </h3>
+
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
+          {[listing.bhk, listing.sqft ? `${listing.sqft} sqft` : null, listing.location].filter(Boolean).map(spec => (
+            <span key={spec} style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
+              color: 'var(--color-text-muted)', background: 'var(--color-bg-card)',
+              borderRadius: 4, padding: '3px 8px',
+            }}>
+              {spec}
+            </span>
+          ))}
           <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 500,
-            color: scoreColor(listing.score), letterSpacing: '-0.03em', lineHeight: 1,
+            fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 500,
+            color: 'var(--color-text-primary)', marginLeft: 'auto',
           }}>
-            {listing.score}
-          </span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-muted)', letterSpacing: '0.1em' }}>
-            IQ SCORE
+            {listing.price}
           </span>
         </div>
-      </div>
 
-      <h3 style={{ fontWeight: 300, fontSize: 15, lineHeight: 1.4, marginBottom: 10 }}>
-        {listing.title}
-      </h3>
-
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
-        {[listing.bhk, listing.sqft ? `${listing.sqft} sqft` : null, listing.location].filter(Boolean).map(spec => (
-          <span key={spec} style={{
-            fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
-            color: 'var(--color-text-muted)', background: 'var(--color-bg-card)',
-            borderRadius: 4, padding: '3px 8px',
-          }}>
-            {spec}
-          </span>
-        ))}
-        <span style={{
-          fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 500,
-          color: 'var(--color-text-primary)', marginLeft: 'auto',
-        }}>
-          {listing.price}
-        </span>
-      </div>
-
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          style={{
-            fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.05em',
-            background: 'none',
-            border: `1px solid ${alreadySaved ? '#E8394D' : 'var(--color-border)'}`,
-            color: alreadySaved ? '#E8394D' : 'var(--color-text-muted)',
-            borderRadius: 6, padding: '7px 14px', cursor: saving ? 'default' : 'pointer',
-            display: 'flex', alignItems: 'center', gap: 6,
-            transition: 'border-color 0.2s, color 0.2s',
-            opacity: saving ? 0.6 : 1,
-          }}
-        >
-          <i
-            className={alreadySaved ? 'fa-solid fa-heart' : 'fa-regular fa-heart'}
-            style={{ animation: popped ? 'heartPop 0.35s ease' : 'none' }}
-          />
-          {alreadySaved ? 'Saved' : 'Save'}
-        </button>
-        <button
-          onClick={() => onHide?.(listing.id)}
-          style={{
-            fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.05em',
-            background: 'none', border: '1px solid var(--color-border)',
-            color: 'var(--color-text-muted)', borderRadius: 6,
-            padding: '7px 14px', cursor: 'pointer',
-            transition: 'border-color 0.2s, color 0.2s',
-          }}
-          onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-text-muted)'}
-          onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--color-border)'}
-        >
-          ✕ Hide
-        </button>
-      </div>
-    </article>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={e => { e.preventDefault(); e.stopPropagation(); handleSave(); }}
+            disabled={saving}
+            style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.05em',
+              background: 'none',
+              border: `1px solid ${alreadySaved ? '#E8394D' : 'var(--color-border)'}`,
+              color: alreadySaved ? '#E8394D' : 'var(--color-text-muted)',
+              borderRadius: 6, padding: '7px 14px', cursor: saving ? 'default' : 'pointer',
+              display: 'flex', alignItems: 'center', gap: 6,
+              transition: 'border-color 0.2s, color 0.2s',
+              opacity: saving ? 0.6 : 1,
+            }}
+          >
+            <i
+              className={alreadySaved ? 'fa-solid fa-heart' : 'fa-regular fa-heart'}
+              style={{ animation: popped ? 'heartPop 0.35s ease' : 'none' }}
+            />
+            {alreadySaved ? 'Saved' : 'Save'}
+          </button>
+          <button
+            onClick={e => { e.preventDefault(); e.stopPropagation(); onHide?.(listing.id); }}
+            style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.05em',
+              background: 'none', border: '1px solid var(--color-border)',
+              color: 'var(--color-text-muted)', borderRadius: 6,
+              padding: '7px 14px', cursor: 'pointer',
+              transition: 'border-color 0.2s, color 0.2s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-text-muted)'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--color-border)'}
+          >
+            ✕ Hide
+          </button>
+          {listing.url && (
+            <a
+              href={listing.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              style={{
+                marginLeft: 'auto',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500,
+                letterSpacing: '0.06em',
+                color: 'var(--color-amber)',
+                border: '1px solid rgba(232,160,32,0.3)',
+                background: 'rgba(232,160,32,0.05)',
+                borderRadius: 6, padding: '0 14px', height: 34,
+                textDecoration: 'none',
+                transition: 'border-color 0.2s, background 0.2s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-amber)'; e.currentTarget.style.background = 'rgba(232,160,32,0.12)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(232,160,32,0.3)'; e.currentTarget.style.background = 'rgba(232,160,32,0.05)'; }}
+            >
+              <i className="fa-solid fa-arrow-up-right-from-square" style={{ fontSize: 12 }} />
+              Source
+            </a>
+          )}
+        </div>
+      </article>
+    </Link>
   );
 }
 
@@ -623,10 +659,12 @@ export default function MyHub() {
 
   const { savedSearches } = useSavedSearches(user);
 
-  const [mainTab, setMainTab]         = useState('My Listings');
+  const [mainTab, setMainTab]         = useState('Saved Leads');
   const [stageFilter, setStageFilter] = useState('All');
   const [timeFilter, setTimeFilter]   = useState('Last 24h');
   const [hiddenLeads, setHiddenLeads] = useState(new Set());
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
+  const LEADS_PER_GROUP = 5;
 
   // Must be memoized — a bare sinceForFilter() call produces a new Date string
   // every render, which re-triggers useNewListings's useEffect endlessly.
@@ -809,7 +847,7 @@ export default function MyHub() {
   }
 
   return (
-    <div style={{ ...s.page, marginLeft: isDesktop ? 240 : 0, paddingBottom: isDesktop ? 40 : undefined }}>
+    <div style={{ ...s.page, marginLeft: isDesktop ? 240 : 0, paddingBottom: isDesktop ? 40 : 100 }}>
       <DesktopSidebar />
 
       <AppHeader />
@@ -828,7 +866,7 @@ export default function MyHub() {
           background: 'var(--color-bg-surface)',
           borderRadius: 'var(--radius-card)', padding: 3,
         }}>
-          {['My Listings', 'New Leads'].map(tab => (
+          {['Saved Leads', 'New Leads'].map(tab => (
             <button
               key={tab}
               onClick={() => setMainTab(tab)}
@@ -866,7 +904,7 @@ export default function MyHub() {
       }}>
 
         {/* ════════════════════════════════ MY LISTINGS ═══════════════════════════ */}
-        {mainTab === 'My Listings' && (
+        {mainTab === 'Saved Leads' && (
           <div style={isDesktop ? { display: 'flex', gap: 32, alignItems: 'flex-start' } : {}}>
 
             {/* ── LEFT: pipeline + stage filters ── */}
@@ -925,7 +963,7 @@ export default function MyHub() {
                   background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)',
                 }}>
                   <p style={{ ...s.monoSmall, fontSize: 13 }}>
-                    {stageFilter === 'All' ? 'No saved listings yet.' : `No listings in ${stageFilter} stage.`}
+                    {stageFilter === 'All' ? 'No saved leads yet.' : `No leads in ${stageFilter} stage.`}
                   </p>
                   <Link to="/search" style={{
                     display: 'inline-block', marginTop: 16,
@@ -1000,9 +1038,12 @@ export default function MyHub() {
             )}
 
             {/* Lead groups — rendered directly from hook output, same as NewForYou.jsx */}
-            {Object.values(newListings).map(({ search, listings, count }) => {
+            {Object.values(newListings).map(({ search, listings }) => {
               const visible = listings.filter(l => !hiddenLeads.has(l.id));
               if (visible.length === 0) return null;
+              const isExpanded = expandedGroups.has(search.id);
+              const shown = isExpanded ? visible : visible.slice(0, LEADS_PER_GROUP);
+              const remaining = visible.length - LEADS_PER_GROUP;
               return (
                 <section key={search.id} style={{ marginBottom: 32 }}>
                   <div style={{
@@ -1029,7 +1070,7 @@ export default function MyHub() {
                     </div>
                   </div>
 
-                  {visible.map(listing => (
+                  {shown.map(listing => (
                     <NewLeadCard
                       key={listing.id}
                       listing={normalizeNewLead(listing)}
@@ -1038,6 +1079,41 @@ export default function MyHub() {
                       isSavedFn={isSaved}
                     />
                   ))}
+
+                  {!isExpanded && remaining > 0 && (
+                    <button
+                      onClick={() => setExpandedGroups(prev => new Set([...prev, search.id]))}
+                      style={{
+                        width: '100%',
+                        fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
+                        background: 'none', border: '1px solid var(--color-border)',
+                        color: 'var(--color-text-muted)', borderRadius: 8,
+                        padding: '10px', cursor: 'pointer', marginTop: 4,
+                        transition: 'border-color 0.2s, color 0.2s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-amber)'; e.currentTarget.style.color = 'var(--color-amber)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-muted)'; }}
+                    >
+                      Show {remaining} more →
+                    </button>
+                  )}
+                  {isExpanded && visible.length > LEADS_PER_GROUP && (
+                    <button
+                      onClick={() => setExpandedGroups(prev => { const next = new Set(prev); next.delete(search.id); return next; })}
+                      style={{
+                        width: '100%',
+                        fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
+                        background: 'none', border: '1px solid var(--color-border)',
+                        color: 'var(--color-text-muted)', borderRadius: 8,
+                        padding: '10px', cursor: 'pointer', marginTop: 4,
+                        transition: 'border-color 0.2s, color 0.2s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-text-muted)'; e.currentTarget.style.color = 'var(--color-text-primary)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-muted)'; }}
+                    >
+                      Show less ↑
+                    </button>
+                  )}
                 </section>
               );
             })}

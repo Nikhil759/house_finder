@@ -78,12 +78,21 @@ const s = {
   },
 };
 
+const FEED_SOURCE_COLORS = {
+  reddit:   { color: '#F97316', bg: 'rgba(249,115,22,0.1)',  border: 'rgba(249,115,22,0.3)'  },
+  telegram: { color: '#38BDF8', bg: 'rgba(56,189,248,0.1)', border: 'rgba(56,189,248,0.3)'  },
+  news:     { color: '#60A5FA', bg: 'rgba(96,165,250,0.1)', border: 'rgba(96,165,250,0.3)'  },
+};
+
 function SourceBadge({ source }) {
+  const cfg = FEED_SOURCE_COLORS[(source || '').toLowerCase()] || null;
   return (
     <span style={{
       fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em',
-      textTransform: 'uppercase', background: 'var(--color-bg-card)',
-      color: 'var(--color-text-muted)', border: '1px solid var(--color-border)',
+      textTransform: 'uppercase',
+      background: cfg ? cfg.bg : 'var(--color-bg-card)',
+      color: cfg ? cfg.color : 'var(--color-text-muted)',
+      border: `1px solid ${cfg ? cfg.border : 'var(--color-border)'}`,
       borderRadius: 4, padding: '3px 8px',
     }}>
       {source}

@@ -19,9 +19,9 @@ const TIER_META = [
 
 // Tier-specific colors matching LocalityGuide palette
 const TIER_COLORS = {
-  'Premium':    { bar: '#7C6AF5', label: '#7C6AF5', border: 'rgba(124,106,245,0.2)' },
-  'Mid-Range':  { bar: '#60A5FA', label: '#60A5FA', border: 'rgba(96,165,250,0.2)'  },
-  'Affordable': { bar: '#34D399', label: '#34D399', border: 'rgba(52,211,153,0.2)'  },
+  'Premium':    { bar: 'var(--color-amber)', label: 'var(--color-amber)', border: 'rgba(232,160,32,0.15)' },
+  'Mid-Range':  { bar: 'var(--color-amber)', label: 'var(--color-amber)', border: 'rgba(232,160,32,0.15)' },
+  'Affordable': { bar: 'var(--color-amber)', label: 'var(--color-amber)', border: 'rgba(232,160,32,0.15)' },
 };
 
 // How many rows to show per tier in collapsed state (total = 5)
@@ -109,16 +109,24 @@ const s = {
 };
 
 // ── Sub-components ────────────────────────────────────────────────────────────
+const FEED_SOURCE_COLORS = {
+  reddit:   { color: '#F97316', bg: 'rgba(249,115,22,0.1)',  border: 'rgba(249,115,22,0.3)'  },
+  telegram: { color: '#38BDF8', bg: 'rgba(56,189,248,0.1)', border: 'rgba(56,189,248,0.3)'  },
+  news:     { color: '#60A5FA', bg: 'rgba(96,165,250,0.1)', border: 'rgba(96,165,250,0.3)'  },
+};
+
 function SourceBadge({ source }) {
+  const key = (source || '').toLowerCase();
+  const cfg = FEED_SOURCE_COLORS[key] || null;
   return (
     <span style={{
       fontFamily: 'var(--font-mono)',
       fontSize: 10,
       letterSpacing: '0.1em',
       textTransform: 'uppercase',
-      background: 'var(--color-bg-card)',
-      color: 'var(--color-text-muted)',
-      border: '1px solid var(--color-border)',
+      background: cfg ? cfg.bg : 'var(--color-bg-card)',
+      color: cfg ? cfg.color : 'var(--color-text-muted)',
+      border: `1px solid ${cfg ? cfg.border : 'var(--color-border)'}`,
       borderRadius: 4,
       padding: '3px 8px',
     }}>
