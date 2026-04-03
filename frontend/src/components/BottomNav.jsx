@@ -22,7 +22,7 @@ const TABS = [
   },
   {
     label: 'My Hub',
-    icon: 'fa-solid fa-bookmark',
+    icon: 'fa-solid fa-layer-group',
     to: '/new',
     match: path => path.startsWith('/new'),
   },

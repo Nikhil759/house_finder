@@ -1,11 +1,12 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { AuthButton } from './AuthButton';
 
 const NAV_ITEMS = [
   { label: 'Home',    icon: 'fa-solid fa-house',        to: '/',               match: p => p === '/' },
   { label: 'Search',  icon: 'fa-solid fa-magnifying-glass', to: '/app',        match: p => p.startsWith('/app') || p.startsWith('/listing') },
   { label: 'Pulse',   icon: 'fa-solid fa-chart-line',   to: '/locality-guide', match: p => p.startsWith('/locality-guide') || p.startsWith('/neighbourhood-pulse') },
-  { label: 'My Hub',  icon: 'fa-solid fa-bookmark',     to: '/new',            match: p => p.startsWith('/new') },
+  { label: 'My Hub',  icon: 'fa-solid fa-layer-group',     to: '/new',            match: p => p.startsWith('/new') },
   { label: 'Profile', icon: 'fa-solid fa-user',         to: '/profile',        match: p => p.startsWith('/profile') },
 ];
 
@@ -97,11 +98,14 @@ export default function DesktopSidebar() {
         })}
       </nav>
 
-      {/* Footer */}
+      {/* Footer: avatar + wordmark */}
       <div style={{
-        padding: '16px 20px',
+        padding: '14px 20px',
         borderTop: '0.5px solid #1a1a1a',
         flexShrink: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
       }}>
         <span style={{
           fontFamily: 'var(--font-mono)',
@@ -112,6 +116,7 @@ export default function DesktopSidebar() {
         }}>
           NestIQ · Bangalore
         </span>
+        <AuthButton />
       </div>
     </aside>
   );

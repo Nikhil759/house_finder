@@ -287,6 +287,14 @@ export default function ListingDetail() {
 
   const localitySlug = listing?.locality ? localityToSlug(listing.locality) : '';
   const sourceLabel  = normalizeSource(listing?.source);
+  const SOURCE_BRAND = {
+    reddit:   '#F97316',
+    nobroker: '#E63946',
+    housing:  '#7C3AED',
+    'housing.com': '#7C3AED',
+    telegram: '#38BDF8',
+  };
+  const brandColor = SOURCE_BRAND[(listing?.source || '').toLowerCase()] || 'var(--color-amber)';
 
   function handleCopyScript() {
     const script = `Hi, I saw your listing for "${listing?.title}" on NestIQ. I'm interested in viewing the property. Could you please share more details? Thank you.`;
@@ -360,9 +368,9 @@ export default function ListingDetail() {
       }}>
         <span style={{
           fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.12em',
-          textTransform: 'uppercase', color: '#4caf82',
-          background: 'rgba(76,175,130,0.1)',
-          border: '1px solid rgba(76,175,130,0.25)',
+          textTransform: 'uppercase', color: brandColor,
+          background: brandColor + '1a',
+          border: `1px solid ${brandColor}40`,
           borderRadius: 4, padding: '3px 8px',
         }}>
           ✓ {sourceLabel}
@@ -784,7 +792,7 @@ export default function ListingDetail() {
                   onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
                   onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
                 >
-                  Open →
+                  Open on {sourceLabel} →
                 </a>
               ) : listing.contact_phone ? (
                 <a
@@ -951,7 +959,7 @@ export default function ListingDetail() {
             onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
             onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
           >
-            Open →
+            Open on {sourceLabel} →
           </a>
         ) : listing.contact_phone ? (
           <a

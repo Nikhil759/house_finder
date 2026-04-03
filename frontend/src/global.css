@@ -201,9 +201,9 @@ body { transition: background 0.25s ease, color 0.25s ease; }
     display: none !important;
   }
 
-  /* Hide the logo inside AppHeader on desktop (sidebar has it) */
-  .nestiq-header-logo {
-    display: none;
+  /* Hide the entire AppHeader on desktop (sidebar handles navigation + avatar) */
+  .nestiq-app-header {
+    display: none !important;
   }
 
   /* Push page content right to clear sidebar */

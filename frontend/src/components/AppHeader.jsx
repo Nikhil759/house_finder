@@ -24,7 +24,7 @@ export default function AppHeader({ backTo = false, transparent = false }) {
   }, [transparent]);
 
   return (
-    <header style={{
+    <header className="nestiq-app-header" style={{
       position: 'sticky',
       top: 0,
       zIndex: 100,
