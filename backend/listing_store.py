@@ -22,7 +22,9 @@ _pool_lock = threading.Lock()
 
 
 def _use_postgres():
-    return bool(_DATABASE_URL)
+    # Read at call time so load_dotenv() in app.py (which runs after this
+    # module is imported) is not missed.
+    return bool(os.environ.get("DATABASE_URL", "") or _DATABASE_URL)
 
 
 def _get_pg_pool():
@@ -34,7 +36,7 @@ def _get_pg_pool():
         if _pg_pool is not None:
             return _pg_pool
         from psycopg2 import pool as pg_pool
-        url = _DATABASE_URL
+        url = os.environ.get("DATABASE_URL", "") or _DATABASE_URL
         if url.startswith("postgres://"):
             url = "postgresql://" + url[len("postgres://"):]
         _pg_pool = pg_pool.ThreadedConnectionPool(
@@ -443,9 +445,92 @@ _LISTING_SELECT = """
            is_flatmate, is_sponsored, thumbnail_url,
            EXTRACT(EPOCH FROM posted_at)::FLOAT as posted_epoch,
            quality_score, raw_payload,
-           id, duplicate_group_id
+           id, duplicate_group_id,
+           society_name, society_place_id, image_urls, images
     FROM listings
 """
+
+
+def _build_image_list(
+    images_jsonb,       # row[36] — jsonb column, already deserialized by psycopg2
+    image_urls,         # row[35] — text[]
+    society_place_id,   # row[34]
+    locality,           # row[12]
+):
+    """
+    Build a unified image list for a listing response.
+
+    Priority order:
+      1. images jsonb column (NoBroker interior shots with full metadata)
+      2. image_urls text[] fallback → converted to the same structure
+      3. society_images rows for society_place_id (society exterior shots)
+      4. locality_images row for locality (locality hero, always last)
+    """
+    result = []
+
+    # 1 / 2 — listing interior shots
+    if images_jsonb:
+        entries = images_jsonb if isinstance(images_jsonb, list) else []
+        result.extend(entries)
+    elif image_urls:
+        for url in image_urls:
+            if url and url.strip():
+                result.append({
+                    "url":         url,
+                    "source":      "nobroker",
+                    "image_type":  "listing_interior",
+                    "attribution": "NoBroker",
+                })
+
+    # 3 — society exterior shots
+    if society_place_id:
+        conn, is_pg = _get_conn()
+        if is_pg:
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT image_urls FROM society_images WHERE place_id = %s LIMIT 1",
+                    (society_place_id,),
+                )
+                soc_row = cur.fetchone()
+                if soc_row and soc_row[0]:
+                    for url in soc_row[0]:
+                        if url and url.strip():
+                            result.append({
+                                "url":         url,
+                                "source":      "google_places",
+                                "image_type":  "society_exterior",
+                                "attribution": "Google",
+                            })
+            except Exception as e:
+                logger.warning("_build_image_list: society_images query failed: %s", e)
+            finally:
+                _put_conn(conn)
+
+    # 4 — locality hero (always appended as final fallback)
+    if locality:
+        conn, is_pg = _get_conn()
+        if is_pg:
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT image_url FROM locality_images WHERE locality = %s LIMIT 1",
+                    (locality,),
+                )
+                loc_row = cur.fetchone()
+                if loc_row and loc_row[0]:
+                    result.append({
+                        "url":         loc_row[0],
+                        "source":      "google_places",
+                        "image_type":  "locality_hero",
+                        "attribution": "Google",
+                    })
+            except Exception as e:
+                logger.warning("_build_image_list: locality_images query failed: %s", e)
+            finally:
+                _put_conn(conn)
+
+    return result
 
 
 def _row_to_listing(row):
@@ -487,6 +572,16 @@ def _row_to_listing(row):
         "created": row[28] or 0,
         "created_utc": row[28] or 0,
         "quality_score": row[29] or 0,
+        "society_name":      row[33],
+        "society_place_id":  row[34],
+        "image_urls":        row[35] or [],
+        "images":            row[36] or [],
+        "image_list": _build_image_list(
+            images_jsonb=row[36],
+            image_urls=row[35],
+            society_place_id=row[34],
+            locality=row[12],
+        ),
     })
     return base
 

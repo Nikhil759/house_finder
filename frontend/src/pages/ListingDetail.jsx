@@ -141,6 +141,141 @@ function ScoreRing({ score, size = 100 }) {
   );
 }
 
+// ── Image Gallery ─────────────────────────────────────────────────────────────
+function TypeBadge({ imageType }) {
+  if (imageType === 'society_exterior') {
+    return (
+      <span style={{
+        fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em',
+        textTransform: 'uppercase', color: '#1a0a00',
+        background: '#E8A020', borderRadius: 3, padding: '2px 6px',
+      }}>
+        Society
+      </span>
+    );
+  }
+  if (imageType === 'locality_hero') {
+    return (
+      <span style={{
+        fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em',
+        textTransform: 'uppercase', color: '#999',
+        background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)',
+        borderRadius: 3, padding: '2px 6px',
+      }}>
+        Area
+      </span>
+    );
+  }
+  return null;
+}
+
+function ImageGallery({ images, locality, heroHeight }) {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const imgs = (images && images.length > 0) ? images.slice(0, 10) : [];
+  const active = imgs[activeIdx] || null;
+
+  if (!active) {
+    return (
+      <div style={{
+        height: heroHeight,
+        background: '#111',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        position: 'relative', overflow: 'hidden',
+      }}>
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'radial-gradient(ellipse 70% 60% at 50% 50%, rgba(232,160,32,0.06) 0%, transparent 70%)',
+        }} />
+        <div style={{ textAlign: 'center', position: 'relative' }}>
+          <p style={{ fontSize: 32, marginBottom: 8 }}>🏙</p>
+          <p style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em',
+            textTransform: 'uppercase', color: '#666',
+          }}>
+            {locality || 'Photos coming soon'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      {/* Hero image */}
+      <div style={{
+        position: 'relative', height: heroHeight, overflow: 'hidden',
+        background: '#0A0A0A',
+      }}>
+        <img
+          src={active.url}
+          alt=""
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+        {/* Type badge — bottom-left */}
+        {active.image_type && active.image_type !== 'listing_interior' && (
+          <div style={{ position: 'absolute', bottom: 10, left: 10 }}>
+            <TypeBadge imageType={active.image_type} />
+          </div>
+        )}
+        {/* Attribution — bottom-right, only for Google images */}
+        {active.attribution === 'Google' && (
+          <span style={{
+            position: 'absolute', bottom: 8, right: 10,
+            fontFamily: 'var(--font-mono)', fontSize: 9,
+            color: 'rgba(255,255,255,0.55)', letterSpacing: '0.04em',
+          }}>
+            📷 Google
+          </span>
+        )}
+        {/* Image counter */}
+        {imgs.length > 1 && (
+          <span style={{
+            position: 'absolute', top: 10, right: 10,
+            fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.06em',
+            color: 'rgba(255,255,255,0.7)',
+            background: 'rgba(0,0,0,0.5)', borderRadius: 3, padding: '3px 7px',
+          }}>
+            {activeIdx + 1}/{imgs.length}
+          </span>
+        )}
+      </div>
+
+      {/* Thumbnail strip */}
+      {imgs.length > 1 && (
+        <div style={{
+          display: 'flex', gap: 3, overflowX: 'auto', scrollbarWidth: 'none',
+          background: '#0A0A0A', padding: '3px 3px 0',
+        }}>
+          {imgs.map((img, i) => (
+            <button
+              key={i}
+              onClick={() => setActiveIdx(i)}
+              style={{
+                flexShrink: 0, width: 64, height: 46,
+                padding: 0, border: 'none', cursor: 'pointer',
+                position: 'relative', overflow: 'hidden',
+                outline: i === activeIdx ? '2px solid #E8A020' : '2px solid transparent',
+                outlineOffset: -2,
+                borderRadius: 2,
+                opacity: i === activeIdx ? 1 : 0.55,
+                transition: 'opacity 0.15s, outline-color 0.15s',
+              }}
+              aria-label={`Image ${i + 1}`}
+            >
+              <img
+                src={img.url}
+                alt=""
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const s = {
   page: {
@@ -184,6 +319,8 @@ export default function ListingDetail() {
   const isDesktop = useDesktop();
 
   // If navigated from a search card, the raw listing is passed as state — use it immediately
+  // for instant render, but always fetch the full detail from the API so fields like
+  // image_list / society_name that aren't in search results are available.
   const seedListing = location.state?.listing ?? null;
 
   const [listing,        setListing]        = useState(seedListing);
@@ -195,28 +332,32 @@ export default function ListingDetail() {
   const [descExpanded,   setDescExpanded]   = useState(false);
   const [copiedScript,   setCopiedScript]   = useState(false);
 
-  // Fetch main listing from API (only if not already seeded from router state)
+  // Always fetch the full listing from the API.
+  // When seedListing is present we skip the loading spinner but still hydrate
+  // image_list and other detail-only fields once the response arrives.
   useEffect(() => {
-    if (!id || seedListing) return;
+    if (!id) return;
     let cancelled = false;
     async function load() {
-      setLoading(true);
-      setNotFound(false);
+      if (!seedListing) { setLoading(true); setNotFound(false); }
       try {
         const res = await fetch(`${API_BASE}/api/listing/${id}`);
-        if (!res.ok) { setNotFound(true); setLoading(false); return; }
+        if (!res.ok) {
+          if (!seedListing) { setNotFound(true); setLoading(false); }
+          return;
+        }
         const data = await res.json();
         if (cancelled) return;
         setListing(data);
       } catch {
-        if (!cancelled) setNotFound(true);
+        if (!cancelled && !seedListing) setNotFound(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
     load();
     return () => { cancelled = true; };
-  }, [id, seedListing]);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch locality stats from Supabase once we have the locality
   useEffect(() => {
@@ -389,35 +530,12 @@ export default function ListingDetail() {
       {/* ── LEFT COLUMN (image + content) ── */}
       <div style={isDesktop ? { flex: 1, minWidth: 0 } : {}}>
 
-      {/* ── IMAGE PLACEHOLDER ── */}
-      <div style={{
-        height: isDesktop ? 280 : 180,
-        background: 'var(--color-bg-surface)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        borderBottom: '1px solid var(--color-border)',
-        position: 'relative', overflow: 'hidden',
-      }}>
-        {listing.thumbnail_url ? (
-          <img
-            src={listing.thumbnail_url}
-            alt={listing.title}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-        ) : (
-          <>
-            <div style={{
-              position: 'absolute', inset: 0,
-              background: 'radial-gradient(ellipse 70% 60% at 50% 50%, rgba(232,160,32,0.06) 0%, transparent 70%)',
-            }} />
-            <div style={{ textAlign: 'center', position: 'relative' }}>
-              <p style={{ fontSize: 32, marginBottom: 8 }}>🏙</p>
-              <p style={{ ...s.monoSmall, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-                Photos coming soon
-              </p>
-            </div>
-          </>
-        )}
-      </div>
+      {/* ── IMAGE GALLERY ── */}
+      <ImageGallery
+        images={listing.image_list}
+        locality={listing.locality}
+        heroHeight={isDesktop ? 320 : 240}
+      />
 
       <div style={{ padding: isDesktop ? '20px 24px 0' : '20px 16px 0' }}>
 

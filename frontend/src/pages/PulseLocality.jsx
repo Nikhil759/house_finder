@@ -153,13 +153,14 @@ export default function PulseLocality() {
   const locality = slugToLocality(slug);
 
   // Data state
-  const [statsRows,   setStatsRows]   = useState([]);
-  const [depositRows, setDepositRows] = useState([]);
-  const [feedPosts,   setFeedPosts]   = useState([]);
-  const [topicCounts, setTopicCounts] = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [feedLoading, setFeedLoading] = useState(true);
-  const [notFound,    setNotFound]    = useState(false);
+  const [statsRows,    setStatsRows]    = useState([]);
+  const [depositRows,  setDepositRows]  = useState([]);
+  const [feedPosts,    setFeedPosts]    = useState([]);
+  const [topicCounts,  setTopicCounts]  = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [feedLoading,  setFeedLoading]  = useState(true);
+  const [notFound,     setNotFound]     = useState(false);
+  const [localityImage, setLocalityImage] = useState(null);
 
   // Fetch stats + global deposit benchmarks
   useEffect(() => {
@@ -167,7 +168,7 @@ export default function PulseLocality() {
     async function load() {
       setLoading(true);
       setNotFound(false);
-      const [{ data: sData }, { data: dData }] = await Promise.all([
+      const [{ data: sData }, { data: dData }, { data: imgData }] = await Promise.all([
         supabase
           .from('locality_stats_cache')
           .select('bhk, median_rent, p25_rent, p75_rent, listing_count, updated_at')
@@ -177,6 +178,11 @@ export default function PulseLocality() {
           .from('deposit_stats_cache')
           .select('bhk, avg_multiplier, median_deposit')
           .order('bhk'),
+        supabase
+          .from('locality_images')
+          .select('image_url, attribution')
+          .eq('locality', locality)
+          .single(),
       ]);
       if (cancelled) return;
       if (!sData || sData.length === 0) {
@@ -185,6 +191,7 @@ export default function PulseLocality() {
         setStatsRows(sData);
         setDepositRows(dData || []);
       }
+      if (imgData?.image_url) setLocalityImage(imgData);
       setLoading(false);
     }
     load();
@@ -325,18 +332,65 @@ export default function PulseLocality() {
 
       <AppHeader backTo />
 
+      {/* ── HERO IMAGE ── */}
+      {localityImage ? (
+        <div style={{
+          position: 'relative',
+          width: '100%',
+          height: 220,
+          backgroundImage: `url(${localityImage.image_url})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          overflow: 'hidden',
+        }}>
+          {/* Dark gradient overlay */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 60%)',
+          }} />
+          {/* Locality name on top of image */}
+          <div style={{
+            position: 'absolute', bottom: 36, left: 16, right: 16,
+          }}>
+            <h1 style={{
+              fontWeight: 300, fontSize: 30, letterSpacing: '-0.025em',
+              color: '#fff', marginBottom: 4,
+            }}>
+              {locality}
+            </h1>
+            <p style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11,
+              color: 'rgba(255,255,255,0.75)', letterSpacing: '0.06em',
+            }}>
+              {loading ? '…' : `${totalListings} active listings`}
+              {updatedAt && ` · Updated ${timeAgoLong(updatedAt)}`}
+            </p>
+          </div>
+          {/* Attribution — required by Google ToS */}
+          <span style={{
+            position: 'absolute', bottom: 8, right: 10,
+            fontFamily: 'var(--font-mono)', fontSize: 10,
+            color: 'rgba(255,255,255,0.6)',
+          }}>
+            📷 Google
+          </span>
+        </div>
+      ) : null}
+
       <div style={{ padding: '24px 16px 0' }}>
 
-        {/* ── TITLE ── */}
-        <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontWeight: 300, fontSize: 30, letterSpacing: '-0.025em', marginBottom: 6 }}>
-            {locality}
-          </h1>
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)', letterSpacing: '0.06em' }}>
-            {loading ? '…' : `${totalListings} active listings`}
-            {updatedAt && ` · Updated ${timeAgoLong(updatedAt)}`}
-          </p>
-        </div>
+        {/* ── TITLE (shown only when no hero image) ── */}
+        {!localityImage && (
+          <div style={{ marginBottom: 24 }}>
+            <h1 style={{ fontWeight: 300, fontSize: 30, letterSpacing: '-0.025em', marginBottom: 6 }}>
+              {locality}
+            </h1>
+            <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)', letterSpacing: '0.06em' }}>
+              {loading ? '…' : `${totalListings} active listings`}
+              {updatedAt && ` · Updated ${timeAgoLong(updatedAt)}`}
+            </p>
+          </div>
+        )}
 
         {/* ── STATS ROW ── */}
         <div style={{
