@@ -4,6 +4,7 @@ import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
 import DesktopSidebar from '../components/DesktopSidebar';
 import { useDesktop } from '../hooks/useDesktop';
+import RadarAnimation from '../components/RadarAnimation';
 
 const SAMPLE_LISTINGS = [
   { score: '9.2', title: 'Spacious 2BHK with Balcony', location: 'HSR Sect 2', price: '₹32,000', source: 'Reddit' },
@@ -177,58 +178,8 @@ export default function Landing() {
           zIndex: 0,
         }} />
 
-        {/* Wireframe polyhedron — upper right */}
-        <svg
-          viewBox="0 0 380 420"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          style={{
-            position: 'absolute',
-            right: -72,
-            top: -8,
-            width: 310,
-            pointerEvents: 'none',
-            zIndex: 0,
-          }}
-        >
-          <g stroke="rgba(195,145,45,0.27)" strokeWidth="0.75" strokeLinecap="round">
-            {/* Icosahedron edges — projected with Rx(25°) Ry(35°), scale 1.5 */}
-            {/* Vertices:
-                v0(295,216) v1(252,378) v2(144,93)  v3(100,255)
-                v4(307,103) v5(159,103) v6(242,367) v7(88,367)
-                v8(364,273) v9(126,273) v10(270,198) v11(31,198) */}
-            <line x1="295" y1="216" x2="252" y2="378" />
-            <line x1="295" y1="216" x2="307" y2="103" />
-            <line x1="295" y1="216" x2="159" y2="103" />
-            <line x1="295" y1="216" x2="364" y2="273" />
-            <line x1="295" y1="216" x2="126" y2="273" />
-            <line x1="252" y1="378" x2="242" y2="367" />
-            <line x1="252" y1="378" x2="88"  y2="367" />
-            <line x1="252" y1="378" x2="364" y2="273" />
-            <line x1="252" y1="378" x2="126" y2="273" />
-            <line x1="144" y1="93"  x2="100" y2="255" />
-            <line x1="144" y1="93"  x2="307" y2="103" />
-            <line x1="144" y1="93"  x2="159" y2="103" />
-            <line x1="144" y1="93"  x2="270" y2="198" />
-            <line x1="144" y1="93"  x2="31"  y2="198" />
-            <line x1="100" y1="255" x2="242" y2="367" />
-            <line x1="100" y1="255" x2="88"  y2="367" />
-            <line x1="100" y1="255" x2="270" y2="198" />
-            <line x1="100" y1="255" x2="31"  y2="198" />
-            <line x1="307" y1="103" x2="159" y2="103" />
-            <line x1="307" y1="103" x2="364" y2="273" />
-            <line x1="307" y1="103" x2="270" y2="198" />
-            <line x1="159" y1="103" x2="126" y2="273" />
-            <line x1="159" y1="103" x2="31"  y2="198" />
-            <line x1="242" y1="367" x2="88"  y2="367" />
-            <line x1="242" y1="367" x2="364" y2="273" />
-            <line x1="242" y1="367" x2="270" y2="198" />
-            <line x1="88"  y1="367" x2="126" y2="273" />
-            <line x1="88"  y1="367" x2="31"  y2="198" />
-            <line x1="364" y1="273" x2="270" y2="198" />
-            <line x1="126" y1="273" x2="31"  y2="198" />
-          </g>
-        </svg>
+        {/* Radar animation — upper right */}
+        <RadarAnimation size={480} />
 
         {/* Content */}
         <div style={{ position: 'relative', zIndex: 1, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
