@@ -1397,9 +1397,10 @@ def ingestion_status():
     """Show DB listing counts by source, locality breakdown, and total."""
     source_counts = get_listing_counts()
     locality_breakdown = get_locality_counts()
-    total = total_listing_count()
+    totals = total_listing_count()
     return jsonify({
-        "total_listings": total,
+        "total_listings": totals["active"],
+        "total_listings_all": totals["total"],
         "by_source": source_counts,
         "by_locality": locality_breakdown,
     })

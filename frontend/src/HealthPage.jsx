@@ -75,8 +75,24 @@ function SourceCard({ sourceId, info, isDark }) {
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 20px", fontSize: 13, opacity: 0.7 }}>
           <span>
-            <strong style={{ opacity: 1 }}>{(info?.count ?? 0).toLocaleString()}</strong> listings
+            <strong style={{ opacity: 1 }}>{(info?.count ?? 0).toLocaleString()}</strong> active
           </span>
+          {(info?.stale_count > 0 || info?.expired_count > 0) && (
+            <span style={{ color: "#f59e0b" }}>
+              {info?.stale_count > 0 && (
+                <><strong style={{ opacity: 1 }}>{info.stale_count.toLocaleString()}</strong> stale</>
+              )}
+              {info?.stale_count > 0 && info?.expired_count > 0 && " · "}
+              {info?.expired_count > 0 && (
+                <><strong style={{ opacity: 1 }}>{info.expired_count.toLocaleString()}</strong> expired</>
+              )}
+            </span>
+          )}
+          {info?.total_count != null && (
+            <span style={{ opacity: 0.55 }}>
+              <strong style={{ opacity: 1 }}>{(info.total_count).toLocaleString()}</strong> total in DB
+            </span>
+          )}
           {info?.newest_age_minutes != null && (
             <span>Last fetched: <strong style={{ opacity: 1 }}>{formatAge(info.newest_age_minutes)}</strong></span>
           )}
@@ -215,6 +231,7 @@ export default function HealthPage() {
 
   const bySource = data?.by_source || {};
   const allSourceIds = ["reddit", "telegram", "nobroker", "housing"];
+  const totalAllSources = data?.total_listings_all ?? null;
 
   const overallStatus = allSourceIds.every(s => statusFor(s, bySource[s]) === "ok")
     ? "ok"
@@ -274,8 +291,14 @@ export default function HealthPage() {
           <div>
             <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.5px" }}>
               {loading ? "—" : (data?.total_listings ?? 0).toLocaleString()}
-              <span style={{ fontSize: 14, fontWeight: 400, opacity: 0.6, marginLeft: 8 }}>total listings</span>
+              <span style={{ fontSize: 14, fontWeight: 400, opacity: 0.6, marginLeft: 8 }}>active listings</span>
             </div>
+            {!loading && totalAllSources != null && totalAllSources !== data?.total_listings && (
+              <div style={{ fontSize: 13, color: muted, marginTop: 2 }}>
+                <strong style={{ color: text, opacity: 0.7 }}>{totalAllSources.toLocaleString()}</strong>
+                <span style={{ marginLeft: 4 }}>total in DB (incl. stale &amp; expired)</span>
+              </div>
+            )}
             <div style={{ fontSize: 12, color: muted, marginTop: 4 }}>
               across {allSourceIds.length} sources · expires automatically per-source TTL
             </div>
