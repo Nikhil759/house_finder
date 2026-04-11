@@ -634,11 +634,13 @@ def get_listing_counts():
         if is_pg:
             cur.execute("""
                 SELECT source,
-                       COUNT(*) as cnt,
-                       EXTRACT(EPOCH FROM MIN(last_seen_at))::FLOAT as oldest,
-                       EXTRACT(EPOCH FROM MAX(last_seen_at))::FLOAT as newest
+                       COUNT(*) FILTER (WHERE status = 'active')  AS active_count,
+                       COUNT(*) FILTER (WHERE status = 'stale')   AS stale_count,
+                       COUNT(*) FILTER (WHERE status = 'expired') AS expired_count,
+                       COUNT(*)                                    AS total_count,
+                       EXTRACT(EPOCH FROM MIN(last_seen_at) FILTER (WHERE status = 'active'))::FLOAT AS oldest,
+                       EXTRACT(EPOCH FROM MAX(last_seen_at) FILTER (WHERE status = 'active'))::FLOAT AS newest
                 FROM listings
-                WHERE status = 'active'
                 GROUP BY source
             """)
         else:
@@ -653,16 +655,29 @@ def get_listing_counts():
         result = {}
         for row in rows:
             if is_pg:
-                src, cnt, oldest, newest = row
+                src, active_cnt, stale_cnt, expired_cnt, total_cnt, oldest, newest = row
+                result[src] = {
+                    "count": active_cnt,
+                    "stale_count": stale_cnt,
+                    "expired_count": expired_cnt,
+                    "total_count": total_cnt,
+                    "oldest_fetched_at": oldest,
+                    "newest_fetched_at": newest,
+                    "oldest_age_minutes": round((time.time() - oldest) / 60, 1) if oldest else None,
+                    "newest_age_minutes": round((time.time() - newest) / 60, 1) if newest else None,
+                }
             else:
                 src, cnt, oldest, newest = row["source"], row["cnt"], row["oldest"], row["newest"]
-            result[src] = {
-                "count": cnt,
-                "oldest_fetched_at": oldest,
-                "newest_fetched_at": newest,
-                "oldest_age_minutes": round((time.time() - oldest) / 60, 1) if oldest else None,
-                "newest_age_minutes": round((time.time() - newest) / 60, 1) if newest else None,
-            }
+                result[src] = {
+                    "count": cnt,
+                    "stale_count": 0,
+                    "expired_count": 0,
+                    "total_count": cnt,
+                    "oldest_fetched_at": oldest,
+                    "newest_fetched_at": newest,
+                    "oldest_age_minutes": round((time.time() - oldest) / 60, 1) if oldest else None,
+                    "newest_age_minutes": round((time.time() - newest) / 60, 1) if newest else None,
+                }
         return result
     except Exception as e:
         logger.error("get_listing_counts failed: %s", e)
@@ -730,13 +745,23 @@ def total_listing_count():
     try:
         cur = conn.cursor()
         if is_pg:
-            cur.execute("SELECT COUNT(*) FROM listings WHERE status = 'active'")
+            cur.execute("""
+                SELECT
+                    COUNT(*) FILTER (WHERE status = 'active')  AS active_count,
+                    COUNT(*)                                    AS total_count
+                FROM listings
+            """)
+            row = cur.fetchone()
+            active = row[0] if row else 0
+            total = row[1] if row else 0
+            return {"active": active, "total": total}
         else:
             cur.execute("SELECT COUNT(*) FROM listings WHERE expires_at > ?", (time.time(),))
-        row = cur.fetchone()
-        return row[0] if row else 0
+            row = cur.fetchone()
+            cnt = row[0] if row else 0
+            return {"active": cnt, "total": cnt}
     except Exception as e:
         logger.error("total_listing_count failed: %s", e)
-        return 0
+        return {"active": 0, "total": 0}
     finally:
         _put_conn(conn)

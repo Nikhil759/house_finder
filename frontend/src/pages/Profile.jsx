@@ -187,6 +187,31 @@ export default function Profile() {
           </div>
         </section>
 
+        {/* ── ADMIN TOOLS (bn5799@gmail.com only) ── */}
+        {user.email === "bn5799@gmail.com" && (
+          <section style={s.section}>
+            <p style={s.sectionLabel}>Admin</p>
+            <div style={s.card}>
+              <Link
+                to="/health"
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 13,
+                  letterSpacing: '0.04em',
+                  color: 'var(--color-amber)',
+                  textDecoration: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                <span>⬡</span>
+                <span>System Health →</span>
+              </Link>
+            </div>
+          </section>
+        )}
+
         {/* ── SAVED SEARCHES ── */}
         <section style={s.section}>
           <p style={s.sectionLabel}>Saved Searches</p>

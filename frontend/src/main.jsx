@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Analytics } from "@vercel/analytics/react";
 import { ThemeProvider } from "./ThemeContext";
 import LandingPage from "./pages/Landing";
@@ -19,8 +19,18 @@ import LocalityDetail from "./pages/LocalityDetail";
 import InstallBanner from "./components/InstallBanner";
 import PostHogRouteTracker from "./components/PostHogRouteTracker";
 import { initPostHog } from "./lib/posthog";
+import { useAuth } from "./hooks/useAuth";
 
 initPostHog();
+
+const ADMIN_EMAIL = "bn5799@gmail.com";
+
+function AdminRoute({ element }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user || user.email !== ADMIN_EMAIL) return <Navigate to="/" replace />;
+  return element;
+}
 
 // Register service worker (enables Android PWA install prompt)
 if ("serviceWorker" in navigator) {
@@ -39,7 +49,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="/app" element={<Search />} />
           <Route path="/new" element={<MyHub />} />
           <Route path="/profile" element={<Profile />} />
-          <Route path="/health" element={<HealthPage />} />
+          <Route path="/health" element={<AdminRoute element={<HealthPage />} />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/listing/:id" element={<ListingDetail />} />
           <Route path="/locality-guide" element={<Pulse />} />
