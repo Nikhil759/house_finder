@@ -248,6 +248,24 @@ body { transition: background 0.25s ease, color 0.25s ease; }
   }
 }
 
+/* ── Pulse ticker marquee ───────────────────────────────────────────────────── */
+.pulse-ticker-track {
+  display: flex;
+  width: max-content;
+  animation: tickerScroll 25s linear infinite;
+}
+.pulse-ticker-track:hover {
+  animation-play-state: paused;
+}
+.pulse-ticker-content {
+  display: flex;
+  flex-shrink: 0;
+}
+@keyframes tickerScroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
 .hero-badge-shimmer {
   background: linear-gradient(
     90deg,

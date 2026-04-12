@@ -60,6 +60,10 @@ class StandardListing(BaseModel):
 
     # ── Media ──
     thumbnail_url: Optional[str] = None
+    image_urls: list[str] = Field(default_factory=list)
+
+    # ── Enriched ──
+    society_name: Optional[str] = None
 
     # ── Timestamps ──
     posted_at: Optional[datetime] = None
