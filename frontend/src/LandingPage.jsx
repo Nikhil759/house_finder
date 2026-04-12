@@ -49,9 +49,9 @@ export default function LandingPage() {
           </div>
 
           <h1 className="lp-hero-headline">
-            Find your next home in Bangalore.<br/>
-            <span>Smarter search. Better homes.</span>
+            Find your next home in Bangalore.
           </h1>
+          <p className="lp-hero-subheadline type-secondary">Smarter search. Better homes.</p>
 
           <p className="lp-hero-sub hero-sub">
             NestIQ is a smart housing aggregator that scans <span className="lp-inline-source lp-inline-source-reddit source-reddit">Reddit</span>,{" "}
@@ -369,9 +369,9 @@ export default function LandingPage() {
           gap: 12px;
           justify-content: center;
           margin-bottom: 28px;
-          font-size: 24px;
-          font-weight: 700;
-          letter-spacing: 0.4px;
+          font-size: var(--text-lg);
+          font-weight: 500;
+          letter-spacing: var(--tracking-normal);
           color: #f5a623;
         }
 
@@ -423,35 +423,32 @@ export default function LandingPage() {
         }
 
         .lp-hero-headline {
-          font-size: clamp(36px, 5vw, 56px);
-          font-weight: 800;
-          line-height: 1.15;
           color: #ffffff;
           margin-bottom: 14px;
-          letter-spacing: -0.5px;
           text-shadow: 0 2px 20px rgba(0,0,0,0.5);
         }
 
-        .lp-hero-headline span {
-          font-size: clamp(28px, 3.5vw, 42px);
-          font-weight: 800;
-          line-height: 1.15;
-          white-space: nowrap;
+        .lp-hero-subheadline {
+          font-size: var(--text-xl);
+          font-weight: 300;
+          line-height: var(--leading-snug);
+          letter-spacing: var(--tracking-snug);
           color: #f5a623;
+          margin-bottom: 14px;
         }
 
         .lp-hero-sub {
-          font-size: clamp(14px, 1.5vw, 17px);
+          font-size: var(--text-sm);
           font-weight: 400;
           color: rgba(255, 255, 255, 0.7);
-          letter-spacing: 0.3px;
-          line-height: 1.65;
+          letter-spacing: var(--tracking-normal);
+          line-height: var(--leading-normal);
           max-width: 500px;
           margin: 0 auto 36px;
           text-shadow: 0 1px 12px rgba(0,0,0,0.8);
         }
         .lp-inline-source {
-          font-weight: 700;
+          font-weight: 500;
           -webkit-text-stroke: 0;
           text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
         }
@@ -480,7 +477,8 @@ export default function LandingPage() {
           background: rgba(255, 255, 255, 0.1);
           border: none;
           outline: none;
-          font-size: 15px;
+          font-size: var(--text-base);
+          font-family: var(--font-sans);
           font-weight: 400;
           color: #ffffff;
           letter-spacing: 0.2px;
@@ -496,9 +494,9 @@ export default function LandingPage() {
           background: #f5a623;
           border: none;
           color: #000000;
-          font-weight: 700;
-          font-size: 14px;
-          letter-spacing: 0.3px;
+          font-weight: 500;
+          font-size: var(--text-sm);
+          letter-spacing: var(--tracking-wide);
           cursor: pointer;
           white-space: nowrap;
           transition: background 0.2s;
@@ -832,7 +830,7 @@ export default function LandingPage() {
             0 0 80px rgba(255, 255, 255, 0.7),
             0 2px 4px rgba(255, 255, 255, 0.8);
         }
-        [data-theme="light"] .lp-hero-headline span {
+        [data-theme="light"] .lp-hero-subheadline {
           color: #b36d00;
           text-shadow:
             0 0 30px rgba(255, 255, 255, 0.9),
@@ -1124,7 +1122,7 @@ export default function LandingPage() {
           .lp-step-arrow { display: none; }
           .lp-steps { gap: 32px; }
           .lp-hero-headline { white-space: normal; }
-          .lp-hero-headline span { white-space: normal; }
+          .lp-hero-subheadline { white-space: normal; }
         }
       `}</style>
     </div>

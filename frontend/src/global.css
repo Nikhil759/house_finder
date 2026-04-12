@@ -1,5 +1,6 @@
 /* ── Google Fonts ───────────────────────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=DM+Mono:ital,wght@0,400;0,500;1,400&display=swap');
+@import './typography.css';
 
 /* ── CSS custom properties ─────────────────────────────────────────────────── */
 :root, [data-theme="dark"] {
@@ -56,7 +57,7 @@ body { transition: background 0.25s ease, color 0.25s ease; }
   min-height: 100vh;
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-sans);
   position: relative;
 }
 
