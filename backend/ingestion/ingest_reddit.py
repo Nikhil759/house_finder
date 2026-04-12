@@ -32,13 +32,16 @@ from ingestion.db import (
     upsert_listings, mark_stale, record_run_start, record_run_end, UpsertStats,
 )
 from ingestion.scoring import compute_quality_score
-from localities import extract_locality
+from localities import extract_locality, LOCALITY_META, LOCALITY_ALIASES
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("ingest_reddit")
+
+GOOGLE_API_KEY: str = os.environ.get("GOOGLE_PLACES_API_KEY", "")
+_GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 
 SUBREDDITS = [
     "bangalore", "bengaluru", "indianrealestate",
@@ -55,6 +58,44 @@ LISTING_KEYWORDS = [
     "available", "deposit", "furnished", "lease",
     "tenant", "flat for", "looking for",
 ]
+
+def _resolve_geocode(
+    address: str | None, locality: str | None
+) -> tuple[float, float, str, str] | None:
+    """
+    Try geocoding in priority order.
+    Returns (lat, lng, geocode_source, geocode_confidence) or None.
+    """
+    # Step 1 — address geocode via Google API
+    if address and address.strip() and GOOGLE_API_KEY:
+        query = f"{address.strip()}, Bangalore"
+        try:
+            resp = requests.get(
+                _GEOCODE_URL,
+                params={"address": query, "key": GOOGLE_API_KEY, "region": "in"},
+                timeout=8,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("status") == "OK" and data.get("results"):
+                loc = data["results"][0]["geometry"]["location"]
+                return float(loc["lat"]), float(loc["lng"]), "address_geocode", "medium"
+        except Exception as exc:
+            logger.debug("Geocode API error for %r: %s", address, exc)
+
+    # Step 2 — locality centroid fallback
+    if locality:
+        meta = LOCALITY_META.get(locality)
+        if not meta:
+            canonical = LOCALITY_ALIASES.get(locality.strip().lower())
+            if canonical:
+                meta = LOCALITY_META.get(canonical)
+        if meta:
+            lat, lng = meta["coords"]
+            return float(lat), float(lng), "locality_centroid", "low"
+
+    return None
+
 
 # ── Reddit OAuth ──
 
@@ -292,6 +333,40 @@ def main():
     stats = UpsertStats()
     if all_listings:
         stats = upsert_listings(all_listings)
+
+    # Geocode listings that still have no coordinates after upsert
+    _needs_geocode = [l for l in all_listings if l.latitude is None]
+    if _needs_geocode:
+        from ingestion.db import get_connection
+        import psycopg2.extras
+        _geo_updates: list[tuple] = []
+        for listing in _needs_geocode:
+            result = _resolve_geocode(listing.address, listing.locality)
+            if result:
+                lat, lng, geo_src, geo_conf = result
+                _geo_updates.append((lat, lng, geo_src, geo_conf,
+                                     listing.source, listing.source_id))
+        if _geo_updates:
+            _conn = get_connection()
+            try:
+                _cur = _conn.cursor()
+                psycopg2.extras.execute_batch(
+                    _cur,
+                    """UPDATE listings SET
+                           latitude           = %s,
+                           longitude          = %s,
+                           geocode_source     = %s,
+                           geocode_confidence = %s
+                       WHERE source = %s AND source_id = %s
+                         AND latitude IS NULL""",
+                    _geo_updates,
+                )
+                _conn.commit()
+                logger.info("Geocoded %d/%d Reddit listings (%d unresolved)",
+                            len(_geo_updates), len(_needs_geocode),
+                            len(_needs_geocode) - len(_geo_updates))
+            finally:
+                _conn.close()
 
     stale_count = mark_stale("reddit", started_at)
 

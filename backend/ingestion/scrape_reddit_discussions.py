@@ -2,9 +2,13 @@
 """
 Reddit discussion scraper for the NestIQ locality feed.
 
-For each Bengaluru locality, searches r/bangalore and r/BangaloreRentals
-for neighbourhood discussion posts (not rental listings) and inserts them
-into the locality_feed table.
+Two-tier scraping strategy:
+  1. Locality subreddits — per-locality search across focused Bangalore subs
+  2. City-level subreddits — single city-keyword search on high-volume subs
+     (locality assignment is deferred to the Gemini tagger)
+
+Inserts raw posts into locality_feed with category/topic = NULL.
+The tag_locality_feed job classifies them afterward.
 
 Usage:
     python -m ingestion.scrape_reddit_discussions          # from backend/
@@ -42,15 +46,30 @@ logger = logging.getLogger("scrape_reddit_discussions")
 
 _UA = "python:nestiq-ingestion:v2.0 (by /u/nikhil7599)"
 
-SUBREDDITS = [
+# Tier 1: Focused Bangalore subs — searched per-locality
+# When OAuth is available, all subs are used. Without OAuth (public .json),
+# only the core subs are used to stay within rate limits (~10 req/min).
+CORE_SUBREDDITS = [
     "bangalore",
     "bengaluru",
-    "BangaloreRentals",
-    "FlatandFlatmatesBLR",
-    "FlatmatesinBangalore",
+    "indianrealestate",
+]
+EXTRA_SUBREDDITS = [
+    "Whitefield",
+    "indiranagar",
+    "bangalorefoodies",
+    "Bangalorestartups",
+    "BangaloreRealEstates",
+    "karnataka",
 ]
 
-MIN_SCORE = 3   # skip posts with fewer upvotes than this
+# Tier 2: High-volume subs — single city-keyword search (no per-locality loop)
+CITY_LEVEL_SUBREDDITS = {
+    "india":           "Bangalore OR Bengaluru",
+    "developersIndia": "Bangalore OR Bengaluru (rent OR commute OR relocat OR traffic OR neighbourhood)",
+}
+
+MIN_SCORE = 3
 
 LOCALITIES = [
     "Indiranagar", "Koramangala", "HSR Layout", "Whitefield",
@@ -60,21 +79,35 @@ LOCALITIES = [
     "HBR Layout", "Sarjapur Road", "KR Puram", "Yeshwanthpur",
 ]
 
-# Posts whose titles contain any of these (case-insensitive) are rental listings, not discussions
 LISTING_KEYWORDS = [
     "available", "for rent", "for lease", "looking for",
     "need flat", "need house", "need tenant", "bhk",
     "bachelor", "family only", "semi furnished", "fully furnished",
+    "flatmate", "flat mate", "roommate", "room mate",
+    "sharing basis", "single occupancy", "double sharing",
+    "rent pm", "per month", "move in",
+    "shifting", "relocating", "need pg", "need room",
+    "dm me", "contact me", "whatsapp",
 ]
 
-MAX_PER_LOCALITY = 5   # posts per locality per subreddit search
-ALREADY_HAVE     = 5   # skip locality if >= this many reddit posts in last 24h
+MAX_PER_SEARCH   = 15   # results per search call
+CITY_LEVEL_LIMIT = 25   # results for city-level subreddit searches
+ALREADY_HAVE     = 50   # skip locality if >= this many reddit posts in last 24h
+
+# High-volume subs get both sort modes; smaller subs only get "top"
+DUAL_SORT_SUBS = {"bangalore", "bengaluru", "indianrealestate"}
+
+# Rate limiting — adaptive based on OAuth availability
+SLEEP_WITH_OAUTH    = 0.5   # seconds (OAuth: ~60 req/min)
+SLEEP_WITHOUT_OAUTH = 4.0   # seconds (public: ~10 req/min, with margin)
+SLEEP_ON_429        = 15.0  # seconds (backoff on rate limit)
+MAX_429_RETRIES     = 1     # retry once on 429, then skip
 
 
 # ── Reddit OAuth ──────────────────────────────────────────────────────────────
 
 def get_oauth_token() -> str | None:
-    """Fetch an app-only OAuth token from Reddit (same as ingest_reddit.py)."""
+    """Fetch an app-only OAuth token from Reddit."""
     client_id     = os.getenv("REDDIT_CLIENT_ID", "")
     client_secret = os.getenv("REDDIT_CLIENT_SECRET", "")
     if not client_id or not client_secret:
@@ -98,7 +131,7 @@ def get_oauth_token() -> str | None:
 # ── DB checks ─────────────────────────────────────────────────────────────────
 
 def _already_covered(conn, locality: str) -> bool:
-    """Return True if locality_feed already has >= ALREADY_HAVE reddit rows in the last 24 h."""
+    """Return True if locality_feed already has >= ALREADY_HAVE reddit rows in the last 24h."""
     cur = conn.cursor()
     cur.execute(
         """
@@ -115,78 +148,80 @@ def _already_covered(conn, locality: str) -> bool:
 # ── Filtering ─────────────────────────────────────────────────────────────────
 
 def _is_listing(title: str) -> bool:
-    """Return True if the title looks like a rental listing (should be skipped)."""
+    """Return True if the title looks like a rental listing (pre-filter before Gemini)."""
     lower = title.lower()
     return any(kw in lower for kw in LISTING_KEYWORDS)
 
 
 # ── API fetch ─────────────────────────────────────────────────────────────────
 
-def search_subreddit_oauth(token: str, subreddit: str, locality: str) -> list[dict]:
+def _search_oauth(token: str, subreddit: str, query: str,
+                  sort: str, time_filter: str, limit: int) -> list[dict]:
     """Search one subreddit via Reddit OAuth API."""
     url = f"https://oauth.reddit.com/r/{subreddit}/search"
     params = {
-        "q":           locality,
-        "sort":        "top",
-        "t":           "day",
-        "limit":       MAX_PER_LOCALITY,
-        "restrict_sr": "1",
+        "q": query, "sort": sort, "t": time_filter,
+        "limit": limit, "restrict_sr": "1",
     }
     headers = {"User-Agent": _UA, "Authorization": f"bearer {token}"}
     try:
         resp = requests.get(url, headers=headers, params=params, timeout=15)
         if resp.status_code != 200:
-            logger.warning(
-                "  %s / r/%s: OAuth API %d — %s",
-                locality, subreddit, resp.status_code, resp.text[:200],
-            )
+            logger.warning("  r/%s: OAuth %d — %s", subreddit, resp.status_code, resp.text[:200])
             return []
         return [item["data"] for item in resp.json().get("data", {}).get("children", [])]
     except Exception as e:
-        logger.error("  %s / r/%s: OAuth request failed — %s", locality, subreddit, e)
+        logger.error("  r/%s: OAuth request failed — %s", subreddit, e)
         return []
 
 
-def search_subreddit_public(subreddit: str, locality: str) -> list[dict]:
-    """Fallback: search via Reddit's public .json endpoint (no auth required)."""
+def _search_public(subreddit: str, query: str,
+                   sort: str, time_filter: str, limit: int) -> list[dict]:
+    """Fallback: search via Reddit's public .json endpoint with 429 retry."""
     url = f"https://www.reddit.com/r/{subreddit}/search.json"
     params = {
-        "q":           locality,
-        "sort":        "top",
-        "t":           "day",
-        "limit":       MAX_PER_LOCALITY,
-        "restrict_sr": "on",
+        "q": query, "sort": sort, "t": time_filter,
+        "limit": limit, "restrict_sr": "on",
     }
     headers = {"User-Agent": _UA}
-    try:
-        resp = requests.get(url, headers=headers, params=params, timeout=15)
-        if resp.status_code != 200:
-            logger.warning(
-                "  %s / r/%s: public .json %d — %s",
-                locality, subreddit, resp.status_code, resp.text[:200],
-            )
+
+    for attempt in range(1 + MAX_429_RETRIES):
+        try:
+            resp = requests.get(url, headers=headers, params=params, timeout=15)
+            if resp.status_code == 429:
+                if attempt < MAX_429_RETRIES:
+                    logger.warning("  r/%s: 429 rate limited — backing off %.0fs", subreddit, SLEEP_ON_429)
+                    time.sleep(SLEEP_ON_429)
+                    continue
+                logger.warning("  r/%s: 429 after retry — skipping", subreddit)
+                return []
+            if resp.status_code != 200:
+                logger.warning("  r/%s: public .json %d — %s", subreddit, resp.status_code, resp.text[:200])
+                return []
+            return [item["data"] for item in resp.json().get("data", {}).get("children", [])]
+        except Exception as e:
+            logger.error("  r/%s: public request failed — %s", subreddit, e)
             return []
-        return [item["data"] for item in resp.json().get("data", {}).get("children", [])]
-    except Exception as e:
-        logger.error("  %s / r/%s: public request failed — %s", locality, subreddit, e)
-        return []
+    return []
 
 
-def search_subreddit(token: str | None, subreddit: str, locality: str) -> list[dict]:
+def search_subreddit(token: str | None, subreddit: str, query: str,
+                     sort: str = "top", time_filter: str = "week",
+                     limit: int = MAX_PER_SEARCH) -> list[dict]:
     """Search a subreddit — tries OAuth first, falls back to public .json."""
     if token:
-        results = search_subreddit_oauth(token, subreddit, locality)
+        results = _search_oauth(token, subreddit, query, sort, time_filter, limit)
         if results:
             return results
-        logger.info("  %s / r/%s: OAuth empty, trying public .json", locality, subreddit)
-    return search_subreddit_public(subreddit, locality)
+    return _search_public(subreddit, query, sort, time_filter, limit)
 
 
 # ── DB insert ─────────────────────────────────────────────────────────────────
 
-def insert_posts(conn, locality: str, posts: list[dict]) -> tuple[int, int]:
+def insert_posts(conn, locality: str | None, posts: list[dict]) -> tuple[int, int]:
     """
-    Insert valid discussion posts into locality_feed.
+    Insert posts into locality_feed.
+    locality can be None for city-level posts (Gemini assigns later).
     Returns (inserted_count, duplicate_count).
     """
     inserted   = 0
@@ -194,12 +229,12 @@ def insert_posts(conn, locality: str, posts: list[dict]) -> tuple[int, int]:
     cur        = conn.cursor()
 
     for post in posts:
-        source_id  = str(post.get("id", "")).strip()
-        title      = (post.get("title") or "").strip()
-        selftext   = post.get("selftext") or ""
-        permalink  = post.get("permalink", "")
-        subreddit  = post.get("subreddit", "")
-        score      = post.get("score", 0)
+        source_id   = str(post.get("id", "")).strip()
+        title       = (post.get("title") or "").strip()
+        selftext    = post.get("selftext") or ""
+        permalink   = post.get("permalink", "")
+        subreddit   = post.get("subreddit", "")
+        score       = post.get("score", 0)
         created_utc = post.get("created_utc")
 
         if not source_id or not title:
@@ -218,10 +253,10 @@ def insert_posts(conn, locality: str, posts: list[dict]) -> tuple[int, int]:
                 """
                 INSERT INTO locality_feed
                     (source, source_id, locality, title, body, url,
-                     author, engagement, posted_at, topic, sentiment, scraped_at)
+                     author, engagement, posted_at, scraped_at)
                 VALUES
                     ('reddit', %s, %s, %s, %s, %s,
-                     %s, %s, %s, NULL, NULL, NOW())
+                     %s, %s, %s, NOW())
                 ON CONFLICT (source, source_id) DO NOTHING
                 """,
                 (source_id, locality, title, body, url, author, score, posted_at),
@@ -244,60 +279,112 @@ def insert_posts(conn, locality: str, posts: list[dict]) -> tuple[int, int]:
 
 def main():
     token = get_oauth_token()
-    if not token:
-        logger.warning("No Reddit OAuth token — falling back to public .json endpoint")
+    has_oauth = token is not None
+
+    if has_oauth:
+        locality_subreddits = CORE_SUBREDDITS + EXTRA_SUBREDDITS
+        sleep_interval = SLEEP_WITH_OAUTH
+        logger.info("Using OAuth — all %d subreddits, %.1fs sleep", len(locality_subreddits), sleep_interval)
+    else:
+        locality_subreddits = CORE_SUBREDDITS
+        sleep_interval = SLEEP_WITHOUT_OAUTH
+        logger.warning(
+            "No OAuth token — using %d core subreddits only, %.1fs sleep (public rate limit)",
+            len(locality_subreddits), sleep_interval,
+        )
 
     conn = get_connection()
 
-    localities_processed = 0
-    total_fetched        = 0
-    total_filtered       = 0
-    total_inserted       = 0
-    total_duplicates     = 0
+    total_fetched    = 0
+    total_filtered   = 0
+    total_inserted   = 0
+    total_duplicates = 0
 
-    logger.info("Starting Reddit discussion scrape for %d localities", len(LOCALITIES))
+    # ── Tier 1: Per-locality search across focused subs ───────────────────
+    logger.info(
+        "Tier 1: Searching %d localities across %d subreddits",
+        len(LOCALITIES), len(locality_subreddits),
+    )
 
     for locality in LOCALITIES:
         if _already_covered(conn, locality):
             logger.info("  %s: skipping — already have enough recent posts", locality)
             continue
 
-        localities_processed += 1
         locality_posts: list[dict] = []
+        seen_ids: set[str] = set()
 
-        for subreddit in SUBREDDITS:
-            raw = search_subreddit(token, subreddit, locality)
+        for subreddit in locality_subreddits:
+            sort_modes = ["top", "new"] if subreddit.lower() in DUAL_SORT_SUBS else ["top"]
 
-            # Filter out rental listing posts and low-engagement posts
+            for sort_mode in sort_modes:
+                raw = search_subreddit(
+                    token, subreddit, locality,
+                    sort=sort_mode, time_filter="week",
+                    limit=MAX_PER_SEARCH,
+                )
+
+                discussions = [
+                    p for p in raw
+                    if not _is_listing(p.get("title", ""))
+                    and p.get("score", 0) >= MIN_SCORE
+                    and str(p.get("id", "")) not in seen_ids
+                ]
+                for p in discussions:
+                    seen_ids.add(str(p.get("id", "")))
+
+                filtered = len(raw) - len(discussions)
+                total_fetched  += len(raw)
+                total_filtered += filtered
+                locality_posts.extend(discussions)
+
+                time.sleep(sleep_interval)
+
+        inserted, dupes = insert_posts(conn, locality, locality_posts)
+        total_inserted   += inserted
+        total_duplicates += dupes
+        logger.info("  %s: %d inserted, %d duplicates", locality, inserted, dupes)
+
+    # ── Tier 2: City-level search on high-volume subs ─────────────────────
+    logger.info(
+        "Tier 2: City-level search across %d high-volume subreddits",
+        len(CITY_LEVEL_SUBREDDITS),
+    )
+
+    for subreddit, query in CITY_LEVEL_SUBREDDITS.items():
+        for sort_mode in ["top", "new"]:
+            raw = search_subreddit(
+                token, subreddit, query,
+                sort=sort_mode, time_filter="week",
+                limit=CITY_LEVEL_LIMIT,
+            )
+
             discussions = [
                 p for p in raw
                 if not _is_listing(p.get("title", ""))
                 and p.get("score", 0) >= MIN_SCORE
             ]
             filtered = len(raw) - len(discussions)
-
             total_fetched  += len(raw)
             total_filtered += filtered
-            locality_posts.extend(discussions)
+
+            inserted, dupes = insert_posts(conn, None, discussions)
+            total_inserted   += inserted
+            total_duplicates += dupes
 
             logger.info(
-                "  %s / r/%s: %d fetched, %d filtered (listings/low-score)",
-                locality, subreddit, len(raw), filtered,
+                "  r/%s (sort=%s): %d fetched, %d filtered, %d inserted",
+                subreddit, sort_mode, len(raw), filtered, inserted,
             )
 
-            time.sleep(0.5)  # polite pause between subreddit calls
-
-        inserted, dupes = insert_posts(conn, locality, locality_posts)
-        total_inserted   += inserted
-        total_duplicates += dupes
+            time.sleep(sleep_interval)
 
     conn.close()
 
     print(
         f"\nReddit discussion scrape complete.\n"
-        f"Localities processed:     {localities_processed}\n"
         f"Posts fetched:            {total_fetched}\n"
-        f"Listing posts filtered:   {total_filtered}\n"
+        f"Listing posts filtered:  {total_filtered}\n"
         f"Posts inserted:           {total_inserted} "
         f"({total_duplicates} duplicates skipped)"
     )

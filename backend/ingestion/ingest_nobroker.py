@@ -133,9 +133,26 @@ def normalize(item: dict, locality_name: str) -> StandardListing:
         item.get("ownerDescription", ""),
     ]))
 
+    # society_name: prefer buildingName, fall back to society; strip locality suffix
+    _society_raw = (item.get("buildingName") or item.get("society") or "").strip()
+    society_name = re.split(r"\s*,\s*", _society_raw)[0].strip() or None
+
+    # image_urls: build from photos[].imagesMap.large using confirmed URL pattern
+    _property_id = str(item.get("id", ""))
+    _nb_base = "https://assets.nobroker.in/images"
+    image_urls: list[str] = []
+    for photo in (item.get("photos") or [])[:10]:
+        if not isinstance(photo, dict):
+            continue
+        filename = (photo.get("imagesMap") or {}).get("large") or \
+                   (photo.get("imagesMap") or {}).get("original") or \
+                   (photo.get("imagesMap") or {}).get("medium") or ""
+        if filename and _property_id:
+            image_urls.append(f"{_nb_base}/{_property_id}/{filename}")
+
     listing = StandardListing(
         source="nobroker",
-        source_id=str(item.get("id", "")),
+        source_id=_property_id,
         source_url=detail_url,
         title=item.get("title") or item.get("propertyTitle", ""),
         body=body_text,
@@ -156,6 +173,8 @@ def normalize(item: dict, locality_name: str) -> StandardListing:
         thumbnail_url=item.get("thumbnailImage"),
         posted_at=created_ts if created_ts else None,
         raw_payload=item,
+        society_name=society_name,
+        image_urls=image_urls,
     )
     listing.quality_score = compute_quality_score(
         source="nobroker",

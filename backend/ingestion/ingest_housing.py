@@ -107,7 +107,7 @@ query SEARCH_RESULTS($hash: String!, $service: String!, $category: String!,
       furnishingType serviceType postedDate addedOn
       listingId url
       carpetArea { value unit }
-      streetInfo location
+      streetInfo location coords
       coverImage { url }
     }
   }
@@ -220,6 +220,19 @@ def normalize(item: dict, locality_name: str) -> StandardListing:
     cover = (item.get("coverImage") or {}).get("url") or ""
     posted_str = item.get("postedDate") or item.get("addedOn") or ""
 
+    coords = item.get("coords") or []
+    lat = float(coords[0]) if len(coords) > 0 else None
+    lng = float(coords[1]) if len(coords) > 1 else None
+
+    # society_name: first comma-segment of address string, with skip rules
+    _seg = address.split(",")[0].strip()
+    _skip = (
+        len(_seg) < 4
+        or re.search(r"\b(Layout|Road|Street|Nagar|Main|Phase|Sector|Block)\b", _seg, re.I)
+        or _seg.strip().lower() == canonical.strip().lower()
+    )
+    society_name = None if _skip else _seg
+
     # Extract from API first, then fall back to URL slug (API often returns null)
     carpet_obj = item.get("carpetArea") or {}
     area_from_api = carpet_obj.get("value")
@@ -276,7 +289,10 @@ def normalize(item: dict, locality_name: str) -> StandardListing:
         locality=canonical,
         address=short_address or address,
         area_sqft=area_val,
+        latitude=lat,
+        longitude=lng,
         thumbnail_url=cover,
+        society_name=society_name,
         posted_at=posted_str if posted_str else None,
         raw_payload=item,
     )

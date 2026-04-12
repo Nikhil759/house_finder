@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
 import DesktopSidebar from '../components/DesktopSidebar';
@@ -7,62 +7,40 @@ import { useDesktop } from '../hooks/useDesktop';
 import { supabase } from '../lib/supabase';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const BHK_OPTIONS = ['1 BHK', '2 BHK', '3 BHK'];
-const FEED_TABS = ['All', 'Reddit', 'Telegram', 'News'];
-const SENTIMENT_TABS = ['All Sources', 'Reddit', 'News'];
 
-const TIER_META = [
-  { id: '01', label: 'Premium',    key: 'Premium'    },
-  { id: '02', label: 'Mid-Range',  key: 'Mid-range'  },
-  { id: '03', label: 'Affordable', key: 'Affordable' },
-];
+const FEED_TABS = ['All', 'Discussion', 'News'];
+const PAGE_SIZE = 6;
 
-// Tier-specific colors matching LocalityGuide palette
-const TIER_COLORS = {
-  'Premium':    { bar: 'var(--color-amber)', label: 'var(--color-amber)', border: 'rgba(232,160,32,0.15)' },
-  'Mid-Range':  { bar: 'var(--color-amber)', label: 'var(--color-amber)', border: 'rgba(232,160,32,0.15)' },
-  'Affordable': { bar: 'var(--color-amber)', label: 'var(--color-amber)', border: 'rgba(232,160,32,0.15)' },
+const SENTIMENT_COLORS = {
+  positive: '#34D399',
+  negative: '#F87171',
+  neutral:  '#9CA3AF',
 };
 
-// How many rows to show per tier in collapsed state (total = 5)
-const COLLAPSED_COUNTS = { 'Premium': 2, 'Mid-Range': 2, 'Affordable': 1 };
+function sentimentArrow(score) {
+  if (score >= 0.15) return { symbol: '▲', color: SENTIMENT_COLORS.positive };
+  if (score <= -0.15) return { symbol: '▼', color: SENTIMENT_COLORS.negative };
+  return { symbol: '–', color: SENTIMENT_COLORS.neutral };
+}
+
+function formatScore(score) {
+  if (score == null) return '0.0';
+  const s = Number(score);
+  return (s >= 0 ? '+' : '') + s.toFixed(1);
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function localityToSlug(name) {
-  return name.toLowerCase().replace(/\s+/g, '-');
-}
 
 function timeAgoShort(dateStr) {
   if (!dateStr) return '';
   const diffMs = Date.now() - new Date(dateStr).getTime();
-  const hours = Math.floor(diffMs / (1000 * 60 * 60));
-  if (hours < 1)  return 'just now';
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
-
-function timeAgoLong(dateStr) {
-  if (!dateStr) return null;
-  const diffMs = Date.now() - new Date(dateStr).getTime();
-  const hours = Math.floor(diffMs / (1000 * 60 * 60));
-  if (hours < 1)   return 'less than an hour ago';
-  if (hours === 1) return '1 hour ago';
-  if (hours < 24)  return `${hours} hours ago`;
   const days = Math.floor(hours / 24);
-  return `${days} day${days > 1 ? 's' : ''} ago`;
-}
-
-function splitIntoTierGroups(localities) {
-  const total = localities.length;
-  if (total === 0) return { Premium: [], 'Mid-range': [], Affordable: [] };
-  const premiumCount    = Math.max(1, Math.round(total * 0.3));
-  const affordableCount = Math.max(1, Math.round(total * 0.3));
-  const midCount        = total - premiumCount - affordableCount;
-  return {
-    Premium:     localities.slice(0, premiumCount),
-    'Mid-range': localities.slice(premiumCount, premiumCount + midCount),
-    Affordable:  localities.slice(premiumCount + midCount),
-  };
+  if (days === 1) return 'Yesterday';
+  return `${days}d ago`;
 }
 
 function decodeHTML(str) {
@@ -72,723 +50,695 @@ function decodeHTML(str) {
   return txt.value;
 }
 
-// ── Shared style objects ──────────────────────────────────────────────────────
-const s = {
-  page: {
-    background: 'var(--color-bg-primary)',
-    color: 'var(--color-text-primary)',
-    fontFamily: 'var(--font-sans)',
-    minHeight: '100vh',
-    paddingBottom: 100,
-  },
-  eyebrow: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: 10,
-    letterSpacing: '0.14em',
-    color: 'var(--color-amber)',
-    textTransform: 'uppercase',
-    marginBottom: 12,
-  },
-  h2: {
-    fontWeight: 300,
-    fontSize: 20,
-    letterSpacing: '-0.02em',
-    marginBottom: 20,
-  },
-  card: {
-    background: 'var(--color-bg-surface)',
-    borderRadius: 'var(--radius-card)',
-    padding: '16px 18px',
-  },
-  monoSmall: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: 11,
-    letterSpacing: '0.06em',
-    color: 'var(--color-text-muted)',
-  },
-};
+function localityToSlug(name) {
+  return name.toLowerCase().replace(/\s+/g, '-');
+}
 
 // ── Sub-components ────────────────────────────────────────────────────────────
-const FEED_SOURCE_COLORS = {
-  reddit:   { color: '#F97316', bg: 'rgba(249,115,22,0.1)',  border: 'rgba(249,115,22,0.3)'  },
-  telegram: { color: '#38BDF8', bg: 'rgba(56,189,248,0.1)', border: 'rgba(56,189,248,0.3)'  },
-  news:     { color: '#60A5FA', bg: 'rgba(96,165,250,0.1)', border: 'rgba(96,165,250,0.3)'  },
-};
 
-function SourceBadge({ source }) {
-  const key = (source || '').toLowerCase();
-  const cfg = FEED_SOURCE_COLORS[key] || null;
+function TopicTicker({ topics }) {
+  if (!topics || topics.length === 0) return null;
+
+  const tickerItems = topics.map(t => {
+    const arrow = sentimentArrow(t.avg_sentiment);
+    return (
+      <div key={t.slug} style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        flexShrink: 0, padding: '0 12px',
+      }}>
+        <span className="type-eyebrow" style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-xs)' }}>
+          {t.label}
+        </span>
+        <span className="type-data" style={{ color: arrow.color, fontSize: 'var(--text-xs)' }}>
+          {arrow.symbol} {Math.abs(t.avg_sentiment).toFixed(1)}
+        </span>
+      </div>
+    );
+  });
+
   return (
-    <span style={{
-      fontFamily: 'var(--font-mono)',
-      fontSize: 10,
-      letterSpacing: '0.1em',
-      textTransform: 'uppercase',
-      background: cfg ? cfg.bg : 'var(--color-bg-card)',
-      color: cfg ? cfg.color : 'var(--color-text-muted)',
-      border: `1px solid ${cfg ? cfg.border : 'var(--color-border)'}`,
-      borderRadius: 4,
-      padding: '3px 8px',
+    <div style={{
+      overflow: 'hidden',
+      borderTop: '1px solid var(--color-border)',
+      borderBottom: '1px solid var(--color-border)',
+      padding: '10px 0',
+      marginBottom: 24,
     }}>
-      {source}
+      <div className="pulse-ticker-track">
+        <div className="pulse-ticker-content">
+          {tickerItems}
+        </div>
+        <div className="pulse-ticker-content" aria-hidden="true">
+          {tickerItems}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SentimentBadge({ score }) {
+  const s = Number(score || 0);
+  let bg, color;
+  if (s >= 0.15) {
+    bg = 'rgba(52,211,153,0.12)';
+    color = SENTIMENT_COLORS.positive;
+  } else if (s <= -0.15) {
+    bg = 'rgba(248,113,113,0.12)';
+    color = SENTIMENT_COLORS.negative;
+  } else {
+    bg = 'rgba(156,163,175,0.12)';
+    color = SENTIMENT_COLORS.neutral;
+  }
+
+  return (
+    <span className="type-data" style={{
+      background: bg,
+      color,
+      padding: '3px 8px',
+      borderRadius: 4,
+      fontSize: 'var(--text-xs)',
+      letterSpacing: 'var(--tracking-wide)',
+    }}>
+      SENTIMENT {formatScore(score)}
     </span>
   );
 }
 
-// Fix #3: body truncated to 2 lines, "Read more →" link shown after
-function FeedCard({ item }) {
+function CategoryBadge({ category }) {
+  const key = (category || '').toLowerCase();
+  const map = {
+    discussion: { color: '#F97316', bg: 'rgba(249,115,22,0.1)', border: 'rgba(249,115,22,0.3)' },
+    news:       { color: '#60A5FA', bg: 'rgba(96,165,250,0.1)', border: 'rgba(96,165,250,0.3)' },
+    listing:    { color: '#A78BFA', bg: 'rgba(167,139,250,0.1)', border: 'rgba(167,139,250,0.3)' },
+  };
+  const cfg = map[key] || map.discussion;
+
   return (
-    <article style={{ ...s.card, marginBottom: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <SourceBadge source={item.source} />
-        <span style={{ ...s.monoSmall }}>{item.channel}</span>
-        <span style={{ ...s.monoSmall, marginLeft: 'auto' }}>{item.timeAgo}</span>
+    <span className="type-eyebrow" style={{
+      background: cfg.bg,
+      color: cfg.color,
+      border: `1px solid ${cfg.border}`,
+      borderRadius: 4,
+      padding: '2px 8px',
+      fontSize: 'var(--text-xs)',
+    }}>
+      {category || 'discussion'}
+    </span>
+  );
+}
+
+function SignalCard({ post }) {
+  const localities = post.detected_localities || [];
+  const breadcrumb = localities.length > 0
+    ? localities.slice(0, 2).join(' // ')
+    : (post.locality || 'Bengaluru');
+
+  return (
+    <article style={{
+      background: 'var(--color-bg-surface)',
+      borderRadius: 'var(--radius-card)',
+      padding: '20px',
+      marginBottom: 10,
+      borderLeft: '3px solid transparent',
+      borderImage: post.relevance_score >= 0.7
+        ? 'linear-gradient(to bottom, var(--color-amber), transparent) 1'
+        : undefined,
+    }}>
+      {/* Top row: sentiment badge + category + time */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        flexWrap: 'wrap', marginBottom: 12,
+      }}>
+        <SentimentBadge score={post.sentiment_score} />
+        <CategoryBadge category={post.category} />
+        <span className="type-data" style={{
+          marginLeft: 'auto',
+          color: 'var(--color-text-muted)',
+          fontSize: 'var(--text-xs)',
+        }}>
+          {post.timeAgo}
+        </span>
       </div>
-      <h3 style={{ fontWeight: 300, fontSize: 15, lineHeight: 1.4, marginBottom: 8 }}>
-        {item.title}
-      </h3>
-      <p style={{
-        fontSize: 13,
+
+      {/* Breadcrumb: locality // topic */}
+      <p className="type-eyebrow" style={{
         color: 'var(--color-text-muted)',
-        lineHeight: 1.6,
-        marginBottom: item.url ? 6 : 10,
+        marginBottom: 8,
+        fontSize: 'var(--text-xs)',
+      }}>
+        {breadcrumb.toUpperCase()}
+        {post.canonical_topic && (
+          <> // {post.canonical_topic.toUpperCase()}</>
+        )}
+      </p>
+
+      {/* Headline */}
+      <h3 style={{
+        fontWeight: 'var(--weight-regular)',
+        fontSize: 'var(--text-base)',
+        lineHeight: 'var(--leading-snug)',
+        marginBottom: 8,
+      }}>
+        {post.title}
+      </h3>
+
+      {/* Body — 2 lines max */}
+      <p className="type-secondary" style={{
+        color: 'var(--color-text-muted)',
+        lineHeight: 'var(--leading-normal)',
+        marginBottom: post.url ? 8 : 12,
         display: '-webkit-box',
         WebkitLineClamp: 2,
         WebkitBoxOrient: 'vertical',
         overflow: 'hidden',
       }}>
-        {item.body}
+        {post.body}
       </p>
-      {item.url && (
+
+      {/* Read more link */}
+      {post.url && (
         <a
-          href={item.url}
+          href={post.url}
           target="_blank"
           rel="noopener noreferrer"
+          className="type-data"
           style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
             color: 'var(--color-amber)',
             textDecoration: 'none',
             display: 'inline-block',
-            marginBottom: 10,
+            marginBottom: 12,
+            fontSize: 'var(--text-xs)',
           }}
         >
-          Read more →
+          READ FULL SIGNAL →
         </a>
       )}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {item.tags.map(tag => (
-          <span key={tag} style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10,
-            letterSpacing: '0.06em',
-            color: 'var(--color-amber)',
-            opacity: 0.8,
+
+      {/* Bottom metadata chips */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+        {post.relevance_score != null && (
+          <span className="type-data" style={{
+            fontSize: 'var(--text-xs)',
+            color: 'var(--color-text-muted)',
           }}>
-            {tag}
+            Relevance {(post.relevance_score * 100).toFixed(0)}%
           </span>
-        ))}
+        )}
+        {post.source && (
+          <span className="type-data" style={{
+            fontSize: 'var(--text-xs)',
+            color: 'var(--color-text-muted)',
+          }}>
+            via {post.source}
+          </span>
+        )}
       </div>
     </article>
   );
 }
 
+const BHK_OPTIONS = ['1 BHK', '2 BHK', '3 BHK'];
 
-// ── Main page ─────────────────────────────────────────────────────────────────
-export default function Pulse() {
-  const navigate = useNavigate();
+function LocalityActivityCard({ localities, rentData, navigate }) {
+  const [selectedBhk, setSelectedBhk] = useState('2 BHK');
 
-  const [selectedBhk,  setSelectedBhk]  = useState('2 BHK');
-  const [showAll,      setShowAll]      = useState(false);
-  const [feedTab,      setFeedTab]      = useState('All');
-  const [feedPage,     setFeedPage]     = useState(0);
-  const [sentimentTab, setSentimentTab] = useState('All Sources');
+  if (!localities || localities.length === 0) return null;
 
-  const PAGE_SIZE = 5;
-
-  // Locality + deposit data
-  const [localityRows, setLocalityRows] = useState([]);
-  const [depositRows,  setDepositRows]  = useState([]);
-  const [loading,      setLoading]      = useState(true);
-  const [updatedAt,    setUpdatedAt]    = useState(null);
-
-  // Feed + topic data
-  const [feedPosts,   setFeedPosts]   = useState([]);
-  const [rawTopics,   setRawTopics]   = useState([]);
-  const [feedLoading, setFeedLoading] = useState(true);
-
-  // Fetch locality stats + deposit benchmarks on mount
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      const [{ data: lData }, { data: dData }] = await Promise.all([
-        supabase
-          .from('locality_stats_cache')
-          .select('*')
-          .order('median_rent', { ascending: false }),
-        supabase
-          .from('deposit_stats_cache')
-          .select('*')
-          .order('bhk'),
-      ]);
-      if (cancelled) return;
-      setLocalityRows(lData || []);
-      setDepositRows(dData || []);
-      if (lData && lData.length > 0) {
-        const latest = lData.reduce((a, b) =>
-          new Date(a.updated_at) > new Date(b.updated_at) ? a : b
-        );
-        setUpdatedAt(latest.updated_at);
+  const rentMap = {};
+  if (rentData) {
+    for (const row of rentData) {
+      if (row.bhk === selectedBhk) {
+        rentMap[row.locality.toLowerCase()] = {
+          median: row.median_rent,
+          trend: row.rent_trend_pct,
+        };
       }
-      setLoading(false);
     }
-    load();
-    return () => { cancelled = true; };
-  }, []);
-
-  // Fetch locality feed (topics + posts) on mount
-  useEffect(() => {
-    let cancelled = false;
-    async function loadFeed() {
-      setFeedLoading(true);
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const [{ data: tData }, { data: pData }] = await Promise.all([
-        supabase
-          .from('locality_feed')
-          .select('topic, source')
-          .not('topic', 'is', null)
-          .gte('scraped_at', thirtyDaysAgo),
-        supabase
-          .from('locality_feed')
-          .select('id, source, author, locality, title, body, url, topic, sentiment, posted_at')
-          .not('topic', 'is', null)
-          .not('sentiment', 'is', null)
-          .order('posted_at', { ascending: false })
-          .limit(30),
-      ]);
-      if (cancelled) return;
-      setRawTopics(tData || []);
-      setFeedPosts(pData || []);
-      setFeedLoading(false);
-    }
-    loadFeed();
-    return () => { cancelled = true; };
-  }, []);
-
-  // ── Derived: localities for selected BHK ──────────────────────────────────
-  const filteredLocalities = useMemo(
-    () => localityRows.filter(r => r.bhk === selectedBhk),
-    [localityRows, selectedBhk]
-  );
-
-  const maxRent = useMemo(
-    () => filteredLocalities.length ? Math.max(...filteredLocalities.map(r => r.median_rent)) : 1,
-    [filteredLocalities]
-  );
-
-  const tiers = useMemo(() => {
-    const groups = splitIntoTierGroups(filteredLocalities);
-    return TIER_META.map(meta => ({
-      ...meta,
-      localities: (groups[meta.key] || []).map(row => ({
-        name:          row.locality,
-        rent:          `₹${Number(row.median_rent).toLocaleString('en-IN')}/mo`,
-        slug:          localityToSlug(row.locality),
-        listingCount:  row.listing_count || 0,
-        medianRent:    row.median_rent   || 0,
-      })),
-    }));
-  }, [filteredLocalities]);
-
-  // ── Derived: deposit benchmarks ──────────────────────────────────────────
-  const deposits = useMemo(() => {
-    return BHK_OPTIONS.map(bhk => {
-      const d = depositRows.find(r => r.bhk === bhk);
-      if (!d) return { config: bhk, multiplier: '—', range: '—' };
-      return {
-        config:     bhk,
-        multiplier: `${Number(d.avg_multiplier).toFixed(1)}×`,
-        range:      `≈ ₹${Number(d.median_deposit).toLocaleString('en-IN')}`,
-      };
-    });
-  }, [depositRows]);
-
-  // ── Derived: sentiment topic bars (filtered by tab, raw counts) ──────────
-  const sentimentTopics = useMemo(() => {
-    let src = rawTopics;
-    if (sentimentTab === 'Reddit') src = rawTopics.filter(t => t.source === 'reddit');
-    else if (sentimentTab === 'News') src = rawTopics.filter(t => t.source === 'news');
-
-    const counts = {};
-    for (const { topic } of src) {
-      counts[topic] = (counts[topic] || 0) + 1;
-    }
-    const sorted = Object.entries(counts)
-      .map(([label, count]) => ({
-        label: label.charAt(0).toUpperCase() + label.slice(1),
-        count,
-      }))
-      .filter(t => t.label.toLowerCase() !== 'other')
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-
-    if (sorted.length === 0) return [];
-    const maxCount = sorted[0].count;
-    return sorted.map(t => ({ ...t, barPct: Math.round((t.count / maxCount) * 100) }));
-  }, [rawTopics, sentimentTab]);
-
-  // ── Derived: visible feed posts ──────────────────────────────────────────
-  const visibleFeed = useMemo(() => {
-    const srcLabel  = { reddit: 'Reddit', news: 'News', telegram: 'Telegram', nestiq: 'NestIQ' };
-    const filterMap = { Reddit: 'reddit', Telegram: 'telegram', News: 'news' };
-
-    let posts = feedPosts;
-    if (feedTab !== 'All') {
-      const src = filterMap[feedTab];
-      posts = src ? feedPosts.filter(p => p.source === src) : [];
-    }
-
-    return posts.map(p => ({
-      id:      p.id,
-      source:  srcLabel[p.source] || p.source,
-      channel: p.locality || p.author || '',
-      timeAgo: timeAgoShort(p.posted_at),
-      title:   p.title || '',
-      body:    decodeHTML(p.body) || '',
-      tags:    p.topic
-        ? [`#${p.topic.charAt(0).toUpperCase() + p.topic.slice(1).replace(/\s+/g, '')}`]
-        : [],
-      url: p.url,
-    }));
-  }, [feedPosts, feedTab]);
-
-  // BHK change resets showAll
-  function handleBhkChange(bhk) {
-    setSelectedBhk(bhk);
-    setShowAll(false);
   }
 
-  const isDesktop = useDesktop();
+  function formatRent(val) {
+    if (!val) return '—';
+    const n = Number(val);
+    if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
+    if (n >= 1000) return `₹${(n / 1000).toFixed(0)}k`;
+    return `₹${n}`;
+  }
+
+
 
   return (
-    <div style={{ ...s.page, marginLeft: isDesktop ? 240 : 0, paddingBottom: isDesktop ? 40 : undefined }}>
-      <DesktopSidebar />
-
-      <AppHeader />
-
+    <div style={{
+      background: 'var(--color-bg-surface)',
+      borderRadius: 'var(--radius-card)',
+      padding: '20px',
+      marginBottom: 24,
+    }}>
       <div style={{
-        padding: isDesktop ? '24px 24px 0' : '24px 16px 0',
-        maxWidth: isDesktop ? 1440 : undefined,
-        margin: isDesktop ? '0 auto' : undefined,
+        display: 'flex', justifyContent: 'space-between',
+        alignItems: 'center', marginBottom: 16,
       }}>
-
-        {/* ── PAGE TITLE ── */}
-        <h1 style={{
-          fontWeight: 300, fontSize: 26, letterSpacing: '-0.025em',
-          lineHeight: 1.2, marginBottom: 20,
+        <p className="type-eyebrow" style={{
+          color: 'var(--color-amber)',
+          fontSize: 'var(--text-xs)',
+          margin: 0,
         }}>
-          Live rental intelligence<br />for Bangalore.
-        </h1>
-
-        {/* ── BHK SELECTOR ── */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 32 }}>
+          LOCALITY ACTIVITY
+        </p>
+        {/* BHK toggle */}
+        <div style={{ display: 'flex', gap: 4 }}>
           {BHK_OPTIONS.map(bhk => (
             <button
               key={bhk}
-              onClick={() => handleBhkChange(bhk)}
+              onClick={() => setSelectedBhk(bhk)}
+              className="type-data"
               style={{
-                fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.05em',
-                background: selectedBhk === bhk ? 'var(--color-amber)' : 'var(--color-bg-surface)',
-                color: selectedBhk === bhk ? '#1a0a00' : 'var(--color-text-muted)',
+                fontSize: '10px',
+                padding: '3px 8px',
+                borderRadius: 'var(--radius-pill)',
                 border: selectedBhk === bhk ? 'none' : '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-pill)', padding: '6px 14px', cursor: 'pointer',
-                transition: 'background 0.2s, color 0.2s',
+                background: selectedBhk === bhk ? 'var(--color-amber)' : 'transparent',
+                color: selectedBhk === bhk ? '#1a0a00' : 'var(--color-text-muted)',
+                cursor: 'pointer',
               }}
             >
               {bhk}
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Column headers */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between',
+        padding: '0 0 8px', borderBottom: '1px solid var(--color-border)',
+        marginBottom: 4,
+      }}>
+        <span className="type-eyebrow" style={{ color: 'var(--color-text-muted)', fontSize: '10px', flex: 1 }}>
+          Locality
+        </span>
+        <span className="type-eyebrow" style={{ color: 'var(--color-text-muted)', fontSize: '10px', width: 70, textAlign: 'right' }}>
+          Avg Rent
+        </span>
+        <span className="type-eyebrow" style={{ color: 'var(--color-text-muted)', fontSize: '10px', width: 70, textAlign: 'right' }}>
+          Status
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {localities.map(loc => {
+          const arrow = sentimentArrow(loc.avg_sentiment);
+          let status = 'STABLE';
+          if (loc.avg_sentiment >= 0.3) status = 'OPTIMAL';
+          else if (loc.avg_sentiment <= -0.3) status = 'VOLATILE';
+
+          const rentInfo = rentMap[loc.locality.toLowerCase()];
+
+          return (
+            <div
+              key={loc.locality}
+              onClick={() => navigate(`/neighbourhood-pulse/${localityToSlug(loc.locality)}`)}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                cursor: 'pointer',
+                padding: '8px 0',
+                borderBottom: '1px solid var(--color-border)',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-bg-card)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = ''; }}
+            >
+              <span style={{
+                fontWeight: 'var(--weight-regular)',
+                fontSize: 'var(--text-sm)',
+                flex: 1,
+              }}>
+                {loc.locality}
+              </span>
+              <span className="type-data" style={{
+                fontSize: 'var(--text-xs)',
+                color: 'var(--color-text-primary)',
+                width: 70,
+                textAlign: 'right',
+              }}>
+                {formatRent(rentInfo?.median)}
+              </span>
+              <span className="type-data" style={{
+                color: arrow.color,
+                fontSize: 'var(--text-xs)',
+                width: 70,
+                textAlign: 'right',
+              }}>
+                {status}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
+export default function Pulse() {
+  const navigate = useNavigate();
+  const isDesktop = useDesktop();
+
+  const [feedTab, setFeedTab] = useState('All');
+  const [feedPage, setFeedPage] = useState(0);
+
+  const [feedPosts, setFeedPosts] = useState([]);
+  const [topicStats, setTopicStats] = useState([]);
+  const [localityStats, setLocalityStats] = useState([]);
+  const [rentData, setRentData] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // ── Data fetching ─────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      const [postsRes, topicsRes, localityRes, rentRes] = await Promise.all([
+        // Recent tagged posts (discussion + news only, sorted by relevance then recency)
+        supabase
+          .from('locality_feed')
+          .select('id, source, locality, title, body, url, category, canonical_topic, sentiment_score, relevance_score, detected_localities, posted_at, scraped_at')
+          .in('category', ['discussion', 'news'])
+          .gte('relevance_score', 0.3)
+          .order('scraped_at', { ascending: false })
+          .limit(50),
+
+        // Topic volume (last 30 days)
+        supabase
+          .from('locality_feed')
+          .select('canonical_topic, sentiment_score')
+          .in('category', ['discussion', 'news'])
+          .not('canonical_topic', 'is', null)
+          .gte('scraped_at', thirtyDaysAgo),
+
+        // Per-locality average sentiment (last 7 days)
+        supabase
+          .from('locality_feed')
+          .select('locality, sentiment_score')
+          .in('category', ['discussion', 'news'])
+          .not('locality', 'is', null)
+          .not('sentiment_score', 'is', null)
+          .gte('scraped_at', sevenDaysAgo),
+
+        // Rent stats + trend for all localities + BHK combos
+        supabase
+          .from('locality_stats_cache')
+          .select('locality, bhk, median_rent, rent_trend_pct')
+          .order('median_rent', { ascending: false }),
+      ]);
+
+      if (cancelled) return;
+
+      setRentData(rentRes.data || []);
+
+      // Posts
+      setFeedPosts((postsRes.data || []).map(p => ({
+        ...p,
+        title: p.title || '',
+        body: decodeHTML(p.body) || '',
+        timeAgo: timeAgoShort(p.posted_at || p.scraped_at),
+      })));
+
+      // Topic aggregation: count + avg sentiment per topic
+      if (topicsRes.data) {
+        const byTopic = {};
+        for (const row of topicsRes.data) {
+          const t = row.canonical_topic;
+          if (!t || t === 'other') continue;
+          if (!byTopic[t]) byTopic[t] = { count: 0, sentimentSum: 0 };
+          byTopic[t].count++;
+          byTopic[t].sentimentSum += (row.sentiment_score || 0);
+        }
+        const sorted = Object.entries(byTopic)
+          .map(([slug, d]) => ({
+            slug,
+            label: slug.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+            count: d.count,
+            avg_sentiment: d.count > 0 ? d.sentimentSum / d.count : 0,
+          }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 8);
+        setTopicStats(sorted);
+      }
+
+      // Locality aggregation: avg sentiment per locality
+      if (localityRes.data) {
+        const byLoc = {};
+        for (const row of localityRes.data) {
+          const loc = row.locality;
+          if (!byLoc[loc]) byLoc[loc] = { count: 0, sentimentSum: 0 };
+          byLoc[loc].count++;
+          byLoc[loc].sentimentSum += (row.sentiment_score || 0);
+        }
+        const sorted = Object.entries(byLoc)
+          .map(([locality, d]) => ({
+            locality,
+            count: d.count,
+            avg_sentiment: d.count > 0 ? d.sentimentSum / d.count : 0,
+          }))
+          .filter(l => l.count >= 2)
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 8);
+        setLocalityStats(sorted);
+      }
+
+      setLoading(false);
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  // ── Derived: aggregated city sentiment ─────────────────────────────────────
+
+  const citySentiment = useMemo(() => {
+    if (feedPosts.length === 0) return { score: 0, label: 'Calibrating' };
+    const scores = feedPosts.filter(p => p.sentiment_score != null).map(p => p.sentiment_score);
+    if (scores.length === 0) return { score: 0, label: 'Calibrating' };
+    const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+    let label = 'Neutral';
+    if (avg >= 0.3) label = 'Bullish';
+    else if (avg >= 0.1) label = 'Cautiously Optimistic';
+    else if (avg <= -0.3) label = 'Bearish';
+    else if (avg <= -0.1) label = 'Cautiously Pessimistic';
+    return { score: avg, label };
+  }, [feedPosts]);
+
+  // ── Derived: filtered feed ────────────────────────────────────────────────
+
+  const filteredFeed = useMemo(() => {
+    if (feedTab === 'All') return feedPosts;
+    return feedPosts.filter(p => (p.category || '').toLowerCase() === feedTab.toLowerCase());
+  }, [feedPosts, feedTab]);
+
+  const totalPages = Math.ceil(filteredFeed.length / PAGE_SIZE);
+  const pagedFeed = filteredFeed.slice(feedPage * PAGE_SIZE, (feedPage + 1) * PAGE_SIZE);
+
+  return (
+    <div className="nestiq-page-body" style={{
+      background: 'var(--color-bg-primary)',
+      color: 'var(--color-text-primary)',
+      fontFamily: 'var(--font-sans)',
+      minHeight: '100vh',
+    }}>
+      <DesktopSidebar />
+      <AppHeader />
+
+      <div style={{
+        padding: isDesktop ? '24px 32px 40px' : '16px 16px 100px',
+        maxWidth: isDesktop ? 1200 : undefined,
+        margin: isDesktop ? '0 auto' : undefined,
+      }}>
+
+        {/* ── DOSSIER HEADER ── */}
+        <div style={{ marginBottom: 0 }}>
+          <p className="type-eyebrow" style={{
+            color: 'var(--color-amber)',
+            marginBottom: 12,
+            fontSize: 'var(--text-xs)',
+          }}>
+            NestIQ Intelligence // Live
+          </p>
+          <h1 style={{
+            fontWeight: 'var(--weight-light)',
+            fontSize: 'var(--text-xl)',
+            letterSpacing: 'var(--tracking-snug)',
+            lineHeight: 'var(--leading-tight)',
+            marginBottom: 16,
+          }}>
+            The Bangalore Pulse
+          </h1>
+
+          {/* Sentiment score + label row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+            <span className="type-data" style={{
+              fontSize: 'var(--text-lg)',
+              color: 'var(--color-amber)',
+            }}>
+              {formatScore(citySentiment.score)}
+            </span>
+            <div>
+              <p className="type-eyebrow" style={{
+                color: 'var(--color-text-muted)',
+                marginBottom: 2,
+                fontSize: 'var(--text-xs)',
+              }}>
+                Aggregated Sentiment
+              </p>
+              <p className="type-data" style={{
+                color: 'var(--color-text-primary)',
+                fontSize: 'var(--text-sm)',
+              }}>
+                {citySentiment.label}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* ── TOPIC TICKER (auto-scrolling) ── */}
+        <TopicTicker topics={topicStats} />
 
         {/* ── TWO-COLUMN BODY (desktop) ── */}
         <div style={isDesktop ? { display: 'flex', gap: 32, alignItems: 'flex-start' } : {}}>
 
-        {/* ── LEFT COLUMN: Rent + Deposit ── */}
-        <div style={isDesktop ? { width: 400, flexShrink: 0 } : {}}>
+          {/* ── LEFT COLUMN: Signal Feed ── */}
+          <div style={isDesktop ? { flex: 1, minWidth: 0 } : {}}>
 
-        {/* ── RENT BY LOCALITY ── */}
-        <section style={{ marginBottom: 40 }}>
-          {/* Section header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-            <div>
-              <p style={{ ...s.monoSmall, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>
-                Average Rent
-              </p>
-              {updatedAt && (
-                <p style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                  Updated {timeAgoLong(updatedAt)}
-                </p>
-              )}
+            {/* Feed tab bar */}
+            <div style={{
+              display: 'flex', gap: 6, marginBottom: 20,
+              overflowX: 'auto', scrollbarWidth: 'none',
+            }}>
+              {FEED_TABS.map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => { setFeedTab(tab); setFeedPage(0); }}
+                  className="type-label"
+                  style={{
+                    fontSize: 'var(--text-xs)',
+                    letterSpacing: 'var(--tracking-wide)',
+                    background: feedTab === tab ? 'var(--color-amber)' : 'var(--color-bg-surface)',
+                    color: feedTab === tab ? '#1a0a00' : 'var(--color-text-muted)',
+                    border: feedTab === tab ? 'none' : '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-pill)',
+                    padding: '6px 14px',
+                    cursor: 'pointer',
+                    transition: 'background 0.2s, color 0.2s',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
-          </div>
 
-          {/* Fix #1: LocalityGuide-style table card */}
-          <div style={{
-            background: 'var(--color-bg-surface)',
-            borderRadius: 'var(--radius-card)',
-            border: '1px solid var(--color-border)',
-            overflow: 'hidden',
-          }}>
+            {/* Signal cards */}
             {loading ? (
-              <p style={{ ...s.monoSmall, padding: '20px 16px', opacity: 0.5 }}>Loading…</p>
-            ) : filteredLocalities.length === 0 ? (
-              <p style={{ ...s.monoSmall, padding: '20px 16px', opacity: 0.5 }}>
-                No data available for {selectedBhk} yet.
+              <p className="type-data" style={{
+                padding: '40px 0', textAlign: 'center',
+                color: 'var(--color-text-muted)',
+                fontSize: 'var(--text-xs)',
+              }}>
+                Scanning signals…
+              </p>
+            ) : filteredFeed.length === 0 ? (
+              <p className="type-data" style={{
+                padding: '40px 0', textAlign: 'center',
+                color: 'var(--color-text-muted)',
+                fontSize: 'var(--text-xs)',
+              }}>
+                No signals for this category yet.
               </p>
             ) : (
               <>
-                {tiers.map(tier => {
-                  const tc   = TIER_COLORS[tier.label];
-                  const all  = tier.localities;
-                  const rows = showAll ? all : all.slice(0, COLLAPSED_COUNTS[tier.label]);
-                  if (rows.length === 0) return null;
-                  return (
-                    <div key={tier.id}>
-                      {/* Tier label header */}
-                      <div style={{
-                        fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
-                        letterSpacing: '0.08em', padding: '10px 16px 6px',
-                        color: tc.label,
-                        borderBottom: `1px solid ${tc.border}`,
-                      }}>
-                        {tier.label}
-                      </div>
-
-                      {/* Locality rows */}
-                      {rows.map((loc, i) => (
-                        <div
-                          key={loc.slug}
-                          style={{
-                            padding: '11px 16px',
-                            borderBottom: '1px solid var(--color-border)',
-                            cursor: 'default',
-                            transition: 'background 0.15s',
-                          }}
-                          onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-bg-card)'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = ''; }}
-                        >
-                          {/* Row 1: name left · rent + explore right */}
-                          <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: 12,
-                            marginBottom: 8,
-                          }}>
-                            {/* Name — never truncates */}
-                            <div style={{
-                              fontSize: 14, fontWeight: 500,
-                              color: 'var(--color-text-primary)',
-                            }}>
-                              {loc.name}
-                            </div>
-
-                            {/* Rent + listing count + Explore button */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{
-                                  fontSize: 13, fontWeight: 600,
-                                  color: 'var(--color-text-primary)',
-                                  whiteSpace: 'nowrap',
-                                }}>
-                                  {loc.rent}
-                                </div>
-                                <div style={{
-                                  fontSize: 10,
-                                  color: 'var(--color-text-muted)',
-                                  marginTop: 2,
-                                }}>
-                                  based on {loc.listingCount} listings
-                                </div>
-                              </div>
-
-                              {/* Explore button */}
-                              <button
-                                onClick={() => navigate(`/neighbourhood-pulse/${loc.slug}`)}
-                                style={{
-                                  padding: '4px 10px',
-                                  borderRadius: 100,
-                                  border: '1px solid var(--color-border)',
-                                  background: 'var(--color-bg-surface)',
-                                  color: 'var(--color-text-muted)',
-                                  fontSize: 11, fontWeight: 500, cursor: 'pointer',
-                                  whiteSpace: 'nowrap',
-                                  transition: 'border-color 0.15s, color 0.15s',
-                                }}
-                                onMouseEnter={e => {
-                                  e.currentTarget.style.borderColor = 'var(--color-amber)';
-                                  e.currentTarget.style.color = 'var(--color-amber)';
-                                }}
-                                onMouseLeave={e => {
-                                  e.currentTarget.style.borderColor = 'var(--color-border)';
-                                  e.currentTarget.style.color = 'var(--color-text-muted)';
-                                }}
-                              >
-                                Explore
-                              </button>
-                            </div>{/* right-side flex: rent + explore */}
-                          </div>{/* row 1: name + rent/explore */}
-
-                          {/* Row 2: full-width progress bar */}
-                          <div style={{
-                            height: 4,
-                            background: 'rgba(255,255,255,0.07)',
-                            borderRadius: 3,
-                            overflow: 'hidden',
-                          }}>
-                            <div style={{
-                              height: '100%',
-                              borderRadius: 3,
-                              width: `${(loc.medianRent / maxRent) * 100}%`,
-                              background: tc.bar,
-                              transition: 'width 0.4s ease',
-                            }} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })}
-
-                {/* View all / collapse toggle */}
-                {filteredLocalities.length > 5 && (
-                  <button
-                    onClick={() => setShowAll(v => !v)}
-                    style={{
-                      display: 'block', width: '100%', padding: '12px',
-                      border: 'none', borderTop: '1px solid var(--color-border)',
-                      background: 'var(--color-bg-surface)',
-                      color: 'var(--color-text-muted)',
-                      fontFamily: 'var(--font-sans)', fontSize: 12,
-                      cursor: 'pointer', textAlign: 'center',
-                      transition: 'background 0.15s, color 0.15s',
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.background = 'var(--color-bg-card)';
-                      e.currentTarget.style.color = 'var(--color-text-primary)';
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.background = 'var(--color-bg-surface)';
-                      e.currentTarget.style.color = 'var(--color-text-muted)';
-                    }}
-                  >
-                    {showAll
-                      ? 'Show less ↑'
-                      : `View all ${filteredLocalities.length} localities ↓`}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        </section>
-
-        {/* ── DEPOSIT BENCHMARKS ── */}
-        <section style={{ marginBottom: 40 }}>
-          <h2 style={s.h2}>Security Deposit Benchmarks</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {loading ? (
-              <p style={{ ...s.monoSmall, padding: '8px 0', opacity: 0.5 }}>Loading…</p>
-            ) : (
-              deposits.map(d => (
-                <div key={d.config} style={{
-                  ...s.card,
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                }}>
-                  <div>
-                    <p style={{ ...s.monoSmall, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                      {d.config} Multiplier
-                    </p>
-                    <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{d.range}</p>
-                  </div>
-                  <span style={{
-                    fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 500,
-                    color: 'var(--color-amber)', letterSpacing: '-0.03em', lineHeight: 1,
-                  }}>
-                    {d.multiplier}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
-
-        </div>{/* end left column */}
-
-        {/* ── RIGHT COLUMN: Sentiment + Feed ── */}
-        <div style={isDesktop ? { flex: 1, minWidth: 0 } : {}}>
-
-        {/* ── MARKET SENTIMENT ── */}
-        <section style={{ marginBottom: 40 }}>
-          <h2 style={s.h2}>Market Sentiment</h2>
-          <p style={{ fontSize: 13, color: 'var(--color-text-muted)', lineHeight: 1.6, marginBottom: 20 }}>
-            Aggregated real-time signals from social feeds and regional news outlets.
-          </p>
-
-          <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
-            {SENTIMENT_TABS.map(tab => (
-              <button
-                key={tab}
-                onClick={() => setSentimentTab(tab)}
-                style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.05em',
-                  background: sentimentTab === tab ? 'var(--color-amber)' : 'var(--color-bg-surface)',
-                  color: sentimentTab === tab ? '#1a0a00' : 'var(--color-text-muted)',
-                  border: sentimentTab === tab ? 'none' : '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-pill)', padding: '6px 14px', cursor: 'pointer',
-                }}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ ...s.card }}>
-            <p style={{ ...s.eyebrow, marginBottom: 16 }}>Volume by Topic</p>
-            {feedLoading ? (
-              <p style={{ ...s.monoSmall, opacity: 0.5 }}>Loading…</p>
-            ) : sentimentTopics.length === 0 ? (
-              <p style={{ ...s.monoSmall, opacity: 0.5 }}>No data available.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {sentimentTopics.map(t => (
-                  <div key={t.label}>
-                    <div style={{
-                      display: 'flex', justifyContent: 'space-between',
-                      alignItems: 'baseline', marginBottom: 6,
-                    }}>
-                      <span style={{ ...s.monoSmall, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                        {t.label}
-                      </span>
-                      <span style={{
-                        fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 500,
-                        color: 'var(--color-text-primary)',
-                      }}>
-                        {t.count}
-                      </span>
-                    </div>
-                    {/* Progress bar proportional to count */}
-                    <div style={{
-                      height: 3, background: 'var(--color-border)',
-                      borderRadius: 'var(--radius-pill)', overflow: 'hidden',
-                    }}>
-                      <div style={{
-                        height: '100%', width: `${t.barPct}%`,
-                        background: 'var(--color-amber)',
-                        borderRadius: 'var(--radius-pill)',
-                        opacity: 0.5 + (t.barPct / 200),
-                      }} />
-                    </div>
-                  </div>
+                {pagedFeed.map(post => (
+                  <SignalCard key={post.id} post={post} />
                 ))}
-              </div>
-            )}
-          </div>
-        </section>
 
-        {/* ── SOCIAL FEED ── */}
-        <section style={{ marginBottom: 24 }}>
-          {/* Feed tab bar */}
-          <div style={{
-            display: 'flex', gap: 6, marginBottom: 16,
-            overflowX: 'auto', scrollbarWidth: 'none',
-          }}>
-            {FEED_TABS.map(tab => (
-              <button
-                key={tab}
-                onClick={() => { setFeedTab(tab); setFeedPage(0); }}
-                style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.05em',
-                  background: feedTab === tab ? 'var(--color-amber)' : 'var(--color-bg-surface)',
-                  color: feedTab === tab ? '#1a0a00' : 'var(--color-text-muted)',
-                  border: feedTab === tab ? 'none' : '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-pill)', padding: '6px 14px',
-                  cursor: 'pointer', transition: 'background 0.2s, color 0.2s',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-
-          {feedLoading ? (
-            <p style={{ ...s.monoSmall, padding: '24px 0', textAlign: 'center', opacity: 0.5 }}>
-              Loading signals…
-            </p>
-          ) : visibleFeed.length === 0 ? (
-            <p style={{ ...s.monoSmall, padding: '24px 0', textAlign: 'center' }}>
-              No signals for this source yet.
-            </p>
-          ) : (() => {
-            const totalPages = Math.ceil(visibleFeed.length / PAGE_SIZE);
-            const pagedFeed  = visibleFeed.slice(feedPage * PAGE_SIZE, (feedPage + 1) * PAGE_SIZE);
-            return (
-              <>
-                {pagedFeed.map(item => <FeedCard key={item.id} item={item} />)}
-
+                {/* Pagination */}
                 {totalPages > 1 && (
                   <div style={{
                     display: 'flex', justifyContent: 'space-between',
-                    alignItems: 'center', marginTop: 12,
+                    alignItems: 'center', marginTop: 16,
                   }}>
                     <button
                       onClick={() => setFeedPage(p => p - 1)}
                       disabled={feedPage === 0}
+                      className="type-data"
                       style={{
-                        fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.05em',
+                        fontSize: 'var(--text-xs)',
                         background: 'var(--color-bg-surface)',
                         color: feedPage === 0 ? 'var(--color-text-muted)' : 'var(--color-amber)',
                         border: '1px solid var(--color-border)',
-                        borderRadius: 'var(--radius-pill)', padding: '6px 14px',
+                        borderRadius: 'var(--radius-pill)',
+                        padding: '6px 14px',
                         cursor: feedPage === 0 ? 'default' : 'pointer',
                         opacity: feedPage === 0 ? 0.4 : 1,
-                        transition: 'opacity 0.15s',
                       }}
                     >
-                      ← Prev
+                      ← PREV
                     </button>
-
-                    <span style={{ ...s.monoSmall }}>
+                    <span className="type-data" style={{
+                      color: 'var(--color-text-muted)',
+                      fontSize: 'var(--text-xs)',
+                    }}>
                       {feedPage + 1} / {totalPages}
                     </span>
-
                     <button
                       onClick={() => setFeedPage(p => p + 1)}
                       disabled={feedPage >= totalPages - 1}
+                      className="type-data"
                       style={{
-                        fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.05em',
+                        fontSize: 'var(--text-xs)',
                         background: 'var(--color-bg-surface)',
                         color: feedPage >= totalPages - 1 ? 'var(--color-text-muted)' : 'var(--color-amber)',
                         border: '1px solid var(--color-border)',
-                        borderRadius: 'var(--radius-pill)', padding: '6px 14px',
+                        borderRadius: 'var(--radius-pill)',
+                        padding: '6px 14px',
                         cursor: feedPage >= totalPages - 1 ? 'default' : 'pointer',
                         opacity: feedPage >= totalPages - 1 ? 0.4 : 1,
-                        transition: 'opacity 0.15s',
                       }}
                     >
-                      Next →
+                      NEXT →
                     </button>
                   </div>
                 )}
               </>
-            );
-          })()}
-        </section>
+            )}
+          </div>
 
-        </div>{/* end right column */}
+          {/* ── RIGHT COLUMN: Intelligence Sidebar ── */}
+          <div style={isDesktop ? { width: 340, flexShrink: 0 } : { marginTop: 32 }}>
+
+            {/* Locality Activity + Rent */}
+            <LocalityActivityCard localities={localityStats} rentData={rentData} navigate={navigate} />
+
+            {/* Powered by */}
+            <p className="type-data" style={{
+              fontSize: 'var(--text-xs)',
+              color: 'var(--color-text-muted)',
+              textAlign: 'center',
+              opacity: 0.6,
+            }}>
+              Powered by Gemini ✦ Updated every 3h
+            </p>
+          </div>
+
         </div>{/* end two-column body */}
-
       </div>
 
       <BottomNav />

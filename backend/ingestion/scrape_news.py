@@ -2,9 +2,12 @@
 """
 NewsAPI scraper for the NestIQ locality feed.
 
-For each Bengaluru locality, fetches up to 5 recent news articles from
-NewsAPI and inserts them into the locality_feed table.  Skips localities
-that already have enough recent coverage so repeat runs stay cheap.
+Two-tier query strategy (designed for ~36 API calls per run, 2 runs/day):
+  1. Locality queries  — top 10 localities × 1 call each  = 10 calls
+  2. City-level queries — 8 thematic queries              =  8 calls
+     (locality = NULL, assigned by Gemini tagger later)
+
+Total: ~18 calls/run × 2 runs/day = ~36 calls/day (well within 100/day free tier).
 
 Usage:
     python -m ingestion.scrape_news          # from backend/
@@ -23,7 +26,6 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 
-# Allow running from repo root or backend/
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from dotenv import load_dotenv
@@ -39,18 +41,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger("scrape_news")
 
+# ── Constants ─────────────────────────────────────────────────────────────────
+
 NEWSAPI_URL = "https://newsapi.org/v2/everything"
 
-LOCALITIES = [
+# Top 10 localities for per-locality queries (highest activity / news coverage)
+TOP_LOCALITIES = [
     "Indiranagar", "Koramangala", "HSR Layout", "Whitefield",
-    "Electronic City", "Hebbal", "Yelahanka", "BTM Layout",
-    "JP Nagar", "Marathahalli", "Bellandur", "Jayanagar",
-    "Malleshwaram", "Banashankari", "Hoodi", "Banaswadi",
-    "HBR Layout", "Sarjapur Road", "KR Puram", "Yeshwanthpur",
+    "Electronic City", "Hebbal", "BTM Layout", "Marathahalli",
+    "Bellandur", "Sarjapur Road",
 ]
 
-MAX_PER_LOCALITY = 5
-LOOKBACK_HOURS   = 72  # wider window — tighten to 24 once articles are flowing
+CITY_QUERIES = [
+    "Bengaluru OR Bangalore infrastructure metro",
+    "Bengaluru OR Bangalore water Cauvery",
+    "Bengaluru OR Bangalore traffic",
+    "Bengaluru OR Bangalore rent housing",
+    "Bengaluru OR Bangalore crime safety",
+    "Bengaluru OR Bangalore BBMP potholes",
+    "Bengaluru OR Bangalore startups tech",
+    "Bengaluru OR Bangalore pollution",
+]
+
+MAX_PER_QUERY  = 10
+LOOKBACK_HOURS = 168  # 7-day window
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -63,7 +77,6 @@ def _get_api_key() -> str:
 
 
 def _parse_published_at(raw: str | None) -> datetime | None:
-    """Parse NewsAPI's ISO-8601 publishedAt string to an aware datetime."""
     if not raw:
         return None
     try:
@@ -72,58 +85,51 @@ def _parse_published_at(raw: str | None) -> datetime | None:
         return None
 
 
-# ── DB checks ────────────────────────────────────────────────────────────────
-
-def _already_covered(conn, locality: str) -> bool:
-    """Return True if locality_feed already has >= 5 news rows scraped in the last 24 h."""
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT COUNT(*) FROM locality_feed
-        WHERE source    = 'news'
-          AND locality  = %s
-          AND scraped_at >= NOW() - INTERVAL '24 hours'
-        """,
-        (locality,),
-    )
-    return cur.fetchone()[0] >= MAX_PER_LOCALITY
-
-
 # ── API fetch ────────────────────────────────────────────────────────────────
 
-def fetch_articles(locality: str, api_key: str) -> list[dict]:
-    """Call the NewsAPI /everything endpoint for one locality."""
+def fetch_articles(query: str, api_key: str) -> list[dict]:
+    """Call the NewsAPI /everything endpoint."""
     from_dt = (
         datetime.now(timezone.utc) - timedelta(hours=LOOKBACK_HOURS)
     ).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     params = {
-        "q":        f'{locality} (Bangalore OR Bengaluru)',
+        "q":        query,
         "from":     from_dt,
-        "pageSize": MAX_PER_LOCALITY,
+        "pageSize": MAX_PER_QUERY,
         "language": "en",
-        "sortBy":   "publishedAt",
+        "sortBy":   "relevancy",
         "apiKey":   api_key,
     }
     try:
         resp = requests.get(NEWSAPI_URL, params=params, timeout=15)
         if resp.status_code != 200:
-            logger.warning(
-                "  %s: NewsAPI %d — %s",
-                locality, resp.status_code, resp.text[:200],
-            )
+            logger.warning("  NewsAPI %d for query '%.50s' — %s", resp.status_code, query, resp.text[:200])
             return []
         return resp.json().get("articles", [])
     except Exception as e:
-        logger.error("  %s: request failed — %s", locality, e)
+        logger.error("  Request failed for query '%.50s' — %s", query, e)
         return []
+
+
+# ── Relevance check ──────────────────────────────────────────────────────────
+
+def _is_relevant(title: str, description: str, locality: str | None) -> bool:
+    """Check title + description for relevance to Bangalore / the target locality."""
+    text = (title + " " + description).lower()
+    if "bangalore" in text or "bengaluru" in text:
+        return True
+    if locality and locality.lower() in text:
+        return True
+    return False
 
 
 # ── DB insert ────────────────────────────────────────────────────────────────
 
-def insert_articles(conn, locality: str, articles: list[dict]) -> tuple[int, int]:
+def insert_articles(conn, locality: str | None, articles: list[dict]) -> tuple[int, int]:
     """
-    Insert valid articles into locality_feed.
+    Insert articles into locality_feed.
+    locality can be None for city-level queries (Gemini assigns later).
     Returns (inserted_count, duplicate_count).
     """
     inserted = 0
@@ -133,23 +139,17 @@ def insert_articles(conn, locality: str, articles: list[dict]) -> tuple[int, int
     for art in articles:
         url   = (art.get("url") or "").strip()
         title = (art.get("title") or "").strip()
+        description = (art.get("description") or "").strip()
 
-        # Skip articles with no URL or a removed title
         if not url or not title or title == "[Removed]":
-            logger.debug("  %s: skipping article — missing url or removed title", locality)
             continue
 
-        # Skip articles whose title doesn't mention the locality or Bangalore/Bengaluru
-        # NewsAPI full-text search can match on body text, pulling in off-topic articles
-        title_lower = title.lower()
-        if (locality.lower() not in title_lower
-                and "bangalore" not in title_lower
-                and "bengaluru" not in title_lower):
-            logger.debug("  %s: skipping off-topic article — title: %.80s", locality, title)
+        if not _is_relevant(title, description, locality):
+            logger.debug("  Skipping off-topic: %.80s", title)
             continue
 
         source_id  = hashlib.md5(url.encode()).hexdigest()
-        body       = (art.get("description") or "")[:1000]
+        body       = description[:1000]
         title      = title[:500]
         author     = (art.get("source", {}).get("name") or "").strip()
         posted_at  = _parse_published_at(art.get("publishedAt"))
@@ -159,22 +159,21 @@ def insert_articles(conn, locality: str, articles: list[dict]) -> tuple[int, int
                 """
                 INSERT INTO locality_feed
                     (source, source_id, locality, title, body, url,
-                     author, engagement, posted_at, topic, sentiment, scraped_at)
+                     author, engagement, posted_at, scraped_at)
                 VALUES
                     ('news', %s, %s, %s, %s, %s,
-                     %s, 0, %s, NULL, NULL, NOW())
+                     %s, 0, %s, NOW())
                 ON CONFLICT (source, source_id) DO NOTHING
                 """,
                 (source_id, locality, title, body, url, author, posted_at),
             )
             if cur.rowcount == 1:
                 inserted += 1
+                logger.info("  [+] %.70s", title)
             else:
                 duplicates += 1
         except Exception as e:
-            logger.error(
-                "  %s: insert failed for %.80s — %s", locality, url, e
-            )
+            logger.error("  Insert failed for %.80s — %s", url, e)
             conn.rollback()
             cur = conn.cursor()
 
@@ -188,20 +187,18 @@ def main():
     api_key = _get_api_key()
     conn    = get_connection()
 
-    localities_processed = 0
-    total_fetched        = 0
-    total_inserted       = 0
-    total_duplicates     = 0
+    total_fetched    = 0
+    total_inserted   = 0
+    total_duplicates = 0
+    api_calls        = 0
 
-    logger.info("Starting news scrape for %d localities", len(LOCALITIES))
+    # ── Tier 1: Per-locality queries ──────────────────────────────────────
+    logger.info("Tier 1: Fetching news for %d localities", len(TOP_LOCALITIES))
 
-    for locality in LOCALITIES:
-        if _already_covered(conn, locality):
-            logger.info("  %s: skipping — already have enough recent articles", locality)
-            continue
-
-        articles = fetch_articles(locality, api_key)
-        localities_processed += 1
+    for locality in TOP_LOCALITIES:
+        query = f'{locality} (Bangalore OR Bengaluru)'
+        articles = fetch_articles(query, api_key)
+        api_calls += 1
         total_fetched += len(articles)
         logger.info("  %s: fetched %d articles", locality, len(articles))
 
@@ -209,14 +206,28 @@ def main():
         total_inserted   += inserted
         total_duplicates += dupes
 
-        # Polite pause — NewsAPI free tier allows ~100 req/day
+        time.sleep(0.5)
+
+    # ── Tier 2: City-level thematic queries ───────────────────────────────
+    logger.info("Tier 2: Fetching %d city-level thematic queries", len(CITY_QUERIES))
+
+    for query in CITY_QUERIES:
+        articles = fetch_articles(query, api_key)
+        api_calls += 1
+        total_fetched += len(articles)
+        logger.info("  '%.50s': fetched %d articles", query, len(articles))
+
+        inserted, dupes = insert_articles(conn, None, articles)
+        total_inserted   += inserted
+        total_duplicates += dupes
+
         time.sleep(0.5)
 
     conn.close()
 
     print(
         f"\nNews scrape complete.\n"
-        f"Localities processed: {localities_processed}\n"
+        f"API calls made:       {api_calls}\n"
         f"Articles fetched:     {total_fetched}\n"
         f"Articles inserted:    {total_inserted} "
         f"({total_duplicates} duplicates skipped)"

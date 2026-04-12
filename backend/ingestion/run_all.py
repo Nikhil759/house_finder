@@ -2,13 +2,20 @@
 """
 Master ingestion runner — executes all source ingestion scripts.
 
-Designed for Railway cron: a single job that runs all sources sequentially.
+Designed for cron / Railway: a single job that runs sources sequentially.
 Each source is isolated so a failure in one doesn't block others.
 
-Usage:
-    python -m ingestion.run_all              # run all sources
-    python -m ingestion.run_all reddit       # run specific source(s)
-    python -m ingestion.run_all nobroker housing
+Preset pipelines (recommended):
+    python -m ingestion.run_all pulse        # Reddit discussions → News → Tag
+    python -m ingestion.run_all listings     # NoBroker → Housing → Telegram → Reddit listings
+
+Individual sources:
+    python -m ingestion.run_all discussions news tag
+    python -m ingestion.run_all reddit
+
+Scheduling guide:
+    pulse     — every 3 hours  (scrape discussions + news, then tag)
+    listings  — every 6 hours  (listing sources only)
 """
 
 from __future__ import annotations
@@ -25,13 +32,18 @@ logging.basicConfig(
 logger = logging.getLogger("run_all")
 
 SOURCES = {
-    "nobroker":  [sys.executable, "-m", "ingestion.ingest_nobroker"],
-    "housing":   [sys.executable, "-m", "ingestion.ingest_housing"],
-    "telegram":  [sys.executable, "-m", "ingestion.ingest_telegram"],
-    "reddit":    [sys.executable, "-m", "ingestion.ingest_reddit"],
-    "news":      [sys.executable, "-m", "ingestion.scrape_news"],
+    "nobroker":    [sys.executable, "-m", "ingestion.ingest_nobroker"],
+    "housing":     [sys.executable, "-m", "ingestion.ingest_housing"],
+    "telegram":    [sys.executable, "-m", "ingestion.ingest_telegram"],
+    "reddit":      [sys.executable, "-m", "ingestion.ingest_reddit"],
+    "news":        [sys.executable, "-m", "ingestion.scrape_news"],
     "discussions": [sys.executable, "-m", "ingestion.scrape_reddit_discussions"],
-    "tag":       [sys.executable, "-m", "ingestion.tag_locality_feed"],
+    "tag":         [sys.executable, "-m", "ingestion.tag_locality_feed"],
+}
+
+PIPELINES = {
+    "pulse":    ["discussions", "news", "tag"],
+    "listings": ["nobroker", "housing", "telegram", "reddit"],
 }
 
 
@@ -39,7 +51,7 @@ def run_source(name: str, cmd: list[str]) -> bool:
     logger.info("─── Starting %s ───", name)
     start = time.time()
     try:
-        result = subprocess.run(cmd, timeout=600, capture_output=False)
+        result = subprocess.run(cmd, timeout=900, capture_output=False)
         elapsed = time.time() - start
         if result.returncode == 0:
             logger.info("─── %s completed in %.1fs ───", name, elapsed)
@@ -48,7 +60,7 @@ def run_source(name: str, cmd: list[str]) -> bool:
             logger.error("─── %s failed (exit %d) in %.1fs ───", name, result.returncode, elapsed)
             return False
     except subprocess.TimeoutExpired:
-        logger.error("─── %s timed out after 600s ───", name)
+        logger.error("─── %s timed out after 900s ───", name)
         return False
     except Exception as e:
         logger.error("─── %s error: %s ───", name, e)
@@ -56,13 +68,31 @@ def run_source(name: str, cmd: list[str]) -> bool:
 
 
 def main():
-    requested = [s.lower() for s in sys.argv[1:]] if len(sys.argv) > 1 else list(SOURCES.keys())
-    invalid = [s for s in requested if s not in SOURCES]
-    if invalid:
-        logger.error("Unknown sources: %s. Valid: %s", invalid, list(SOURCES.keys()))
-        sys.exit(1)
+    args = [s.lower() for s in sys.argv[1:]] if len(sys.argv) > 1 else ["pulse"]
 
-    logger.info("Running ingestion for: %s", ", ".join(requested))
+    requested: list[str] = []
+    for arg in args:
+        if arg in PIPELINES:
+            requested.extend(PIPELINES[arg])
+        elif arg in SOURCES:
+            requested.append(arg)
+        else:
+            logger.error(
+                "Unknown source/pipeline: '%s'. Valid sources: %s. Pipelines: %s",
+                arg, list(SOURCES.keys()), list(PIPELINES.keys()),
+            )
+            sys.exit(1)
+
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    unique: list[str] = []
+    for name in requested:
+        if name not in seen:
+            seen.add(name)
+            unique.append(name)
+    requested = unique
+
+    logger.info("Running ingestion pipeline: %s", " → ".join(requested))
     results = {}
     for name in requested:
         results[name] = run_source(name, SOURCES[name])
