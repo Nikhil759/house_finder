@@ -172,7 +172,7 @@ export default function PulseLocality() {
         supabase
           .from('locality_stats_cache')
           .select('bhk, median_rent, p25_rent, p75_rent, listing_count, updated_at')
-          .eq('locality', locality)
+          .ilike('locality', locality)
           .order('bhk'),
         supabase
           .from('deposit_stats_cache')
@@ -181,8 +181,8 @@ export default function PulseLocality() {
         supabase
           .from('locality_images')
           .select('image_url, attribution')
-          .eq('locality', locality)
-          .single(),
+          .ilike('locality', locality)
+          .maybeSingle(),
       ]);
       if (cancelled) return;
       if (!sData || sData.length === 0) {
@@ -208,13 +208,13 @@ export default function PulseLocality() {
         supabase
           .from('locality_feed')
           .select('topic')
-          .eq('locality', locality)
+          .ilike('locality', locality)
           .not('topic', 'is', null)
           .gte('scraped_at', thirtyDaysAgo),
         supabase
           .from('locality_feed')
           .select('id, source, author, locality, title, body, url, topic, sentiment, posted_at')
-          .eq('locality', locality)
+          .ilike('locality', locality)
           .not('topic', 'is', null)
           .not('sentiment', 'is', null)
           .order('posted_at', { ascending: false })

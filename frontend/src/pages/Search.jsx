@@ -1293,7 +1293,7 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 // ── Geo-radius modal (bottom sheet) ──────────────────────────────────────────
 const GEO_RADIUS_OPTIONS = [1, 2, 5, 10, 15, 20];
 
-function GeoRadiusModal({ open, onClose, onApply, onClear, currentPin, currentRadius }) {
+function GeoRadiusModal({ open, onClose, onApply, onClear, currentPin, currentRadius, currentLabel }) {
   const mapContainerRef = useRef(null);
   const mapRef          = useRef(null);
   const markerRef       = useRef(null);
@@ -1311,7 +1311,7 @@ function GeoRadiusModal({ open, onClose, onApply, onClear, currentPin, currentRa
     if (open) {
       setPin(currentPin || null);
       setRadius(currentRadius || 5);
-      setLocInput('');
+      setLocInput(currentPin ? (currentLabel || '') : '');
       setSuggestions([]);
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1330,9 +1330,10 @@ function GeoRadiusModal({ open, onClose, onApply, onClear, currentPin, currentRa
         ? 'https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png'
         : 'https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png';
 
+      const initialCenter = currentPin ? [currentPin.lat, currentPin.lng] : [12.9716, 77.5946];
       const map = L.map(mapContainerRef.current, {
-        center: [12.9716, 77.5946],
-        zoom: 12,
+        center: initialCenter,
+        zoom: currentPin ? 13 : 12,
         preferCanvas: true,
         zoomControl: false, // added manually below at bottom-right
       });
@@ -1745,8 +1746,9 @@ export default function Search() {
   const [areaSuggestions, setAreaSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState(-1);
-  const areaInputRef  = useRef(null);
-  const wasLoadingRef = useRef(false);
+  const areaInputRef    = useRef(null);
+  const pillsRowRef     = useRef(null);
+  const wasLoadingRef   = useRef(false);
   const [progressState, setProgressState] = useState('idle'); // 'idle' | 'running' | 'completing'
   const [listings, setListings]       = useState([]);
   const [total, setTotal]             = useState(0);
@@ -1889,8 +1891,13 @@ export default function Search() {
   }
   if (activeFilters.furnished !== 'Any') activePills.push(activeFilters.furnished);
   if (activeFilters.keywords) activePills.push(`"${activeFilters.keywords}"`);
+  // Skip source pills for sources that are already covered by the community quick filter
+  const communityActive = quickFilters.has('community');
   Object.entries(SOURCE_CONFIG).forEach(([key, cfg]) => {
-    if (!activeFilters.sources[key]) activePills.push(`No ${cfg.label}`);
+    if (!activeFilters.sources[key]) {
+      if (communityActive && (key === 'nobroker' || key === 'housing')) return;
+      activePills.push(`No ${cfg.label}`);
+    }
   });
 
   function removePill(label) {
@@ -1917,10 +1924,20 @@ export default function Search() {
   }
 
   function toggleSourceFilter(rawSource) {
-    setActiveFilters(prev => ({
-      ...prev,
-      sources: { ...prev.sources, [rawSource]: !prev.sources[rawSource] },
-    }));
+    // If community filter is active and user re-enables nobroker or housing,
+    // treat it as "exit community mode" and turn that source back on
+    if (quickFilters.has('community') && (rawSource === 'nobroker' || rawSource === 'housing')) {
+      setQuickFilters(prev => { const n = new Set(prev); n.delete('community'); return n; });
+      setActiveFilters(prev => ({
+        ...prev,
+        sources: { ...prev.sources, nobroker: true, housing: true },
+      }));
+    } else {
+      setActiveFilters(prev => ({
+        ...prev,
+        sources: { ...prev.sources, [rawSource]: !prev.sources[rawSource] },
+      }));
+    }
     setPage(1);
   }
 
@@ -2003,7 +2020,14 @@ export default function Search() {
   const pageCount  = Math.ceil(displayed.length / PAGE_SIZE);
   const paginated  = displayed.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  // Derived source counts — always reflects the post-filter displayed list
+  // Source counts from all results (before source filter) — so pills persist when a source is deselected
+  const allSourceCounts = sorted.reduce((acc, l) => {
+    // Only count listings that pass non-source filters (BHK, budget, furnished, keywords, geo, quick)
+    const label = SOURCE_LABELS[l.rawSource] || l.rawSource;
+    acc[label] = (acc[label] || 0) + 1;
+    return acc;
+  }, {});
+  // sourceCounts keeps track of how many are actually shown (post source-filter) — used for count display
   const sourceCounts = displayed.reduce((acc, l) => {
     const label = SOURCE_LABELS[l.rawSource] || l.rawSource;
     acc[label] = (acc[label] || 0) + 1;
@@ -2343,12 +2367,14 @@ export default function Search() {
             </div>
 
             {/* Source breakdown */}
-            {!loading && Object.keys(sourceCounts).length > 0 && (
+            {!loading && Object.keys(allSourceCounts).length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-                {Object.entries(sourceCounts).map(([label, count]) => {
+                {Object.entries(allSourceCounts).map(([label, totalCount]) => {
                   const rawSource = Object.keys(SOURCE_CONFIG).find(k => SOURCE_CONFIG[k].label === label);
                   const cfg = (rawSource && SOURCE_CONFIG[rawSource]) || { color: '#666', icon: 'fa-solid fa-circle' };
                   const active = rawSource ? activeFilters.sources[rawSource] !== false : true;
+                  const shownCount = sourceCounts[label] ?? 0;
+                  if (active && shownCount === 0) return null;
                   return (
                     <button
                       key={label}
@@ -2360,12 +2386,12 @@ export default function Search() {
                         background: active ? cfg.color + '11' : 'transparent',
                         color: active ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
                         borderRadius: 20, padding: '4px 10px', cursor: 'pointer',
-                        opacity: active ? 1 : 0.45,
+                        opacity: active ? 1 : 0.4,
                         transition: 'all 0.15s',
                       }}
                     >
                       <i className={cfg.icon} style={{ fontSize: 10, color: active ? cfg.color : 'inherit' }} />
-                      <span style={{ fontWeight: 500 }}>{count}</span>
+                      <span style={{ fontWeight: 500 }}>{active ? shownCount : totalCount}</span>
                       <span>{label}</span>
                     </button>
                   );
@@ -2449,20 +2475,23 @@ export default function Search() {
             )}
           </div>
         )}
-        <div style={{ position: 'relative' }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            background: 'var(--color-bg-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-pill)',
-            padding: '10px 16px',
-          }}>
-            <i className="fa-solid fa-location-dot" style={{ color: 'var(--color-text-muted)', fontSize: 14 }} />
-            <input
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+
+          {/* Search pill — flex: 1 so it fills available space */}
+          <div style={{ flex: 1, position: 'relative' }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              background: 'var(--color-bg-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-pill)',
+              padding: '10px 16px',
+            }}>
+              <i className="fa-solid fa-location-dot" style={{ color: 'var(--color-text-muted)', fontSize: 14 }} />
+              <input
               ref={areaInputRef}
-              type="search"
+              type="text"
               value={query}
               autoComplete="off"
               onChange={e => {
@@ -2474,109 +2503,85 @@ export default function Search() {
                   const matches = BANGALORE_AREAS.filter(a =>
                     a.toLowerCase().includes(lower)
                   ).slice(0, 8);
-                  setAreaSuggestions(matches);
-                  setShowSuggestions(matches.length > 0);
-                } else {
-                  setAreaSuggestions([]);
-                  setShowSuggestions(false);
-                }
-              }}
-              onKeyDown={e => {
-                if (showSuggestions) {
-                  if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    setActiveSuggestion(i => Math.min(i + 1, areaSuggestions.length - 1));
-                  } else if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    setActiveSuggestion(i => Math.max(i - 1, -1));
-                  } else if (e.key === 'Enter' && activeSuggestion >= 0) {
-                    e.preventDefault();
-                    const chosen = areaSuggestions[activeSuggestion];
-                    setQuery(chosen);
+                    setAreaSuggestions(matches);
+                    setShowSuggestions(matches.length > 0);
+                  } else {
+                    setAreaSuggestions([]);
                     setShowSuggestions(false);
-                    setActiveSuggestion(-1);
-                    doLocalitySearch(chosen);
-                  } else if (e.key === 'Escape') {
-                    setShowSuggestions(false);
+                  }
+                }}
+                onKeyDown={e => {
+                  if (showSuggestions) {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setActiveSuggestion(i => Math.min(i + 1, areaSuggestions.length - 1));
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setActiveSuggestion(i => Math.max(i - 1, -1));
+                    } else if (e.key === 'Enter' && activeSuggestion >= 0) {
+                      e.preventDefault();
+                      const chosen = areaSuggestions[activeSuggestion];
+                      setQuery(chosen);
+                      setShowSuggestions(false);
+                      setActiveSuggestion(-1);
+                      doLocalitySearch(chosen);
+                    } else if (e.key === 'Escape') {
+                      setShowSuggestions(false);
+                    } else if (e.key === 'Enter') {
+                      setShowSuggestions(false);
+                      doLocalitySearch(query);
+                    }
                   } else if (e.key === 'Enter') {
-                    setShowSuggestions(false);
                     doLocalitySearch(query);
                   }
-                } else if (e.key === 'Enter') {
-                  doLocalitySearch(query);
-                }
-              }}
-              onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-              onFocus={() => { if (areaSuggestions.length > 0) setShowSuggestions(true); }}
-              placeholder="Koramangala, Indiranagar, HSR Layout..."
-              style={{
-                flex: 1,
-                background: 'transparent',
-                border: 'none',
-                outline: 'none',
-                fontFamily: 'var(--font-sans)',
-                fontSize: 14,
-                color: 'var(--color-text-primary)',
-                minWidth: 0,
-                WebkitAppearance: 'none',
-              }}
-            />
-            {query && (
-              <button
-                onMouseDown={e => { e.preventDefault(); setQuery(''); setActiveLocality(null); doSearch(''); setShowSuggestions(false); }}
-                style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  color: 'var(--color-amber)', fontSize: 16, padding: '0 2px',
-                  display: 'flex', alignItems: 'center', lineHeight: 1,
                 }}
-                aria-label="Clear search"
-              >×</button>
-            )}
-            <button
-              onClick={() => setGeoOpen(true)}
-              style={{
-                background: geoActive ? 'rgba(232,160,32,0.1)' : 'none',
-                border: geoActive ? '1px solid rgba(232,160,32,0.35)' : '1px solid transparent',
-                borderRadius: 8,
-                padding: '5px 8px',
-                cursor: 'pointer',
-                color: geoActive ? 'var(--color-amber)' : 'var(--color-text-muted)',
-                fontSize: 13,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                transition: 'all 0.15s',
-              }}
-              aria-label="Search by area"
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                <i className="fa-solid fa-map" style={{ fontSize: 13 }} />
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.06em', lineHeight: 1 }}>
-                  {geoActive ? `${geoRadius}km` : 'NEARBY'}
-                </span>
-              </div>
-            </button>
-            <button
-              onClick={() => { setShowSuggestions(false); doLocalitySearch(query); }}
-              style={{
-                background: 'none',
-                border: '1px solid var(--color-amber)',
-                borderRadius: 8,
-                padding: '6px 13px',
-                cursor: 'pointer',
-                color: 'var(--color-amber)',
-                fontSize: 13,
-                display: 'flex',
-                alignItems: 'center',
-              }}
-              aria-label="Search"
-            >
-              <i className={loading ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-magnifying-glass'} />
-            </button>
-          </div>
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                onFocus={() => { if (areaSuggestions.length > 0) setShowSuggestions(true); }}
+                placeholder="Koramangala, Indiranagar, HSR Layout..."
+                style={{
+                  flex: 1,
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 14,
+                  color: 'var(--color-text-primary)',
+                  minWidth: 0,
+                  WebkitAppearance: 'none',
+                }}
+              />
+              {query && (
+                <button
+                  onMouseDown={e => { e.preventDefault(); setQuery(''); setActiveLocality(null); doSearch(''); setShowSuggestions(false); }}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--color-amber)', fontSize: 16, padding: '0 2px',
+                    display: 'flex', alignItems: 'center', lineHeight: 1,
+                  }}
+                  aria-label="Clear search"
+                >×</button>
+              )}
+              <button
+                onClick={() => { setShowSuggestions(false); doLocalitySearch(query); }}
+                style={{
+                  background: 'none',
+                  border: '1px solid var(--color-amber)',
+                  borderRadius: 8,
+                  padding: '6px 13px',
+                  cursor: 'pointer',
+                  color: 'var(--color-amber)',
+                  fontSize: 13,
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+                aria-label="Search"
+              >
+                <i className={loading ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-magnifying-glass'} />
+              </button>
+            </div>
 
-          {/* Autocomplete dropdown */}
-          {showSuggestions && (
+            {/* Autocomplete dropdown — positioned relative to the search pill only */}
+            {showSuggestions && (
             <ul style={{
               position: 'absolute',
               top: 'calc(100% + 6px)',
@@ -2625,7 +2630,38 @@ export default function Search() {
               ))}
             </ul>
           )}
-        </div>
+          </div>{/* end search pill wrapper */}
+
+          {/* NEARBY — soft rounded square button, same row as search */}
+          <button
+            onClick={() => setGeoOpen(true)}
+            style={{
+              flexShrink: 0,
+              display: 'inline-flex',
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              background: geoActive ? 'rgba(232,160,32,0.12)' : 'rgba(232,160,32,0.05)',
+              border: geoActive ? '1px solid rgba(232,160,32,0.4)' : '1px solid rgba(232,160,32,0.2)',
+              borderRadius: 12,
+              padding: '0 14px',
+              height: 44,
+              cursor: 'pointer',
+              color: geoActive ? 'var(--color-amber)' : '#B08040',
+              transition: 'all 0.15s',
+              whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={e => { if (!geoActive) { e.currentTarget.style.borderColor = 'rgba(232,160,32,0.4)'; e.currentTarget.style.color = 'var(--color-amber)'; e.currentTarget.style.background = 'rgba(232,160,32,0.1)'; } }}
+            onMouseLeave={e => { if (!geoActive) { e.currentTarget.style.borderColor = 'rgba(232,160,32,0.2)'; e.currentTarget.style.color = '#B08040'; e.currentTarget.style.background = 'rgba(232,160,32,0.05)'; } }}
+            aria-label="Search by area"
+          >
+            <i className="fa-solid fa-map" style={{ fontSize: 13 }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.05em' }}>
+              {geoActive ? `${geoRadius} km` : 'Nearby'}
+            </span>
+          </button>
+
+        </div>{/* end flex row */}
 
       </div>
 
@@ -2685,7 +2721,7 @@ export default function Search() {
       </div>
 
       {/* ── ROW 2: QUICK FILTER PILLS ── */}
-      <div style={{
+      <div ref={pillsRowRef} style={{
         overflowX: 'auto',
         scrollbarWidth: 'none',
         WebkitOverflowScrolling: 'touch',
@@ -2695,7 +2731,7 @@ export default function Search() {
         paddingBottom: 0,
         display: 'flex',
         gap: 8,
-        marginBottom: 12,
+        marginBottom: 6,
       }}>
         {/* Filters gateway pill */}
         <button
@@ -2720,51 +2756,48 @@ export default function Search() {
           ⚙ Filters
           {activePills.length > 0 && (
             <span style={{
-              width: 6,
-              height: 6,
-              borderRadius: '50%',
+              width: 6, height: 6, borderRadius: '50%',
               background: 'var(--color-amber)',
-              display: 'inline-block',
-              flexShrink: 0,
+              display: 'inline-block', flexShrink: 0,
             }} />
           )}
           {' '}▼
         </button>
 
-        {/* Geo-radius active pill */}
-        {geoActive && geoPin && (
-          <button
-            onClick={() => setGeoOpen(true)}
-            style={{
-              flexShrink: 0,
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.05em',
-              background: 'rgba(232,160,32,0.12)',
-              color: '#E8A020',
-              border: '0.5px solid rgba(232,160,32,0.4)',
-              borderRadius: 99, padding: '5px 12px',
-              cursor: 'pointer', whiteSpace: 'nowrap',
-            }}
-          >
-            <i className="fa-solid fa-location-dot" style={{ fontSize: 10 }} />
-            {geoRadius} km radius
-            <span
-              onMouseDown={e => { e.stopPropagation(); setGeoActive(false); setGeoPin(null); }}
-              style={{ marginLeft: 2, opacity: 0.7, fontSize: 13, lineHeight: 1 }}
-            >×</span>
-          </button>
-        )}
+        {/* Geo-radius quick switcher pills (plain toggles — no × here, dismiss via Row 3) */}
+        {geoActive && geoPin && [1, 2, 5, 10].map(km => {
+          const isCurrent = geoRadius === km;
+          return (
+            <button
+              key={km}
+              onClick={() => { setGeoRadius(km); setPage(1); }}
+              style={{
+                flexShrink: 0,
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
+                background: isCurrent ? 'rgba(232,160,32,0.15)' : 'transparent',
+                color: isCurrent ? '#E8A020' : '#888',
+                border: `0.5px solid ${isCurrent ? 'rgba(232,160,32,0.45)' : '#333'}`,
+                borderRadius: 99, padding: '5px 10px',
+                cursor: 'pointer', whiteSpace: 'nowrap',
+                transition: 'all 0.12s',
+              }}
+            >
+              {km} km
+            </button>
+          );
+        })}
 
-        {/* Quick toggle pills */}
+        {/* Quick toggle pills — fixed order, subtle active state */}
         {QUICK_FILTERS.map(({ key, label }) => {
           const active = quickFilters.has(key);
           return (
             <button
               key={key}
               onClick={() => {
+                const turning_on = !quickFilters.has(key);
                 setQuickFilters(prev => {
                   const next = new Set(prev);
-                  const turning_on = !next.has(key);
                   turning_on ? next.add(key) : next.delete(key);
                   if (key === 'community') {
                     setActiveFilters(f => ({
@@ -2785,31 +2818,113 @@ export default function Search() {
                 fontFamily: 'var(--font-mono)',
                 fontSize: 11,
                 letterSpacing: '0.05em',
-                background: active ? '#E8A020' : '#1A1A1A',
-                color: active ? '#0A0A0A' : '#888',
-                border: '0.5px solid #2A2A2A',
+                background: active ? 'rgba(232,160,32,0.12)' : '#1A1A1A',
+                color: active ? '#E8A020' : '#888',
+                border: `0.5px solid ${active ? 'rgba(232,160,32,0.35)' : '#2A2A2A'}`,
                 borderRadius: 99,
                 padding: '5px 14px',
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
-                transition: 'background 0.15s, color 0.15s',
+                transition: 'background 0.15s, color 0.15s, border-color 0.15s',
               }}
             >
               {label}
             </button>
           );
         })}
-
-        {/* Active sheet filter pills — dismissible */}
-        {activePills.map(label => (
-          <FilterPill
-            key={label}
-            label={label}
-            onRemove={() => removePill(label)}
-            onOpenSheet={() => setSheetOpen(true)}
-          />
-        ))}
       </div>
+
+      {/* ── ROW 3: ACTIVE FILTER CHIPS ── only visible when something is on */}
+      {(geoActive || quickFilters.size > 0 || activePills.length > 0) && (
+        <div style={{
+          overflowX: 'auto',
+          scrollbarWidth: 'none',
+          WebkitOverflowScrolling: 'touch',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          paddingLeft: 12,
+          paddingRight: 12,
+          paddingBottom: 10,
+          paddingTop: 2,
+        }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em',
+            textTransform: 'uppercase', color: 'var(--color-text-muted)',
+            flexShrink: 0, paddingRight: 2,
+          }}>Active:</span>
+
+          {/* Geo chip */}
+          {geoActive && geoPin && (
+            <span style={{
+              flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
+              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
+              background: 'rgba(232,160,32,0.1)', color: '#E8A020',
+              border: '0.5px solid rgba(232,160,32,0.4)',
+              borderRadius: 99, padding: '4px 10px', whiteSpace: 'nowrap',
+            }}>
+              <i className="fa-solid fa-location-dot" style={{ fontSize: 9 }} />
+              {geoRadius} km
+              <button
+                onClick={() => { setGeoActive(false); setGeoPin(null); }}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: '#E8A020', padding: 0, fontSize: 13, lineHeight: 1,
+                  opacity: 0.7, display: 'flex', alignItems: 'center',
+                }}
+              >×</button>
+            </span>
+          )}
+
+          {/* Quick filter chips */}
+          {QUICK_FILTERS.filter(f => quickFilters.has(f.key)).map(({ key, label }) => (
+            <span key={key} style={{
+              flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
+              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
+              background: 'rgba(232,160,32,0.1)', color: '#E8A020',
+              border: '0.5px solid rgba(232,160,32,0.4)',
+              borderRadius: 99, padding: '4px 10px', whiteSpace: 'nowrap',
+            }}>
+              {label}
+              <button
+                onClick={() => {
+                  setQuickFilters(prev => { const n = new Set(prev); n.delete(key); return n; });
+                  if (key === 'community') {
+                    setActiveFilters(f => ({ ...f, sources: { ...f.sources, nobroker: true, housing: true } }));
+                  }
+                  setPage(1);
+                }}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: '#E8A020', padding: 0, fontSize: 13, lineHeight: 1,
+                  opacity: 0.7, display: 'flex', alignItems: 'center',
+                }}
+              >×</button>
+            </span>
+          ))}
+
+          {/* Sheet filter chips */}
+          {activePills.map(label => (
+            <span key={label} style={{
+              flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
+              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
+              background: 'rgba(232,160,32,0.1)', color: '#E8A020',
+              border: '0.5px solid rgba(232,160,32,0.4)',
+              borderRadius: 99, padding: '4px 10px', whiteSpace: 'nowrap',
+            }}>
+              {label}
+              <button
+                onClick={() => removePill(label)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: '#E8A020', padding: 0, fontSize: 13, lineHeight: 1,
+                  opacity: 0.7, display: 'flex', alignItems: 'center',
+                }}
+              >×</button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* ── RESULTS HEADER ── */}
       <div style={{ padding: '0 16px' }}>
@@ -2882,12 +2997,14 @@ export default function Search() {
         </div>
 
         {/* Source breakdown */}
-        {!loading && Object.keys(sourceCounts).length > 0 && (
+        {!loading && Object.keys(allSourceCounts).length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-            {Object.entries(sourceCounts).map(([label, count]) => {
+            {Object.entries(allSourceCounts).map(([label, totalCount]) => {
               const rawSource = Object.keys(SOURCE_CONFIG).find(k => SOURCE_CONFIG[k].label === label);
               const cfg = (rawSource && SOURCE_CONFIG[rawSource]) || { color: '#666', icon: 'fa-solid fa-circle' };
               const active = rawSource ? activeFilters.sources[rawSource] !== false : true;
+              const shownCount = sourceCounts[label] ?? 0;
+              if (active && shownCount === 0) return null;
               return (
                 <button
                   key={label}
@@ -2899,12 +3016,12 @@ export default function Search() {
                     background: active ? cfg.color + '11' : 'transparent',
                     color: active ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
                     borderRadius: 20, padding: '4px 10px', cursor: 'pointer',
-                    opacity: active ? 1 : 0.45,
+                    opacity: active ? 1 : 0.4,
                     transition: 'all 0.15s',
                   }}
                 >
                   <i className={cfg.icon} style={{ fontSize: 10, color: active ? cfg.color : 'inherit' }} />
-                  <span style={{ fontWeight: 500 }}>{count}</span>
+                  <span style={{ fontWeight: 500 }}>{active ? shownCount : totalCount}</span>
                   <span>{label}</span>
                 </button>
               );
@@ -3016,6 +3133,7 @@ export default function Search() {
         onClose={() => setGeoOpen(false)}
         currentPin={geoPin}
         currentRadius={geoRadius}
+        currentLabel={geoLabel}
         onApply={(pin, radius, label) => {
           setGeoPin(pin);
           setGeoRadius(radius);
