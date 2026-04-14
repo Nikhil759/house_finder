@@ -1553,7 +1553,7 @@ function FaqRow({ item, isOpen, onToggle }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '22px 0',
+          padding: '22px 16px',
           background: 'none',
           border: 'none',
           cursor: 'pointer',
@@ -1602,7 +1602,7 @@ function FaqRow({ item, isOpen, onToggle }) {
           fontSize: 14,
           lineHeight: 1.8,
           color: '#777',
-          paddingBottom: 22,
+          padding: '0 16px 22px',
           maxWidth: 580,
         }}>
           {item.a}
