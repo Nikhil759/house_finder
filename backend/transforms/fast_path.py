@@ -150,60 +150,30 @@ def run_post_pulse_transforms(source: str):
 def _run_gemini_tagging(source: str):
     """
     Gemini Flash Lite batch tagging: category, topic, sentiment,
-    locality NER, relevance. Already implemented in
-    ingestion/tag_locality_feed.py — will be moved here in Phase 2.
-
-    TODO (Phase 2): Move existing tagging logic here + add gemini_fallback tracking.
+    locality NER, relevance. Delegates to pulse_transforms.
     """
-    run_id = record_transform_start("gemini_tagging", source)
     try:
-        # Phase 2: move tag_locality_feed.py logic here
-        record_transform_end(
-            run_id,
-            status="success",
-            records_processed=0,
-            metadata={"note": "stub — implementation in Phase 2"},
-        )
+        from transforms.pulse_transforms import run_gemini_tagging
+        run_gemini_tagging(source)
     except Exception as e:
         logger.error("Gemini tagging failed for %s: %s", source, e)
-        record_transform_end(run_id, status="failed", error_message=str(e))
 
 
 def _run_category_filter(source: str):
     """
-    Exclude listing/flatmate_search/spam posts from the curated feed.
-
-    TODO (Phase 2): Implement category filter into feed_curated.
+    Copy tagged posts into feed_curated, excluding listing/flatmate_search/spam.
     """
-    run_id = record_transform_start("category_filter", source)
     try:
-        # Phase 2: implement category filter here
-        record_transform_end(
-            run_id,
-            status="success",
-            records_processed=0,
-            metadata={"note": "stub — implementation in Phase 2"},
-        )
+        from transforms.pulse_transforms import run_category_filter
+        run_category_filter(source)
     except Exception as e:
         logger.error("Category filter failed for %s: %s", source, e)
-        record_transform_end(run_id, status="failed", error_message=str(e))
 
 
 def _run_news_dedup():
-    """
-    Near-duplicate news dedup (>85% title similarity).
-
-    TODO (Phase 2): Implement title-similarity dedup for news articles.
-    """
-    run_id = record_transform_start("news_dedup", "news")
+    """Near-duplicate news dedup (>85% title similarity)."""
     try:
-        # Phase 2: implement news dedup here
-        record_transform_end(
-            run_id,
-            status="success",
-            records_processed=0,
-            metadata={"note": "stub — implementation in Phase 2"},
-        )
+        from transforms.pulse_transforms import run_news_dedup
+        run_news_dedup()
     except Exception as e:
         logger.error("News dedup failed: %s", e)
-        record_transform_end(run_id, status="failed", error_message=str(e))

@@ -135,47 +135,35 @@ The following tables exist in the schema but are not used by any active code pat
 
 ---
 
-## 7. Transform Layer — Build Pulse Pipeline
+## 7. Transform Layer — Build Pulse Pipeline ✅
 
 **Current state:** Pulse tagging (Gemini) runs as part of the ingestion pipeline and writes back to `locality_feed` in-place. No curation or editorial layer exists.  
-**Desired state:** A dedicated Pulse transform pipeline produces `feed_curated` and `pulse_feed_state` tables with filtered, trend-detected, and editorially ranked posts.
+**Desired state:** A dedicated Pulse transform pipeline produces a `feed_curated` table with filtered, trend-detected, and editorially ranked posts.
 
 ### Tasks
 
 **Schema:**
-- [ ] Create `feed_curated` table with all columns from `locality_feed` plus:
+- [x] Create `feed_curated` table (`012_feed_curated.sql`) with:
   - `featured` (BOOLEAN), `editor_rank` (INTEGER), `editor_note` (TEXT)
   - `is_trending` (BOOLEAN), `trending_score` (FLOAT)
   - `gemini_tagged` (BOOLEAN), `gemini_fallback` (BOOLEAN)
-- [ ] Create `pulse_feed_state` table (single-row state):
-  - `feed_refreshed_at` (TIMESTAMP) — timestamp of last editor agent run, shown in UI as "Last updated"
-  - `editor_shortlist_size` (INTEGER) — count of posts the editor was given to rank from
-  - `trending_topics` (JSONB) — list of currently trending `canonical_topic` slugs
+- ~~`pulse_feed_state` table~~ — skipped, "Last updated" derived from `MAX(updated_at) WHERE featured = true`
 
 **Fast-path jobs (event-driven, wired to Pulse ingestion flows):**
-- [ ] Category filter job — exclude `listing`, `flatmate_search`, `spam` category posts from `feed_curated`
-- [ ] Duplicate news dedup job — drop near-duplicate news articles (> 85% title similarity) before Gemini tagging; keep highest-engagement version
-- [ ] Gemini Flash Lite tagging job (existing, move to fast-path) — category, topic, sentiment, locality NER, relevance in a single batch call; set `gemini_tagged = true` / `gemini_fallback = true`
+- [x] Gemini Flash Lite tagging job (`transforms/pulse_transforms.py::run_gemini_tagging`) — wraps existing `tag_locality_feed.py` logic with `transform_runs` tracking
+- [x] Category filter job (`transforms/pulse_transforms.py::run_category_filter`) — copies tagged posts to `feed_curated`, excluding listing/flatmate_search/spam
+- [x] News dedup job (`transforms/pulse_transforms.py::run_news_dedup`) — >85% title similarity via rapidfuzz, keeps higher-engagement version
 
 **Slow-path jobs (daily at 3:00 AM UTC):**
-- [ ] Trend detection job (SQL-based):
-  - Ratio formula: `spike_ratio = recent_72h_count / (3 × 7day_daily_avg)`
-  - Flag `is_trending = true` when `spike_ratio ≥ 2.0` AND `recent_72h_count ≥ 5`
-  - Write `trending_score = spike_ratio` to enable ordering multiple trending topics
-- [ ] Editor/Curator Agent job (Gemini Flash):
-  - Pool: posts from the **last 24 hours** with `relevance_score > 0.6` and `category IN ('discussion', 'news')`
-  - Pre-filter: if pool > 200 posts, keep top 200 by `(sentiment_score * relevance_score)`
-  - Exclusion: skip posts already `featured = true` in the previous cycle
-  - Prompt: LLM acts as a city editor and **ranks** (not scores) the filtered batch
-  - Output per post: `editor_rank`, `editor_note` (1-sentence rationale), `featured = true`
-  - Re-process `gemini_fallback = true` rows from previous cycles when API is healthy
-- [ ] `gemini_fallback` re-processing: nightly job finds all `gemini_fallback = true` rows in both `listings_curated` and `feed_curated` and retries them
+- [x] Trend detection (`transforms/pulse_transforms.py::run_trend_detection`) — SQL ratio-based: `spike_ratio = 72h_count / (3 × 7day_daily_avg)`, flags when ≥ 2.0 AND count ≥ 5
+- [x] Editor/Curator Agent (`transforms/pulse_transforms.py::run_editor_agent`) — Gemini Flash ranks top 10–15 posts from 24h pool (relevance > 0.6, discussion/news only), sets `featured`, `editor_rank`, `editor_note`
+- [x] Gemini fallback re-processing (`transforms/pulse_transforms.py::run_gemini_fallback_reprocess`) — retries `gemini_fallback = true` rows in both listings and pulse
 
 **Wiring & switch:**
 - [x] Wire Pulse fast-path jobs as function calls at the end of `scrape_reddit_discussions` and `scrape_news` (done in Phase 1)
-- [ ] Wire slow-path jobs (trend detection, editor agent) as Railway Cron services on 3:00 AM UTC schedule
+- [ ] Wire slow-path as Railway Cron service: `python -m transforms.pulse_transforms` at 3:00 AM UTC
 - [ ] Switch Pulse frontend page to read from `feed_curated` instead of `locality_feed`
-- [ ] Update frontend Pulse header to derive "Last updated" from `SELECT MAX(updated_at) FROM feed_curated WHERE featured = true` (no separate state table needed)
+- [ ] Update frontend Pulse header to derive "Last updated" from `SELECT MAX(updated_at) FROM feed_curated WHERE featured = true`
 
 ---
 
