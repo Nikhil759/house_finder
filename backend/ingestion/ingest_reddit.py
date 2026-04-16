@@ -360,12 +360,11 @@ def main():
         status="success",
         stats=stats,
         total_fetched=len(all_listings),
-        total_stale=stale_count,
         started_at=started_at,
     )
     logger.info(
-        "Reddit ingestion complete: %d fetched, %d new, %d updated, %d stale",
-        len(all_listings), stats.total_new, stats.total_updated, stale_count,
+        "Reddit ingestion complete: %d fetched, %d new, %d updated",
+        len(all_listings), stats.total_new, stats.total_updated,
     )
 
 

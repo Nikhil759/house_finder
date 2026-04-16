@@ -1,0 +1,57 @@
+# Prefect deployment configuration
+# Deploy all: prefect deploy --all
+# Deploy one: prefect deploy -n ingest-nobroker/every-3h
+
+name: nestiq-pipeline
+
+deployments:
+  # ── Listings (3h cycle) ──────────────────────────────────────
+  - name: every-3h
+    entrypoint: flows.py:ingest_nobroker
+    work_pool:
+      name: railway-pool
+    schedule:
+      cron: "0 */3 * * *"   # 00:00, 03:00, 06:00, ...
+      timezone: UTC
+
+  - name: every-3h
+    entrypoint: flows.py:ingest_housing
+    work_pool:
+      name: railway-pool
+    schedule:
+      cron: "10 */3 * * *"  # 10-min offset to spread load
+      timezone: UTC
+
+  - name: every-3h
+    entrypoint: flows.py:ingest_telegram
+    work_pool:
+      name: railway-pool
+    schedule:
+      cron: "20 */3 * * *"
+      timezone: UTC
+
+  # ── Listings (6h cycle, local pool for Reddit IP) ────────────
+  - name: every-6h
+    entrypoint: flows.py:ingest_reddit
+    work_pool:
+      name: local-pool       # Reddit blocks Railway IPs
+    schedule:
+      cron: "0 */6 * * *"
+      timezone: UTC
+
+  # ── Pulse (6h cycle) ────────────────────────────────────────
+  - name: every-6h
+    entrypoint: flows.py:scrape_reddit_discussions
+    work_pool:
+      name: local-pool       # Same Reddit IP issue
+    schedule:
+      cron: "30 */6 * * *"   # 30-min offset from listings
+      timezone: UTC
+
+  - name: every-6h
+    entrypoint: flows.py:scrape_news
+    work_pool:
+      name: railway-pool
+    schedule:
+      cron: "45 */6 * * *"
+      timezone: UTC

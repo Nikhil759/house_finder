@@ -217,8 +217,8 @@ def main():
         started_at=started_at,
     )
     logger.info(
-        "NoBroker ingestion complete: %d fetched, %d new, %d updated, %d stale",
-        len(all_listings), stats.total_new, stats.total_updated, stale_count,
+        "NoBroker ingestion complete: %d fetched, %d new, %d updated",
+        len(all_listings), stats.total_new, stats.total_updated,
     )
 
 
