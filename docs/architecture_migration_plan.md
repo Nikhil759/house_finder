@@ -81,15 +81,17 @@ The following tables exist in the schema but are not used by any active code pat
 
 ---
 
-## 5. Database — Extend `locality_stats_cache` with Price-Per-Sqft
+## 5. Database — Extend `locality_stats_cache` with Price-Per-Sqft ✅
 
 **Current state:** `locality_stats_cache` stores median/P25/P75 rent and `rent_trend_pct` per locality+BHK but does not store price-per-sqft metrics.  
 **Desired state:** The cache also stores `median_price_per_sqft` per locality+BHK to power the area-adjusted price competitiveness scoring in the Transform Layer.
 
 ### Tasks
-- [ ] Add `median_price_per_sqft NUMERIC(8,2)` column to `locality_stats_cache`
-- [ ] Update `refresh_locality_stats()` Postgres function to compute and store `median_price_per_sqft` from listings where both `rent` and `area_sqft` are present
-- [ ] Ensure the computation only uses listings with `status IN ('active', 'stale')` and excludes outlier area values (< 100 sqft or > 10,000 sqft)
+- [x] Add `median_price_per_sqft NUMERIC(8,2)` column to `locality_stats_cache`
+- [x] Update `refresh_locality_stats()` Postgres function to compute and store `median_price_per_sqft` from listings where both `rent` and `area_sqft` are present
+- [x] Ensure the computation only uses listings with `status IN ('active', 'stale')` and excludes outlier area values (< 100 sqft or > 10,000 sqft)
+
+*Implemented in `011_listings_curated.sql`.*
 
 ---
 
@@ -101,34 +103,34 @@ The following tables exist in the schema but are not used by any active code pat
 ### Tasks
 
 **Schema:**
-- [ ] Create `listings_curated` table with all columns from `listings` plus:
-  - `quality_score`, `price_competitiveness_score`, `locality_sentiment_score`, `freshness_score`, `detail_score`
+- [x] Create `listings_curated` table (`011_listings_curated.sql`) with:
+  - `quality_score`, `detail_score`, `price_comp_score`, `locality_sent_score`, `freshness_score`
   - `price_anomaly` (BOOLEAN) — rent > 2σ from locality+BHK median
   - `is_per_room` (BOOLEAN), `rent_type` (TEXT: `"whole" / "per_room" / "unknown"`)
-  - `extracted_bhk`, `extracted_rent` — LLM-filled values for Reddit/Telegram rows
+  - `extracted_bhk`, `extracted_rent`, `extracted_locality` — LLM-filled values for Reddit/Telegram rows
   - `gemini_tagged` (BOOLEAN), `gemini_fallback` (BOOLEAN)
 
 **Fast-path jobs (event-driven, wired to each ingestion flow):**
-- [ ] Fuzzy locality matching job — rapidfuzz second pass for unmatched Reddit/Telegram posts
+- [x] Fuzzy locality matching job (`transforms/locality_matcher.py`) — rapidfuzz second pass for unmatched Reddit/Telegram posts
 - [ ] Reddit/Telegram listing filter + structured extraction job (Gemini Flash Lite):
   - Regex pre-filter drops obvious non-listings ("looking for", "seeking", "need flatmate")
   - Single batch Gemini call returns `is_listing` boolean + all structured fields + `rent_type`
   - Posts with `is_listing = false` are excluded from `listings_curated`
   - Set `gemini_tagged = true` on success; `gemini_fallback = true` + Claude Haiku retry on API error
-- [ ] Stale marking job — reads `ingestion_runs.started_at` as cycle boundary, runs 3-pass update
+- [x] Stale marking job — wired via `run_post_ingest_transforms()` calling `mark_stale()` (Phase 1)
 
 **Slow-path jobs (daily at 2:30–2:45 AM UTC):**
-- [ ] Full quality rescoring job — 4-dimension composite score with source-aware weights:
-  - Detail score (0–20): field completeness, no flat source bonuses
-  - Price competitiveness (0–35 NoBroker/Housing, 0–30 Reddit/Telegram): rent vs locality+BHK median, area-adjusted when `area_sqft` available, falls back to city-wide median when < 15 locality listings
-  - Locality sentiment (0–30 / 0–20): 30-day rolling avg `sentiment_score` from `locality_feed`, weighted by `relevance_score`
+- [x] Full quality rescoring job (`transforms/slow_path.py::run_quality_rescoring`) — 4-dimension composite score with source-aware weights:
+  - Detail score (0–20): field completeness
+  - Price competitiveness (0–35 NoBroker/Housing, 0–30 Reddit/Telegram): rent vs locality+BHK median, area-adjusted when `area_sqft` available
+  - Locality sentiment (0–30 / 0–20): 30-day rolling avg `sentiment_score` from `locality_feed`
   - Freshness (0–15 / 0–30): exponential decay `max × e^(-0.1 × age_in_days)`
-- [ ] Cross-source deduplication — run after all listing sources for the day have completed
-- [ ] Rent anomaly flagging — set `price_anomaly`, `is_per_room`, `rent_type`; excludes `is_per_room` rows from `locality_stats_cache` calculations
+- [x] Cross-source deduplication (`transforms/slow_path.py::run_cross_source_dedup`)
+- [x] Rent anomaly flagging (`transforms/slow_path.py::run_rent_anomaly_flagging`) — sets `price_anomaly`, `is_per_room`, `rent_type`
 
 **Wiring & switch:**
 - [x] Wire fast-path jobs as function calls at the end of each ingestion script's `main()` (done in Phase 1)
-- [ ] Wire slow-path jobs as Railway Cron services on a fixed 2:30–2:45 AM UTC schedule
+- [ ] Wire slow-path jobs as Railway Cron service: `python -m transforms.slow_path` at 2:30 AM UTC
 - [ ] Switch backend API and frontend to read from `listings_curated` instead of `listings`
 
 ---
