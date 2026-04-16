@@ -221,6 +221,10 @@ def main():
         len(all_listings), stats.total_new, stats.total_updated,
     )
 
+    if stats.total_new + stats.total_updated > 0:
+        from transforms.fast_path import run_post_ingest_transforms
+        run_post_ingest_transforms("nobroker", started_at)
+
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,66 @@
+---
+globs: src/pages/**, src/components/**
+---
+
+# NestIQ Design System — Typography Rules
+
+When editing any frontend file, follow these rules exactly.
+Do not deviate based on your own design judgment.
+
+## Fonts
+- Headlines + body: DM Sans (`var(--font-sans)`)
+- All data, prices, scores, counts, tags: DM Mono (`var(--font-mono)`)
+- Never use Inter, system-ui, or any other font family
+
+## Type Scale (use only these values)
+- 12px → `var(--text-xs)` — captions, timestamps
+- 14px → `var(--text-sm)` — secondary body, metadata
+- 16px → `var(--text-base)` — primary body copy
+- 20px → `var(--text-md)` — card titles, subheadings
+- 24px → `var(--text-lg)` — section headers
+- 32px → `var(--text-xl)` — page titles
+- 40px → `var(--text-2xl)` — hero subheadline
+- 52px → `var(--text-3xl)` — hero headline (landing only)
+
+Never hardcode a font-size in px, rem, or em. Always use a token.
+
+## Weights
+- 300 → h1, h2, hero display text only
+- 400 → body copy, descriptions
+- 500 → buttons, nav, labels, tags
+- Never use 600, 700, or bold — anywhere
+
+## Tracking (letter-spacing)
+- Hero (52px): `var(--tracking-tight)` = -0.03em
+- h1/h2 (40/32px): `var(--tracking-snug)` = -0.015em
+- Body: `var(--tracking-normal)` = 0em
+- Small labels: `var(--tracking-wide)` = 0.06em
+- Eyebrow/all-caps: `var(--tracking-wider)` = 0.1em
+
+## Leading (line-height)
+- Hero + h1/h2: `var(--leading-tight)` = 1.15
+- h3/h4/card titles: `var(--leading-snug)` = 1.3
+- Body copy: `var(--leading-normal)` = 1.55
+- Pulse prose: `var(--leading-relaxed)` = 1.7
+
+## Utility Classes (apply in JSX)
+- `.type-hero` — landing page headline only
+- `.type-eyebrow` — small all-caps label above a section
+- `.type-secondary` — metadata, muted descriptions
+- `.type-prose` — Pulse article body
+- `.type-data` — prices, scores, counts (14px DM Mono)
+- `.type-data-lg` — primary rent price on cards (20px DM Mono)
+- `.type-label` — buttons, nav items, filter tags
+
+## Amber (#E8A020)
+- Used on one word or value per section maximum
+- Never on entire headlines or paragraphs
+- Never as a background on text blocks
+
+## Hard Rules
+- No font-weight 600 or 700 anywhere
+- No Inter anywhere
+- No arbitrary font sizes outside the scale
+- No DM Sans on prices, scores, or numeric data
+- No all-caps except `.type-eyebrow` at 12px
+- No inline style overrides for typography — use tokens and utility classes

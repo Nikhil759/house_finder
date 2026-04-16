@@ -233,6 +233,10 @@ def main():
         f"({total_duplicates} duplicates skipped)"
     )
 
+    if total_inserted > 0:
+        from transforms.fast_path import run_post_pulse_transforms
+        run_post_pulse_transforms("news")
+
 
 if __name__ == "__main__":
     main()
