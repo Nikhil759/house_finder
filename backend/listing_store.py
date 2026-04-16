@@ -202,27 +202,27 @@ def query_listings(
         params = []
 
         if not include_expired:
-            conditions.append("status = %s")
+            conditions.append("l.status = %s")
             params.append("active")
 
         if sources:
             placeholders = ",".join(["%s"] * len(sources))
-            conditions.append(f"source IN ({placeholders})")
+            conditions.append(f"l.source IN ({placeholders})")
             params.extend(sources)
 
         if localities:
             placeholders = ",".join(["%s"] * len(localities))
-            conditions.append(f"LOWER(locality) IN ({placeholders})")
+            conditions.append(f"LOWER(l.locality) IN ({placeholders})")
             params.extend([loc.lower() for loc in localities])
 
         if bhk and bhk != "any":
-            conditions.append("LOWER(REPLACE(bhk, ' ', '')) LIKE %s")
+            conditions.append("LOWER(REPLACE(l.bhk, ' ', '')) LIKE %s")
             params.append(f"%{bhk.lower().replace(' ', '')}%")
 
         if budget:
             try:
                 budget_val = int(budget)
-                conditions.append("(rent IS NULL OR rent <= %s)")
+                conditions.append("(l.rent IS NULL OR l.rent <= %s)")
                 params.append(budget_val)
             except ValueError:
                 pass
@@ -230,41 +230,44 @@ def query_listings(
         if min_budget:
             try:
                 min_budget_val = int(min_budget)
-                conditions.append("(rent IS NULL OR rent >= %s)")
+                conditions.append("(l.rent IS NULL OR l.rent >= %s)")
                 params.append(min_budget_val)
             except ValueError:
                 pass
 
-        # Exclude obvious rent anomalies that slipped through ingestion
-        # (< ₹2k is garbage; > ₹1.5L is out of range for typical Bangalore rentals)
-        conditions.append("(rent IS NULL OR (rent >= 2000 AND rent <= 150000))")
+        conditions.append("(l.rent IS NULL OR (l.rent >= 2000 AND l.rent <= 150000))")
 
-        # Hide non-canonical duplicates: if a listing is in a duplicate group,
-        # only show the one with the highest quality_score (the canonical one).
-        # The canonical listing has id = duplicate_group_id (set by run_dedup.py).
         conditions.append(
-            "(duplicate_group_id IS NULL OR id = duplicate_group_id)"
+            "(l.duplicate_group_id IS NULL OR l.id = l.duplicate_group_id)"
         )
 
+        # Hide confirmed non-listings (Gemini-tagged as not a rental listing)
+        conditions.append("(lc.is_listing IS NULL OR lc.is_listing = TRUE)")
+
         if since_utc is not None:
-            conditions.append("EXTRACT(EPOCH FROM posted_at) > %s")
+            conditions.append("EXTRACT(EPOCH FROM l.posted_at) > %s")
             params.append(since_utc)
 
         where = " AND ".join(conditions) if conditions else "1=1"
         sql = f"""
-            SELECT source, source_id, source_url, source_group,
-                   title, body, bhk, property_type, furnishing,
-                   rent, deposit, maintenance,
-                   locality, address, latitude, longitude, maps_url,
-                   area_sqft, floor_info, amenities, lease_type,
-                   contact_phone, contact_name, is_broker, no_brokerage,
-                   is_flatmate, is_sponsored, thumbnail_url,
-                   EXTRACT(EPOCH FROM posted_at)::FLOAT as posted_epoch,
-                   quality_score, raw_payload,
-                   id, duplicate_group_id
-            FROM listings
+            SELECT l.source, l.source_id, l.source_url, l.source_group,
+                   l.title, l.body, l.bhk, l.property_type, l.furnishing,
+                   l.rent, l.deposit, l.maintenance,
+                   l.locality, l.address, l.latitude, l.longitude, l.maps_url,
+                   l.area_sqft, l.floor_info, l.amenities, l.lease_type,
+                   l.contact_phone, l.contact_name, l.is_broker, l.no_brokerage,
+                   l.is_flatmate, l.is_sponsored, l.thumbnail_url,
+                   EXTRACT(EPOCH FROM l.posted_at)::FLOAT as posted_epoch,
+                   COALESCE(lc.quality_score, l.quality_score) AS quality_score,
+                   l.raw_payload,
+                   l.id, l.duplicate_group_id,
+                   lc.detail_score, lc.price_comp_score,
+                   lc.locality_sent_score, lc.freshness_score,
+                   lc.price_anomaly, lc.is_per_room, lc.rent_type
+            FROM listings l
+            LEFT JOIN listings_curated lc ON lc.listing_id = l.id
             WHERE {where}
-            ORDER BY posted_at DESC NULLS LAST
+            ORDER BY l.posted_at DESC NULLS LAST
             LIMIT %s
         """
         params.append(limit)
@@ -347,6 +350,13 @@ def query_listings(
                 "created_utc": row[28] or 0,
                 "quality_score": row[29] or 0,
                 "duplicate_sources": siblings,
+                "detail_score": row[33],
+                "price_comp_score": row[34],
+                "locality_sent_score": row[35],
+                "freshness_score": row[36],
+                "price_anomaly": row[37] or False,
+                "is_per_room": row[38] or False,
+                "rent_type": row[39] or "unknown",
             })
             results.append(base)
         return results
@@ -436,18 +446,23 @@ _SOURCE_ALIAS = {
 
 
 _LISTING_SELECT = """
-    SELECT source, source_id, source_url, source_group,
-           title, body, bhk, property_type, furnishing,
-           rent, deposit, maintenance,
-           locality, address, latitude, longitude, maps_url,
-           area_sqft, floor_info, amenities, lease_type,
-           contact_phone, contact_name, is_broker, no_brokerage,
-           is_flatmate, is_sponsored, thumbnail_url,
-           EXTRACT(EPOCH FROM posted_at)::FLOAT as posted_epoch,
-           quality_score, raw_payload,
-           id, duplicate_group_id,
-           society_name, society_place_id, image_urls, images
-    FROM listings
+    SELECT l.source, l.source_id, l.source_url, l.source_group,
+           l.title, l.body, l.bhk, l.property_type, l.furnishing,
+           l.rent, l.deposit, l.maintenance,
+           l.locality, l.address, l.latitude, l.longitude, l.maps_url,
+           l.area_sqft, l.floor_info, l.amenities, l.lease_type,
+           l.contact_phone, l.contact_name, l.is_broker, l.no_brokerage,
+           l.is_flatmate, l.is_sponsored, l.thumbnail_url,
+           EXTRACT(EPOCH FROM l.posted_at)::FLOAT as posted_epoch,
+           COALESCE(lc.quality_score, l.quality_score) AS quality_score,
+           l.raw_payload,
+           l.id, l.duplicate_group_id,
+           l.society_name, l.society_place_id, l.image_urls, l.images,
+           lc.detail_score, lc.price_comp_score,
+           lc.locality_sent_score, lc.freshness_score,
+           lc.price_anomaly, lc.is_per_room, lc.rent_type
+    FROM listings l
+    LEFT JOIN listings_curated lc ON lc.listing_id = l.id
 """
 
 
@@ -582,6 +597,13 @@ def _row_to_listing(row):
             society_place_id=row[34],
             locality=row[12],
         ),
+        "detail_score": row[37],
+        "price_comp_score": row[38],
+        "locality_sent_score": row[39],
+        "freshness_score": row[40],
+        "price_anomaly": row[41] or False,
+        "is_per_room": row[42] or False,
+        "rent_type": row[43] or "unknown",
     })
     return base
 
@@ -595,12 +617,12 @@ def _query_single_by_source_id(source_id: str, source: str = None):
         cur = conn.cursor()
         if source:
             cur.execute(
-                _LISTING_SELECT + " WHERE source = %s AND source_id = %s LIMIT 1",
+                _LISTING_SELECT + " WHERE l.source = %s AND l.source_id = %s LIMIT 1",
                 (source, source_id),
             )
         else:
             cur.execute(
-                _LISTING_SELECT + " WHERE source_id = %s LIMIT 1",
+                _LISTING_SELECT + " WHERE l.source_id = %s LIMIT 1",
                 (source_id,),
             )
         row = cur.fetchone()

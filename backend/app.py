@@ -10,6 +10,7 @@ import asyncio
 import logging
 import random
 import threading
+from decimal import Decimal
 from dotenv import load_dotenv
 from nobroker import (
     start_background_refresh,
@@ -1194,9 +1195,10 @@ def search():
             )
         ]
 
-    # Score every post
+    # Use curated quality_score when available; fall back to legacy scorer
     for post in all_posts:
-        post["quality_score"] = score_post(post)
+        if not post.get("detail_score"):
+            post["quality_score"] = score_post(post)
 
     # Filter out low-quality posts
     all_posts = [p for p in all_posts if p["quality_score"] >= min_score]
@@ -1299,7 +1301,8 @@ def search_new():
         ]
 
     for post in all_posts:
-        post["quality_score"] = score_post(post)
+        if not post.get("detail_score"):
+            post["quality_score"] = score_post(post)
 
     all_posts = [p for p in all_posts if p["quality_score"] >= 20]
     all_posts.sort(key=lambda x: x["quality_score"], reverse=True)
@@ -1583,6 +1586,477 @@ def stats():
         return jsonify({"error": str(e)}), 500
 
 
+# ─────────────────────────────────────────────
+# Pulse API
+# ─────────────────────────────────────────────
+
+def _get_pg_conn():
+    """Get a direct psycopg2 connection for curated-table queries."""
+    import psycopg2
+    url = os.environ.get("SUPABASE_DB_URL") or os.environ.get("DATABASE_URL", "")
+    if not url:
+        raise RuntimeError("SUPABASE_DB_URL or DATABASE_URL must be set")
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+    return psycopg2.connect(url)
+
+
+@app.route("/api/pulse/feed")
+def pulse_feed():
+    """
+    Return curated Pulse feed posts.
+    Featured posts first, then by relevance_score DESC.
+    Optional filters: ?locality=, ?topic=, ?limit=
+    """
+    locality = request.args.get("locality", "").strip() or None
+    topic = request.args.get("topic", "").strip() or None
+    limit_val = min(int(request.args.get("limit", 50)), 100)
+
+    conn = None
+    try:
+        conn = _get_pg_conn()
+        cur = conn.cursor()
+
+        where_clauses = []
+        params = []
+
+        if locality:
+            where_clauses.append("(%s = ANY(lf.detected_localities) OR lf.locality ILIKE %s)")
+            params.extend([locality, locality])
+        if topic:
+            where_clauses.append("lf.canonical_topic = %s")
+            params.append(topic)
+
+        where_sql = (" AND " + " AND ".join(where_clauses)) if where_clauses else ""
+        params.append(limit_val)
+
+        cur.execute(f"""
+            SELECT
+                lf.id, lf.source, lf.locality, lf.title, lf.body, lf.url,
+                lf.category, lf.canonical_topic, lf.sentiment_score,
+                lf.relevance_score, lf.detected_localities,
+                lf.posted_at, lf.scraped_at, lf.engagement, lf.author,
+                fc.featured, fc.editor_rank, fc.editor_note,
+                fc.is_trending, fc.trending_score
+            FROM feed_curated fc
+            JOIN locality_feed lf ON lf.id = fc.feed_id
+            WHERE lf.category IN ('discussion', 'news')
+              AND lf.relevance_score >= 0.3
+              {where_sql}
+            ORDER BY fc.featured DESC, fc.editor_rank ASC NULLS LAST,
+                     lf.relevance_score DESC, lf.scraped_at DESC
+            LIMIT %s
+        """, params)
+
+        cols = [d[0] for d in cur.description]
+        rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+        for r in rows:
+            for k, v in r.items():
+                if hasattr(v, "isoformat"):
+                    r[k] = v.isoformat()
+
+        # City-wide sentiment (all posts, last 7 days)
+        cur.execute("""
+            SELECT AVG(sentiment_score), COUNT(*)
+            FROM locality_feed
+            WHERE category IN ('discussion', 'news')
+              AND sentiment_score IS NOT NULL
+              AND relevance_score >= 0.3
+              AND scraped_at >= NOW() - INTERVAL '7 days'
+        """)
+        avg_sent, sent_count = cur.fetchone()
+
+        # Per-locality sentiment (last 7 days)
+        cur.execute("""
+            SELECT locality, AVG(sentiment_score) AS avg_sent, COUNT(*) AS cnt
+            FROM locality_feed
+            WHERE category IN ('discussion', 'news')
+              AND locality IS NOT NULL
+              AND sentiment_score IS NOT NULL
+              AND scraped_at >= NOW() - INTERVAL '7 days'
+            GROUP BY locality
+            HAVING COUNT(*) >= 2
+            ORDER BY COUNT(*) DESC
+            LIMIT 10
+        """)
+        locality_sentiments = [
+            {"locality": loc, "avg_sentiment": round(float(s), 3), "count": c}
+            for loc, s, c in cur.fetchall()
+        ]
+
+        return jsonify({
+            "posts": rows,
+            "city_sentiment": round(float(avg_sent), 3) if avg_sent else 0,
+            "city_sentiment_count": sent_count or 0,
+            "locality_sentiments": locality_sentiments,
+        })
+
+    except Exception as e:
+        logger.error("pulse/feed error: %s", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route("/api/pulse/topics")
+def pulse_topics():
+    """
+    Aggregate canonical_topic counts + avg sentiment from feed_curated
+    for the last 30 days.
+    """
+    conn = None
+    try:
+        conn = _get_pg_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT
+                lf.canonical_topic,
+                COUNT(*) AS post_count,
+                AVG(lf.sentiment_score) AS avg_sentiment
+            FROM feed_curated fc
+            JOIN locality_feed lf ON lf.id = fc.feed_id
+            WHERE lf.canonical_topic IS NOT NULL
+              AND lf.canonical_topic != 'other'
+              AND lf.scraped_at >= NOW() - INTERVAL '30 days'
+            GROUP BY lf.canonical_topic
+            ORDER BY post_count DESC
+        """)
+        topics = []
+        for slug, count, avg_sent in cur.fetchall():
+            topics.append({
+                "slug": slug,
+                "label": slug.replace("_", " ").title(),
+                "count": count,
+                "avg_sentiment": round(float(avg_sent), 3) if avg_sent else 0,
+            })
+
+        return jsonify({"topics": topics})
+
+    except Exception as e:
+        logger.error("pulse/topics error: %s", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route("/api/pulse/trending")
+def pulse_trending():
+    """Return trending posts from feed_curated."""
+    conn = None
+    try:
+        conn = _get_pg_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT
+                lf.id, lf.source, lf.locality, lf.title, lf.body, lf.url,
+                lf.category, lf.canonical_topic, lf.sentiment_score,
+                lf.relevance_score, lf.detected_localities,
+                lf.posted_at, lf.scraped_at, lf.engagement,
+                fc.trending_score
+            FROM feed_curated fc
+            JOIN locality_feed lf ON lf.id = fc.feed_id
+            WHERE fc.is_trending = TRUE
+            ORDER BY fc.trending_score DESC
+        """)
+        cols = [d[0] for d in cur.description]
+        rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+        for r in rows:
+            for k, v in r.items():
+                if hasattr(v, "isoformat"):
+                    r[k] = v.isoformat()
+
+        return jsonify({"trending": rows})
+
+    except Exception as e:
+        logger.error("pulse/trending error: %s", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route("/api/pulse/locality/<locality>")
+def pulse_locality(locality):
+    """
+    Locality-specific sentiment summary: 7-day avg sentiment,
+    top topics by post count, recent high-relevance posts.
+    """
+    conn = None
+    try:
+        conn = _get_pg_conn()
+        cur = conn.cursor()
+
+        # 7-day avg sentiment for this locality
+        cur.execute("""
+            SELECT AVG(sentiment_score), COUNT(*)
+            FROM locality_feed
+            WHERE (locality ILIKE %s OR %s = ANY(detected_localities))
+              AND sentiment_score IS NOT NULL
+              AND scraped_at >= NOW() - INTERVAL '7 days'
+        """, (locality, locality))
+        avg_sent, post_count_7d = cur.fetchone()
+
+        # Top topics (last 30 days)
+        cur.execute("""
+            SELECT canonical_topic, COUNT(*) AS cnt, AVG(sentiment_score) AS avg_sent
+            FROM locality_feed
+            WHERE (locality ILIKE %s OR %s = ANY(detected_localities))
+              AND canonical_topic IS NOT NULL
+              AND canonical_topic != 'other'
+              AND scraped_at >= NOW() - INTERVAL '30 days'
+            GROUP BY canonical_topic
+            ORDER BY cnt DESC
+            LIMIT 8
+        """, (locality, locality))
+        topics = [
+            {"slug": slug, "label": slug.replace("_", " ").title(),
+             "count": cnt, "avg_sentiment": round(float(s), 3) if s else 0}
+            for slug, cnt, s in cur.fetchall()
+        ]
+
+        # Recent high-relevance posts
+        cur.execute("""
+            SELECT id, source, locality, title, body, url,
+                   category, canonical_topic, sentiment_score,
+                   relevance_score, posted_at, scraped_at, engagement
+            FROM locality_feed
+            WHERE (locality ILIKE %s OR %s = ANY(detected_localities))
+              AND category IN ('discussion', 'news')
+              AND relevance_score >= 0.4
+            ORDER BY scraped_at DESC
+            LIMIT 20
+        """, (locality, locality))
+        cols = [d[0] for d in cur.description]
+        posts = [dict(zip(cols, row)) for row in cur.fetchall()]
+        for p in posts:
+            for k, v in p.items():
+                if hasattr(v, "isoformat"):
+                    p[k] = v.isoformat()
+
+        return jsonify({
+            "locality": locality,
+            "avg_sentiment_7d": round(float(avg_sent), 3) if avg_sent else None,
+            "post_count_7d": post_count_7d or 0,
+            "topics": topics,
+            "recent_posts": posts,
+        })
+
+    except Exception as e:
+        logger.error("pulse/locality error: %s", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+# ─────────────────────────────────────────────
+# Locality Stats API
+# ─────────────────────────────────────────────
+
+@app.route("/api/locality-stats/<locality>")
+def locality_stats(locality):
+    """
+    Return rent stats (median, P25, P75, price_per_sqft) + deposit stats
+    for a locality, per BHK. Replaces direct Supabase queries.
+    """
+    conn = None
+    try:
+        conn = _get_pg_conn()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT bhk, median_rent, p25_rent, p75_rent, listing_count,
+                   rent_trend_pct, median_price_per_sqft, updated_at
+            FROM locality_stats_cache
+            WHERE locality ILIKE %s
+            ORDER BY bhk
+        """, (locality,))
+        cols = [d[0] for d in cur.description]
+        rent_rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+        for r in rent_rows:
+            for k, v in r.items():
+                if hasattr(v, "isoformat"):
+                    r[k] = v.isoformat()
+                elif isinstance(v, Decimal):
+                    r[k] = float(v)
+
+        cur.execute("""
+            SELECT bhk, avg_multiplier, median_deposit
+            FROM deposit_stats_cache
+            ORDER BY bhk
+        """)
+        cols2 = [d[0] for d in cur.description]
+        deposit_rows = [dict(zip(cols2, row)) for row in cur.fetchall()]
+        for r in deposit_rows:
+            for k, v in r.items():
+                if isinstance(v, Decimal):
+                    r[k] = float(v)
+
+        return jsonify({
+            "locality": locality,
+            "rent_stats": rent_rows,
+            "deposit_stats": deposit_rows,
+        })
+
+    except Exception as e:
+        logger.error("locality-stats error: %s", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route("/api/pulse/rent-overview")
+def pulse_rent_overview():
+    """All locality rent stats for Pulse sidebar."""
+    conn = None
+    try:
+        conn = _get_pg_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT locality, bhk, median_rent, rent_trend_pct
+            FROM locality_stats_cache
+            WHERE median_rent IS NOT NULL
+            ORDER BY median_rent DESC
+        """)
+        cols = [d[0] for d in cur.description]
+        rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+        for r in rows:
+            for k, v in r.items():
+                if isinstance(v, Decimal):
+                    r[k] = float(v)
+        return jsonify({"rent_data": rows})
+    except Exception as e:
+        logger.error("pulse/rent-overview error: %s", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route("/api/locality-stats-all")
+def locality_stats_all():
+    """All locality stats + deposit benchmarks for LocalityGuide overview."""
+    conn = None
+    try:
+        conn = _get_pg_conn()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT locality, bhk, median_rent, p25_rent, p75_rent,
+                   listing_count, rent_trend_pct, median_price_per_sqft, updated_at
+            FROM locality_stats_cache
+            ORDER BY median_rent DESC
+        """)
+        cols = [d[0] for d in cur.description]
+        rent_rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+        for r in rent_rows:
+            for k, v in r.items():
+                if hasattr(v, "isoformat"):
+                    r[k] = v.isoformat()
+                elif isinstance(v, Decimal):
+                    r[k] = float(v)
+
+        cur.execute("""
+            SELECT bhk, avg_multiplier, median_deposit
+            FROM deposit_stats_cache
+            ORDER BY bhk
+        """)
+        cols2 = [d[0] for d in cur.description]
+        dep_rows = [dict(zip(cols2, row)) for row in cur.fetchall()]
+        for r in dep_rows:
+            for k, v in r.items():
+                if isinstance(v, Decimal):
+                    r[k] = float(v)
+
+        return jsonify({"locality_stats": rent_rows, "deposit_stats": dep_rows})
+    except Exception as e:
+        logger.error("locality-stats-all error: %s", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route("/api/locality-image/<locality>")
+def locality_image(locality):
+    """Return hero image for a locality."""
+    conn = None
+    try:
+        conn = _get_pg_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT image_url, attribution
+            FROM locality_images
+            WHERE locality ILIKE %s
+            LIMIT 1
+        """, (locality,))
+        row = cur.fetchone()
+        if row:
+            return jsonify({"image_url": row[0], "attribution": row[1]})
+        return jsonify({}), 200
+    except Exception as e:
+        logger.error("locality-image error: %s", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route("/api/pulse/feed-for-locality/<locality>")
+def pulse_feed_for_locality(locality):
+    """Topic counts + recent posts for a specific locality (30d window)."""
+    conn = None
+    try:
+        conn = _get_pg_conn()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT canonical_topic, COUNT(*) AS cnt
+            FROM locality_feed
+            WHERE (locality ILIKE %s OR %s = ANY(detected_localities))
+              AND canonical_topic IS NOT NULL
+              AND scraped_at >= NOW() - INTERVAL '30 days'
+            GROUP BY canonical_topic
+            ORDER BY cnt DESC
+        """, (locality, locality))
+        topics = [{"topic": t, "count": c} for t, c in cur.fetchall()]
+
+        cur.execute("""
+            SELECT id, source, author, locality, title, body, url,
+                   canonical_topic AS topic, sentiment_score AS sentiment,
+                   engagement, posted_at
+            FROM locality_feed
+            WHERE (locality ILIKE %s OR %s = ANY(detected_localities))
+              AND canonical_topic IS NOT NULL
+              AND sentiment_score IS NOT NULL
+            ORDER BY posted_at DESC
+            LIMIT 30
+        """, (locality, locality))
+        cols = [d[0] for d in cur.description]
+        posts = [dict(zip(cols, row)) for row in cur.fetchall()]
+        for p in posts:
+            for k, v in p.items():
+                if hasattr(v, "isoformat"):
+                    p[k] = v.isoformat()
+                elif isinstance(v, Decimal):
+                    p[k] = float(v)
+
+        return jsonify({"topics": topics, "posts": posts})
+    except Exception as e:
+        logger.error("pulse/feed-for-locality error: %s", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+# ─────────────────────────────────────────────
+# Pipeline Status
+# ─────────────────────────────────────────────
+
 @app.route("/api/pipeline-status")
 def pipeline_status():
     """
@@ -1639,11 +2113,41 @@ def pipeline_status():
                 if hasattr(v, 'isoformat'):
                     run[k] = v.isoformat()
 
+        # Transform runs (last run per job)
+        cur.execute("""
+            SELECT DISTINCT ON (job_name)
+                job_name, source, started_at, finished_at, status,
+                duration_ms, records_processed, records_failed,
+                gemini_calls, gemini_fallback_count, error_message
+            FROM transform_runs
+            ORDER BY job_name, started_at DESC
+        """)
+        tcols = [d[0] for d in cur.description]
+        transform_runs = [dict(zip(tcols, row)) for row in cur.fetchall()]
+        for tr in transform_runs:
+            for k, v in tr.items():
+                if hasattr(v, 'isoformat'):
+                    tr[k] = v.isoformat()
+
+        # Gemini fallback pending counts
+        cur.execute("""
+            SELECT
+                (SELECT COUNT(*) FROM listings_curated WHERE gemini_fallback = TRUE) AS listings_pending,
+                (SELECT COUNT(*) FROM feed_curated WHERE gemini_fallback = TRUE) AS feed_pending
+        """)
+        pend = cur.fetchone()
+        gemini_pending = {
+            "listings_curated": pend[0] if pend else 0,
+            "feed_curated": pend[1] if pend else 0,
+        }
+
         return jsonify({
             "total_listings": total,
             "by_source_status": status_counts,
             "by_locality": locality_counts,
             "recent_runs": recent_runs,
+            "transform_runs": transform_runs,
+            "gemini_fallback_pending": gemini_pending,
         })
 
     except Exception as e:
@@ -1651,6 +2155,54 @@ def pipeline_status():
         return jsonify({"error": str(e)}), 500
     finally:
         _put_conn(conn)
+
+
+# ─────────────────────────────────────────────
+# Listing Statuses (batch) — used by My Hub for stale badges
+# ─────────────────────────────────────────────
+
+@app.route("/api/listing-statuses", methods=["POST"])
+def listing_statuses():
+    """Return { composite_id: status } for a batch of composite listing IDs (source_sourceId)."""
+    conn = None
+    try:
+        body = request.get_json(silent=True) or {}
+        ids = body.get("ids", [])
+        if not ids or not isinstance(ids, list):
+            return jsonify({})
+        ids = [str(i) for i in ids[:200]]
+
+        pairs = []
+        for cid in ids:
+            if '_' in cid:
+                src, sid = cid.split('_', 1)
+                src_map = {'nb': 'nobroker'}
+                pairs.append((src_map.get(src, src), sid))
+
+        if not pairs:
+            return jsonify({})
+
+        conn = _get_pg_conn()
+        cur = conn.cursor()
+        values_sql = ",".join(
+            cur.mogrify("(%s,%s)", p).decode() for p in pairs
+        )
+        cur.execute(f"""
+            SELECT l.source, l.source_id, l.status
+            FROM listings l
+            JOIN (VALUES {values_sql}) AS v(src, sid)
+              ON l.source = v.src AND l.source_id = v.sid
+        """)
+        result = {}
+        for source, source_id, status in cur.fetchall():
+            result[f"{source}_{source_id}"] = status
+        return jsonify(result)
+    except Exception as e:
+        logger.error("listing-statuses error: %s", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
 
 
 if __name__ == "__main__":

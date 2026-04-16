@@ -350,10 +350,11 @@ def _write_results(cur, results: list[dict], batch: list[dict], stats: dict):
 
         cur.execute("""
             INSERT INTO listings_curated
-                (listing_id, extracted_bhk, extracted_rent, extracted_locality,
+                (listing_id, is_listing, extracted_bhk, extracted_rent, extracted_locality,
                  rent_type, gemini_tagged, gemini_fallback, updated_at)
-            VALUES (%s, %s, %s, %s, %s, TRUE, FALSE, NOW())
+            VALUES (%s, %s, %s, %s, %s, %s, TRUE, FALSE, NOW())
             ON CONFLICT (listing_id) DO UPDATE SET
+                is_listing         = EXCLUDED.is_listing,
                 extracted_bhk      = EXCLUDED.extracted_bhk,
                 extracted_rent     = EXCLUDED.extracted_rent,
                 extracted_locality = EXCLUDED.extracted_locality,
@@ -363,6 +364,7 @@ def _write_results(cur, results: list[dict], batch: list[dict], stats: dict):
                 updated_at         = NOW()
         """, (
             r["listing_id"],
+            r["is_listing"],
             r["extracted_bhk"],
             r["extracted_rent"],
             r["extracted_locality"],
