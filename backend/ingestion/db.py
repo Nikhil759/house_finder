@@ -46,7 +46,6 @@ class UpsertStats:
         self.total_new = 0
         self.total_updated = 0
         self.total_errors = 0
-        self.price_changes = 0
 
 
 _UPSERT_COLUMNS = [
@@ -162,7 +161,6 @@ def upsert_listings(listings: list[StandardListing]) -> UpsertStats:
                     stats.total_errors += 1
                     conn.rollback()
                     cur = conn.cursor()
-                    old_prices = {}
 
             for res in results:
                 if res is None:
@@ -172,19 +170,6 @@ def upsert_listings(listings: list[StandardListing]) -> UpsertStats:
                     stats.total_new += 1
                 else:
                     stats.total_updated += 1
-                    old = old_prices.get(source_id)
-                    if old:
-                        old_rent, old_deposit = old
-                        if (new_rent and old_rent and new_rent != old_rent) or \
-                           (new_deposit and old_deposit and new_deposit != old_deposit):
-                            try:
-                                cur.execute(
-                                    "INSERT INTO listing_price_history (listing_id, rent, deposit) VALUES (%s, %s, %s)",
-                                    (listing_id, new_rent, new_deposit),
-                                )
-                                stats.price_changes += 1
-                            except Exception as e:
-                                logger.error("Failed to record price change for %s: %s", listing_id, e)
 
             conn.commit()
 
@@ -196,9 +181,8 @@ def upsert_listings(listings: list[StandardListing]) -> UpsertStats:
         conn.close()
 
     logger.info(
-        "Upserted %d listings (new=%d, updated=%d, errors=%d, price_changes=%d)",
-        len(listings), stats.total_new, stats.total_updated,
-        stats.total_errors, stats.price_changes,
+        "Upserted %d listings (new=%d, updated=%d, errors=%d)",
+        len(listings), stats.total_new, stats.total_updated, stats.total_errors,
     )
     return stats
 
