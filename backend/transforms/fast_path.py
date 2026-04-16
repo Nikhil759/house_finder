@@ -71,23 +71,25 @@ def _run_stale_marking(source: str, started_at: datetime):
 def _run_fuzzy_locality_matching(source: str):
     """
     Second-pass locality matching using rapidfuzz for Reddit/Telegram
-    posts that didn't match the exact alias table at ingest time.
-
-    TODO (Phase 2): Implement fuzzy matching against localities table.
+    posts where the exact alias table didn't find a locality at ingest time.
     """
+    from datetime import datetime, timezone
+    started_at = datetime.now(timezone.utc)
     run_id = record_transform_start("fuzzy_locality", source)
     try:
-        # Phase 2: implement fuzzy matching here
+        from transforms.locality_matcher import fuzzy_match_unmatched_listings
+        processed, matched = fuzzy_match_unmatched_listings(source)
         record_transform_end(
             run_id,
             status="success",
-            records_processed=0,
-            records_skipped=0,
-            metadata={"note": "stub — implementation in Phase 2"},
+            records_processed=processed,
+            started_at=started_at,
+            metadata={"matched": matched, "unmatched_remaining": processed - matched},
         )
+        logger.info("Fuzzy locality for %s: %d/%d matched", source, matched, processed)
     except Exception as e:
         logger.error("Fuzzy locality matching failed for %s: %s", source, e)
-        record_transform_end(run_id, status="failed", error_message=str(e))
+        record_transform_end(run_id, status="failed", error_message=str(e), started_at=started_at)
 
 
 def _run_listing_filter_and_extraction(source: str):
