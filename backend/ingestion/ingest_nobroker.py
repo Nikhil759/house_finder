@@ -30,9 +30,8 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 from ingestion.models import StandardListing
 from ingestion.db import (
-    upsert_listings, mark_stale, record_run_start, record_run_end, UpsertStats,
+    upsert_listings, record_run_start, record_run_end, UpsertStats,
 )
-from ingestion.scoring import compute_quality_score
 from localities import extract_locality
 
 logging.basicConfig(
@@ -176,17 +175,6 @@ def normalize(item: dict, locality_name: str) -> StandardListing:
         society_name=society_name,
         image_urls=image_urls,
     )
-    listing.quality_score = compute_quality_score(
-        source="nobroker",
-        title=listing.title or "",
-        body=listing.body or "",
-        rent=listing.rent,
-        contact_phone=listing.contact_phone,
-        bhk=listing.bhk,
-        furnishing=listing.furnishing,
-        deposit=listing.deposit,
-        posted_at=listing.posted_at,
-    )
     return listing
 
 
@@ -219,21 +207,18 @@ def main():
     if all_listings:
         stats = upsert_listings(all_listings)
 
-    stale_count = mark_stale("nobroker", started_at)
-
     record_run_end(
         db_run_id,
         status="success" if total_errors == 0 else "partial",
         stats=stats,
         total_fetched=len(all_listings),
-        total_stale=stale_count,
         locality_counts=locality_counts,
         error_message=None if total_errors == 0 else f"{total_errors} locality fetches failed",
         started_at=started_at,
     )
     logger.info(
-        "NoBroker ingestion complete: %d fetched, %d new, %d updated, %d stale",
-        len(all_listings), stats.total_new, stats.total_updated, stale_count,
+        "NoBroker ingestion complete: %d fetched, %d new, %d updated",
+        len(all_listings), stats.total_new, stats.total_updated,
     )
 
 

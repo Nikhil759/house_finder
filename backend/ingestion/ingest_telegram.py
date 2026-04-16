@@ -27,9 +27,8 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 from ingestion.models import StandardListing
 from ingestion.db import (
-    upsert_listings, mark_stale, record_run_start, record_run_end, UpsertStats,
+    upsert_listings, record_run_start, record_run_end, UpsertStats,
 )
-from ingestion.scoring import compute_quality_score
 import requests as _requests
 
 from localities import normalize_locality, extract_locality, LOCALITY_META, LOCALITY_ALIASES
@@ -285,18 +284,6 @@ async def fetch_all_groups() -> list[StandardListing]:
                         posted_at=int(msg.date.timestamp()),
                         raw_payload={"text": text, "group": group, "sender_id": str(msg.sender_id or "")},
                     )
-                    listing.quality_score = compute_quality_score(
-                        source="telegram",
-                        title=listing.title or "",
-                        body=listing.body or "",
-                        rent=listing.rent,
-                        contact_phone=listing.contact_phone,
-                        bhk=listing.bhk,
-                        furnishing=listing.furnishing,
-                        deposit=listing.deposit,
-                        no_brokerage=listing.no_brokerage,
-                        posted_at=listing.posted_at,
-                    )
                     group_listings.append(listing)
 
                 listings.extend(group_listings[:MAX_PER_GROUP])
@@ -369,19 +356,16 @@ def main():
             finally:
                 _conn.close()
 
-    stale_count = mark_stale("telegram", started_at)
-
     record_run_end(
         db_run_id,
         status="success",
         stats=stats,
         total_fetched=len(all_listings),
-        total_stale=stale_count,
         started_at=started_at,
     )
     logger.info(
-        "Telegram ingestion complete: %d fetched, %d new, %d updated, %d stale",
-        len(all_listings), stats.total_new, stats.total_updated, stale_count,
+        "Telegram ingestion complete: %d fetched, %d new, %d updated",
+        len(all_listings), stats.total_new, stats.total_updated,
     )
 
 

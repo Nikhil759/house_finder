@@ -29,9 +29,8 @@ import requests
 
 from ingestion.models import StandardListing
 from ingestion.db import (
-    upsert_listings, mark_stale, record_run_start, record_run_end, UpsertStats,
+    upsert_listings, record_run_start, record_run_end, UpsertStats,
 )
-from ingestion.scoring import compute_quality_score
 from localities import extract_locality, LOCALITY_META, LOCALITY_ALIASES
 
 logging.basicConfig(
@@ -274,18 +273,6 @@ def normalize(p: dict) -> StandardListing:
         posted_at=p.get("created_utc", 0),
         raw_payload=p,
     )
-    listing.quality_score = compute_quality_score(
-        source="reddit",
-        title=listing.title or "",
-        body=listing.body or "",
-        rent=listing.rent,
-        contact_phone=listing.contact_phone,
-        bhk=listing.bhk,
-        furnishing=listing.furnishing,
-        posted_at=listing.posted_at,
-        reddit_score=p.get("score", 0),
-        reddit_comments=p.get("num_comments", 0),
-    )
     return listing
 
 
@@ -368,19 +355,16 @@ def main():
             finally:
                 _conn.close()
 
-    stale_count = mark_stale("reddit", started_at)
-
     record_run_end(
         db_run_id,
         status="success",
         stats=stats,
         total_fetched=len(all_listings),
-        total_stale=stale_count,
         started_at=started_at,
     )
     logger.info(
-        "Reddit ingestion complete: %d fetched, %d new, %d updated, %d stale",
-        len(all_listings), stats.total_new, stats.total_updated, stale_count,
+        "Reddit ingestion complete: %d fetched, %d new, %d updated",
+        len(all_listings), stats.total_new, stats.total_updated,
     )
 
 
