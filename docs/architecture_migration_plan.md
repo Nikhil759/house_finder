@@ -4,22 +4,25 @@ This document tracks all changes required to bring the live system to the desire
 
 ---
 
-## 1. Orchestration — Migrate Crons to Prefect on Railway
+## 1. Orchestration — Migrate to Railway Cron + Local Cron ✅
 
 **Current state:** Individual ingestion scripts are triggered by macOS crontab entries running locally.  
-**Desired state:** Each ingestion script runs as a dedicated Prefect flow deployed on Railway.
+**Desired state:** 4 non-Reddit jobs run via Railway Cron, 2 Reddit jobs remain on local crontab. Fast-path transforms are called at the end of each ingestion script's `main()`.
 
 ### Tasks
-- [ ] Set up Prefect Cloud workspace and connect Railway as the execution environment
-- [ ] Wrap each ingestion script as a Prefect flow with retry policies and state logging:
-  - `ingest_nobroker.py` — every 3 hours
-  - `ingest_housing.py` — every 3 hours
-  - `ingest_telegram.py` — every 3 hours
-  - `ingest_reddit.py` — every 6 hours
-  - `scrape_reddit_discussions.py` — every 6 hours
-  - `scrape_news.py` — every 6 hours
-- [ ] Remove existing macOS crontab entries once Prefect flows are live and verified
-- [ ] Retire the testing wrapper scripts (`run_all.py`, `run_pulse_cron.sh`, `run_reddit_cron.sh`, `run_reddit_discussions_cron.sh`) or move them to a `scripts/dev/` folder clearly marked as local-only
+- [x] Wire fast-path transform calls into all 6 ingestion scripts (`run_post_ingest_transforms` / `run_post_pulse_transforms`)
+- [x] Create `transforms/` module with `fast_path.py`, `db.py` (transform run tracking), `check_health.py`
+- [x] Create `transform_runs` table migration (`010_transform_runs.sql`)
+- [ ] Set up Railway Cron services for the 4 non-Reddit scripts:
+  - `ingest_nobroker.py` — every 3 hours (`0 */3 * * *`)
+  - `ingest_housing.py` — every 3 hours (`10 */3 * * *`)
+  - `ingest_telegram.py` — every 3 hours (`20 */3 * * *`)
+  - `scrape_news.py` — every 6 hours (`45 */6 * * *`)
+- [ ] Keep local macOS crontab for the 2 Reddit scripts:
+  - `ingest_reddit.py` — every 6 hours (`0 */6 * * *`)
+  - `scrape_reddit_discussions.py` — every 6 hours (`30 */6 * * *`)
+- [ ] Set up Railway Cron for the hourly health check (`python -m transforms.check_health`)
+- [ ] Retire the testing wrapper scripts (`run_all.py`, `run_pulse_cron.sh`, etc.) or move to `scripts/dev/`
 
 ---
 
@@ -124,8 +127,8 @@ The following tables exist in the schema but are not used by any active code pat
 - [ ] Rent anomaly flagging — set `price_anomaly`, `is_per_room`, `rent_type`; excludes `is_per_room` rows from `locality_stats_cache` calculations
 
 **Wiring & switch:**
-- [ ] Wire all fast-path jobs as Prefect sub-flows triggered by each ingestion flow's `on_completion` hook
-- [ ] Wire slow-path jobs as Prefect flows on a fixed 2:30–2:45 AM UTC Prefect schedule
+- [x] Wire fast-path jobs as function calls at the end of each ingestion script's `main()` (done in Phase 1)
+- [ ] Wire slow-path jobs as Railway Cron services on a fixed 2:30–2:45 AM UTC schedule
 - [ ] Switch backend API and frontend to read from `listings_curated` instead of `listings`
 
 ---
@@ -150,7 +153,7 @@ The following tables exist in the schema but are not used by any active code pat
 **Fast-path jobs (event-driven, wired to Pulse ingestion flows):**
 - [ ] Category filter job — exclude `listing`, `flatmate_search`, `spam` category posts from `feed_curated`
 - [ ] Duplicate news dedup job — drop near-duplicate news articles (> 85% title similarity) before Gemini tagging; keep highest-engagement version
-- [ ] Gemini Flash Lite tagging job (existing, move to Prefect) — category, topic, sentiment, locality NER, relevance in a single batch call; set `gemini_tagged = true` / `gemini_fallback = true`
+- [ ] Gemini Flash Lite tagging job (existing, move to fast-path) — category, topic, sentiment, locality NER, relevance in a single batch call; set `gemini_tagged = true` / `gemini_fallback = true`
 
 **Slow-path jobs (daily at 3:00 AM UTC):**
 - [ ] Trend detection job (SQL-based):
@@ -167,8 +170,8 @@ The following tables exist in the schema but are not used by any active code pat
 - [ ] `gemini_fallback` re-processing: nightly job finds all `gemini_fallback = true` rows in both `listings_curated` and `feed_curated` and retries them
 
 **Wiring & switch:**
-- [ ] Wire Pulse fast-path jobs as Prefect sub-flows triggered by `scrape_reddit_discussions` and `scrape_news` completion
-- [ ] Wire slow-path jobs on 3:00 AM UTC Prefect schedule
+- [x] Wire Pulse fast-path jobs as function calls at the end of `scrape_reddit_discussions` and `scrape_news` (done in Phase 1)
+- [ ] Wire slow-path jobs (trend detection, editor agent) as Railway Cron services on 3:00 AM UTC schedule
 - [ ] Switch Pulse frontend page to read from `feed_curated` instead of `locality_feed`
 - [ ] Update frontend Pulse header to derive "Last updated" from `SELECT MAX(updated_at) FROM feed_curated WHERE featured = true` (no separate state table needed)
 
@@ -198,12 +201,13 @@ The following tables exist in the schema but are not used by any active code pat
   );
   ```
 
-**Prefect integration:**
-- [ ] Add logging to each Transform Layer Prefect flow: write a row on job start, update on completion/failure
-- [ ] Add a post-task check at the end of each Gemini-using job: if `gemini_fallback_count / gemini_calls > 0.1`, fire a Prefect webhook alert (Slack/email) flagging elevated fallback rate
+**Run tracking:**
+- [x] Create `transforms/db.py` with `record_transform_start()` / `record_transform_end()` helpers (done in Phase 1)
+- [x] All fast-path transform jobs write to `transform_runs` on start and completion/failure (done in Phase 1)
+- [ ] Add a post-job check to each Gemini-using job: if `gemini_fallback_count / gemini_calls > 0.1`, log a warning in `transform_runs.metadata` and fire a webhook alert
 
 **Alerts:**
-- [ ] Configure Prefect built-in failure alerts (email or Slack) for any flow that exhausts all retries
+- [ ] Add `transforms/check_health.py` to Railway Cron (every hour) to detect stale sources and elevated Gemini fallback rates
 - [ ] Add a SQL-based sentiment anomaly check to the daily slow-path run: if a locality's 24h avg `sentiment_score` has dropped > 0.3 vs its 7-day rolling avg, log it as an anomaly row in `transform_runs` (or a dedicated `alerts` table if volume warrants it)
 - [ ] Add a silent-source check: if any source's `ingestion_runs.completed_at` is more than 2× its expected interval old, surface it on the internal dashboard as stale
 

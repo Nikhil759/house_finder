@@ -24,21 +24,22 @@ The Listings stream gathers specific real estate listings and availability. It a
 
 ### Orchestration & Compute
 
-Each source has its own **dedicated Prefect flow** running on an independent schedule. A failure in one source does not affect others.
+Each source has its own **dedicated cron job** running on an independent schedule. A failure in one source does not affect others.
 
 - **Schedules:**
 
-  | Stream   | Source      | Script                         | Schedule                      |
-  |----------|-------------|--------------------------------|-------------------------------|
-  | Listings | NoBroker    | `ingest_nobroker.py`           | Every 3 hours (`0 */3 * * *`) |
-  | Listings | Housing.com | `ingest_housing.py`            | Every 3 hours (`0 */3 * * *`) |
-  | Listings | Telegram    | `ingest_telegram.py`           | Every 3 hours (`0 */3 * * *`) |
-  | Listings | Reddit      | `ingest_reddit.py`             | Every 6 hours (`0 */6 * * *`) |
-  | Pulse    | Reddit      | `scrape_reddit_discussions.py` | Every 6 hours (`0 */6 * * *`) |
-  | Pulse    | Google News | `scrape_news.py`               | Every 6 hours (`0 */6 * * *`) |
+  | Stream   | Source      | Script                         | Schedule                      | Cron Host     |
+  |----------|-------------|--------------------------------|-------------------------------|---------------|
+  | Listings | NoBroker    | `ingest_nobroker.py`           | Every 3 hours (`0 */3 * * *`) | Railway Cron  |
+  | Listings | Housing.com | `ingest_housing.py`            | Every 3 hours (`0 */3 * * *`) | Railway Cron  |
+  | Listings | Telegram    | `ingest_telegram.py`           | Every 3 hours (`0 */3 * * *`) | Railway Cron  |
+  | Listings | Reddit      | `ingest_reddit.py`             | Every 6 hours (`0 */6 * * *`) | Local crontab |
+  | Pulse    | Reddit      | `scrape_reddit_discussions.py` | Every 6 hours (`0 */6 * * *`) | Local crontab |
+  | Pulse    | Google News | `scrape_news.py`               | Every 6 hours (`0 */6 * * *`) | Railway Cron  |
 
-- **Orchestration:** **Prefect** manages scheduling, state tracking, retries, and run observability for all ingestion flows.
-- **Compute Provider:** **Railway** provisions the compute and executes all backend ingestion scripts.
+- **Orchestration:** Railway Cron for 4 non-Reddit jobs, local macOS crontab for 2 Reddit jobs (Reddit blocks Railway IP ranges). No external orchestrator (Prefect/Airflow) — at current scale, cron + the `ingestion_runs` audit table provides sufficient scheduling and observability.
+- **Compute Provider:** **Railway** provisions the compute for all backend scripts except Reddit scraping.
+- **Fast-path transforms:** Each ingestion script calls `run_post_ingest_transforms()` (or `run_post_pulse_transforms()` for Pulse scripts) at the end of its `main()` function after a successful ingest. This chains transforms to ingestion without needing a separate orchestrator for dependency management.
 
 ### Raw JSON → Structured: The Dual-Write Pattern
 
@@ -159,11 +160,13 @@ Deduplication logic and scheduling is covered in the Transform Layer documentati
 
 ## 4. Design Decisions
 
-### Orchestration — Prefect over Airflow
+### Orchestration — Cron over Prefect/Airflow
 
-Prefect Cloud was chosen over Apache Airflow for orchestration. Airflow requires self-hosting its own scheduler, webserver, metadata database, and worker nodes — on Railway that would mean 3–4 always-on services with significant configuration overhead, for what are ultimately 6 simple cron-triggered scripts. Prefect Cloud hosts all the UI, scheduling state, run history, and alerting on their side. The only thing deployed on Railway is a lightweight Prefect worker that polls for work. This gives the same monitoring and retry capabilities as Airflow at a fraction of the operational cost.
+No external orchestrator (Prefect, Airflow) is used. At current scale — 6 ingestion scripts and a handful of transform jobs — the operational overhead of maintaining an orchestration platform (additional always-on processes, metadata databases, paid plan requirements) outweighs its benefits. Cron scheduling (Railway Cron + local crontab) combined with the `ingestion_runs` and `transform_runs` Postgres tables provides sufficient scheduling, run history, and failure visibility.
 
-**Reddit flows run locally, not on Railway.** Reddit actively blocks requests originating from known cloud provider IP ranges (AWS/GCP), which Railway runs on. All 3 fallback tiers (OAuth API → public JSON → PullPush) still originate from the same datacenter IP and are subject to this block. The Reddit scrapers (`ingest_reddit.py`, `scrape_reddit_discussions.py`) must run from a residential IP — practically, a local machine. Prefect handles this cleanly via **separate work pools**: a Railway work pool runs the 4 non-Reddit flows, and a local work pool runs a Prefect worker on a local machine for the 2 Reddit flows. Both pools report into the same Prefect Cloud workspace, so run history, success/failure state, and alerting are unified across all 6 flows regardless of where they physically execute.
+**Dependency chaining** is handled by direct function calls: each ingestion script calls `run_post_ingest_transforms()` or `run_post_pulse_transforms()` at the end of its `main()` function. This guarantees transforms run immediately after ingestion without needing inter-process signalling or a scheduler DAG.
+
+**Reddit flows run locally, not on Railway.** Reddit actively blocks requests originating from known cloud provider IP ranges (AWS/GCP), which Railway runs on. All 3 fallback tiers (OAuth API → public JSON → PullPush) still originate from the same datacenter IP and are subject to this block. The Reddit scrapers (`ingest_reddit.py`, `scrape_reddit_discussions.py`) must run from a residential IP — practically, a local machine via macOS crontab. Both Railway and local runs write to the same `ingestion_runs` and `transform_runs` tables, so observability is unified regardless of where the job physically executes.
 
 ### Storage — Supabase + Railway
 
@@ -192,7 +195,7 @@ The Transform Layer sits between the Raw Layer and the Curated Layer. It reads f
 ```
 Raw Layer (listings, locality_feed)
         ↓
-  Transform Layer (Railway / Prefect)
+  Transform Layer (Railway + local)
    ├── Script-based transforms (Python)
    └── NLP-based transforms (Gemini Flash Lite / Gemini Flash)
         ↓
@@ -207,31 +210,39 @@ All transform jobs are idempotent — safe to re-run on the same data without si
 
 Transform jobs are split into two paths based on how time-sensitive they are:
 
-**Fast Path — Event-Driven (triggered after each ingestion flow completes)**
+**Fast Path — Called at the end of each ingestion script's `main()`**
 
-These run per-cycle because they affect search correctness immediately or depend on the specific run's `started_at` timestamp.
+These run per-cycle because they affect search correctness immediately or depend on the specific run's `started_at` timestamp. No separate scheduler needed — the dependency chain is a direct function call inside the ingestion script.
 
-| Job | Trigger |
-|---|---|
-| Fuzzy locality matching | After each source's ingestion flow |
-| Reddit/Telegram listing filter (is_listing detection) | After `ingest_reddit`, `ingest_telegram` |
-| Structured extraction from Reddit/Telegram posts (Gemini Flash Lite) | After `ingest_reddit`, `ingest_telegram` |
-| Stale marking | After each source's ingestion flow |
-| Pulse Gemini tagging (category, topic, sentiment, locality NER, relevance) | After `scrape_reddit_discussions`, `scrape_news` |
-| Pulse category filter + news dedup | After Pulse tagging completes |
+*Listings (via `run_post_ingest_transforms(source, started_at)`:*
 
-**Slow Path — Scheduled Daily (2:00–3:00 AM UTC)**
+| Job | All Sources | Reddit/Telegram Only |
+|---|---|---|
+| Stale marking | ✓ | |
+| Fuzzy locality matching | | ✓ |
+| Listing filter + Gemini extraction | | ✓ |
+
+*Pulse (via `run_post_pulse_transforms(source)`:*
+
+| Job | All Sources | News Only |
+|---|---|---|
+| Gemini tagging (category, topic, sentiment, locality NER, relevance) | ✓ | |
+| Category filter | ✓ | |
+| News dedup (>85% title similarity) | | ✓ |
+
+**Slow Path — Scheduled Daily (2:00–3:00 AM UTC via Railway Cron + Supabase Cron)**
 
 These depend on aggregated data from `locality_stats_cache` or benefit from seeing all sources together.
 
-| Job | Schedule |
-|---|---|
-| `refresh_locality_stats()` (Supabase Cron) | 2:00 AM UTC |
-| Full quality rescoring (all 4 dimensions) | 2:30 AM UTC |
-| Cross-source deduplication | 2:45 AM UTC |
-| Rent anomaly flagging | 2:45 AM UTC |
-| Trend detection (Pulse) | 3:00 AM UTC |
-| Editor / Curator Agent (Gemini Flash) | 3:00 AM UTC |
+| Job | Schedule | Cron Host |
+|---|---|---|
+| `refresh_locality_stats()` | 2:00 AM UTC | Supabase Cron |
+| Full quality rescoring (all 4 dimensions) | 2:30 AM UTC | Railway Cron |
+| Cross-source deduplication | 2:45 AM UTC | Railway Cron |
+| Rent anomaly flagging | 2:45 AM UTC | Railway Cron |
+| Trend detection (Pulse) | 3:00 AM UTC | Railway Cron |
+| Editor / Curator Agent (Gemini Flash) | 3:00 AM UTC | Railway Cron |
+| Pipeline health check | Every hour | Railway Cron |
 
 ---
 
@@ -380,8 +391,7 @@ Uses Gemini Flash (not Lite) because editorial judgment requires contextual reas
 ### Error Resilience & Observability
 
 **Transform-level failure isolation:**
-- Each transform job is a separate Prefect task. Failure in one (e.g. the editor agent) does not block others (e.g. quality rescoring, dedup).
-- Prefect retries each task up to 3 times with exponential backoff before raising an alert.
+- Each transform job is a separate function call. Failure in one (e.g. the editor agent) does not block others (e.g. quality rescoring, dedup) — each job has its own `try/except` that logs to `transform_runs` and continues.
 - Because all writes are upserts, a partial run leaves the curated layer in a valid (degraded) state that the next full run will complete.
 
 **Gemini failure handling:**
@@ -410,7 +420,7 @@ This table powers a custom internal dashboard and enables per-job health monitor
 | Editor / Curator agent | Gemini Flash (not Lite) | Requires genuine editorial reasoning. Lite produces mechanical, repetitive selections |
 | Gemini fallback (API outage) | Claude Haiku | One retry for API errors only, not JSON parsing errors. Cost-effective at rare usage |
 
-**Gemini stability note:** Gemini Flash Lite occasionally returns malformed JSON or inconsistent outputs. All Gemini calls include JSON schema validation with graceful fallbacks (`gemini_fallback = true`, neutral defaults). Malformed-JSON failures do not count against Prefect retries — they are handled silently within the transform job and flagged for re-processing.
+**Gemini stability note:** Gemini Flash Lite occasionally returns malformed JSON or inconsistent outputs. All Gemini calls include JSON schema validation with graceful fallbacks (`gemini_fallback = true`, neutral defaults). Malformed-JSON failures are handled silently within the transform job — the record gets defaults and is flagged for re-processing.
 
 ---
 
@@ -496,18 +506,10 @@ No transform job ever deletes from or mutates the raw `listings` or `locality_fe
 
 ## 6. Observability
 
-### Three Layers
+### Two Layers
 
-**Layer 1 — Infrastructure: Prefect Cloud**
-Tracks whether jobs ran and completed at the flow/task level. Provides:
-- Flow run history and task-level retry logs
-- Failure notifications (email/Slack webhook) after all retries are exhausted
-- Timeline view of when each ingestion and transform job last succeeded
-
-This answers: *did the job run, and did it crash?* It does not tell you anything about data quality inside a successful run.
-
-**Layer 2 — Pipeline: `ingestion_runs` + `transform_runs` tables**
-Your own Postgres audit log, queryable however you need and not subject to Prefect's retention limits.
+**Layer 1 — Pipeline: `ingestion_runs` + `transform_runs` tables**
+The primary observability layer. Your own Postgres audit log with no retention limits. Every ingestion and transform job writes a row at start and updates it on completion/failure.
 
 `ingestion_runs` (existing) — one row per ingest cycle per source:
 
@@ -515,49 +517,55 @@ Your own Postgres audit log, queryable however you need and not subject to Prefe
 |---|---|
 | `source` | `nobroker / housing / reddit / telegram / reddit_discussions / news` |
 | `started_at` | When the run began (used as the stale-marking boundary) |
-| `completed_at` | When the run finished |
+| `finished_at` | When the run finished |
 | `status` | `success / partial / failed` |
-| `records_fetched` | Raw count from the source |
-| `records_upserted` | Count written to `listings` or `locality_feed` |
+| `duration_ms` | Runtime in milliseconds |
+| `total_fetched` | Raw count from the source |
+| `total_new` / `total_updated` | Count of new vs updated records |
+| `total_errors` | Count of per-record errors |
+| `locality_counts` | JSONB breakdown per locality |
+| `error_message` | Top-level error if the job failed |
 
 `transform_runs` (new) — one row per transform job per cycle:
 
 | Column | Description |
 |---|---|
-| `job_name` | e.g. `listings_extraction`, `quality_rescoring`, `editor_agent` |
-| `started_at` / `completed_at` | Job timing |
-| `status` | `success / partial / failed` |
-| `records_processed` | Rows the job touched |
-| `records_failed` | Rows that errored out individually |
-| `gemini_calls` | Total Gemini API calls made |
-| `gemini_fallback_count` | Calls that returned malformed JSON or timed out |
-| `error_message` | Top-level error if the job itself crashed |
+| `job_name` | e.g. `stale_marking`, `fuzzy_locality`, `listing_extraction`, `quality_rescoring`, `editor_agent`, `health_check` |
+| `source` | Source the job ran for (NULL for cross-source jobs like dedup) |
+| `started_at` / `finished_at` | Job timing |
+| `status` | `success / partial / failed / warning` |
+| `duration_ms` | Runtime in milliseconds |
+| `records_processed` / `records_failed` / `records_skipped` | Counts |
+| `gemini_calls` / `gemini_fallback_count` | Gemini API usage and fallback tracking |
+| `error_message` | Top-level error if the job failed |
+| `metadata` | JSONB — flexible bag for job-specific stats (e.g. `{"duplicates_found": 12}`, `{"avg_score": 67.3}`) |
 
-**Layer 3 — Record-Level: `gemini_tagged` / `gemini_fallback` flags**
+**Layer 2 — Record-Level: `gemini_tagged` / `gemini_fallback` flags**
 Stamped on every row in `listings_curated` and `feed_curated`. Answers: *which specific records right now are missing quality scores or sentiment tags because Gemini was unavailable?* These rows are re-processed by a nightly job once the API is healthy.
 
 ---
 
-### Alerts
+### Health Checks
 
-| Condition | Mechanism | Action |
+A standalone health check script (`transforms/check_health.py`) runs hourly via Railway Cron and detects:
+
+| Condition | Detection Logic | Logged As |
 |---|---|---|
-| Transform job fails after 3 Prefect retries | Prefect built-in webhook | Slack/email notification |
-| Gemini fallback rate > 10% in a single run | Custom check at end of each transform Prefect task; if `gemini_fallback_count / gemini_calls > 0.1`, log to `transform_runs` with a `high_fallback` flag and fire a webhook | Investigate API status |
-| Locality sentiment drops sharply | SQL: compare 24h avg `sentiment_score` per locality against 7-day rolling avg; if delta > 0.3 in negative direction, flag as anomaly | Surface in internal dashboard |
-| Ingestion source goes silent | SQL: if `ingestion_runs.completed_at` for a source is > 2× its expected interval, flag as stale | Investigate scraper / source |
+| Ingestion source goes silent | `ingestion_runs.finished_at` for a source is > 2× its expected cron interval | `transform_runs` row with `job_name = 'health_check'`, `status = 'warning'` |
+| Gemini fallback rate elevated | `gemini_fallback_count / gemini_calls > 10%` in any `transform_runs` row from the last 24h | Same health check row, details in `metadata` JSONB |
+| Locality sentiment crashes | (Phase 2) 24h avg `sentiment_score` drops > 0.3 vs 7-day rolling avg for any locality | Surfaced in internal dashboard |
 
 ---
 
 ### Custom Internal Dashboard
 
 A lightweight internal React page (or Retool board) querying your own Postgres. Shows:
-- **Per-job status strip** — last 7 days of `ingestion_runs` and `transform_runs` rows as a colour-coded grid (green / yellow / red per job per day)
+- **Per-job status grid** — last 7 days of `ingestion_runs` and `transform_runs` rows as a colour-coded grid (green / yellow / red per job per day)
 - **Gemini health panel** — `gemini_fallback_count / gemini_calls` per job over time; highlights any job where the fallback rate has been elevated for more than one cycle
 - **Pending re-processing count** — `SELECT COUNT(*) FROM listings_curated WHERE gemini_fallback = true` and same for `feed_curated`; shows how many records are currently on defaults
 - **Active listing health** — count of `active / stale / expired` listings per source, trending over time
 
-The dashboard reads directly from Supabase via the existing REST API — no additional backend work required beyond the `transform_runs` table being populated by Prefect flows.
+The dashboard reads directly from Supabase via the existing REST API — no additional backend work required beyond the `transform_runs` table being populated by the transform jobs.
 
 ---
 
@@ -620,7 +628,7 @@ User data (saved listings, saved searches, search logs) is currently handled ent
 |---|---|---|
 | `POST /api/alerts` | POST | Create a saved search alert (email, area, bhk, budget, keywords). |
 | `DELETE /api/alerts/<id>` | DELETE | Remove an alert. |
-| `GET /api/alerts/check` | GET | Internal: poll all alerts, check for new matching listings, send email notifications. Called by a Prefect scheduled job, not the frontend. |
+| `GET /api/alerts/check` | GET | Internal: poll all alerts, check for new matching listings, send email notifications. Called by a Railway Cron job, not the frontend. |
 
 ---
 
