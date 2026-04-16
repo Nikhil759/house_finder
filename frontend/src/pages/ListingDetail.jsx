@@ -4,8 +4,6 @@ import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
 import DesktopSidebar from '../components/DesktopSidebar';
 import { useDesktop } from '../hooks/useDesktop';
-import { supabase } from '../lib/supabase';
-
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -57,8 +55,8 @@ function timeAgo(epoch) {
 }
 
 function scoreColor(score) {
-  if (score >= 80) return 'var(--color-amber)';
-  if (score >= 60) return 'rgba(232,160,32,0.6)';
+  if (score >= 70) return 'var(--color-amber)';
+  if (score >= 50) return 'rgba(232,160,32,0.6)';
   return 'var(--color-text-muted)';
 }
 
@@ -331,6 +329,7 @@ export default function ListingDetail() {
   const [saved,          setSaved]          = useState(false);
   const [descExpanded,   setDescExpanded]   = useState(false);
   const [copiedScript,   setCopiedScript]   = useState(false);
+  const [sentimentData,  setSentimentData]  = useState(null);
 
   // Always fetch the full listing from the API.
   // When seedListing is present we skip the loading spinner but still hydrate
@@ -359,36 +358,32 @@ export default function ListingDetail() {
     return () => { cancelled = true; };
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch locality stats from Supabase once we have the locality
+  // Fetch locality stats + sentiment via Flask APIs
   useEffect(() => {
     if (!listing?.locality) return;
     let cancelled = false;
+    const loc = encodeURIComponent(listing.locality);
+
     async function loadLocality() {
       try {
-        const { data: rows } = await supabase
-          .from('locality_stats_cache')
-          .select('bhk, median_rent, listing_count')
-          .ilike('locality', listing.locality)
-          .order('listing_count', { ascending: false });
+        const [statsRes, sentRes] = await Promise.all([
+          fetch(`${API_BASE}/api/locality-stats/${loc}`).then(r => r.json()).catch(() => null),
+          fetch(`${API_BASE}/api/pulse/locality/${loc}`).then(r => r.json()).catch(() => null),
+        ]);
 
-        if (cancelled || !rows?.length) return;
+        if (cancelled) return;
 
-        // Pick 2BHK row or best available
-        const row2 = rows.find(r => (r.bhk || '').includes('2')) || rows[0];
-        const totalListings = rows.reduce((sum, r) => sum + (r.listing_count || 0), 0);
+        if (statsRes?.rent_stats?.length) {
+          const rows = statsRes.rent_stats;
+          const row2 = rows.find(r => (r.bhk || '').includes('2')) || rows[0];
+          const totalListings = rows.reduce((sum, r) => sum + (r.listing_count || 0), 0);
 
-        // Deposit benchmark
-        const { data: dep } = await supabase
-          .from('deposit_stats_cache')
-          .select('bhk, avg_multiplier, median_deposit')
-          .order('bhk');
+          const dep = statsRes.deposit_stats || [];
+          const dep2 = dep.find(r => (r.bhk || '').includes('2')) || dep[0];
+          const depositMultiplier = dep2?.avg_multiplier
+            ? `${Number(dep2.avg_multiplier).toFixed(1)}×`
+            : '—';
 
-        const dep2 = dep?.find(r => (r.bhk || '').includes('2')) || dep?.[0];
-        const depositMultiplier = dep2?.avg_multiplier
-          ? `${Number(dep2.avg_multiplier).toFixed(1)}×`
-          : '—';
-
-        if (!cancelled) {
           setLocalityStats({
             avgRent: row2?.median_rent ? formatRentShort(row2.median_rent) : '—',
             totalListings: totalListings || '—',
@@ -396,12 +391,13 @@ export default function ListingDetail() {
             medianRent: row2?.median_rent || 0,
           });
         }
+
+        if (sentRes) setSentimentData(sentRes);
       } catch { /* non-fatal */ }
     }
     loadLocality();
     return () => { cancelled = true; };
   }, [listing?.locality]);
-
 
   const signals = useMemo(
     () => deriveSignals(listing, localityStats?.medianRent),
@@ -410,8 +406,8 @@ export default function ListingDetail() {
 
   const marketFit = useMemo(() => {
     const score = listing?.quality_score || 0;
-    if (score >= 80) return 'High';
-    if (score >= 60) return 'Medium';
+    if (score >= 70) return 'High';
+    if (score >= 50) return 'Medium';
     return 'Low';
   }, [listing?.quality_score]);
 
@@ -425,6 +421,18 @@ export default function ListingDetail() {
     if (!rent || !dep) return null;
     return Math.round(dep / rent);
   }, [listing]);
+
+  const sentScore = sentimentData?.avg_sentiment_7d;
+  const sentLabel = sentScore == null ? null
+    : sentScore >= 0.3  ? 'Bullish'
+    : sentScore >= 0.1  ? 'Optimistic'
+    : sentScore <= -0.3 ? 'Bearish'
+    : sentScore <= -0.1 ? 'Pessimistic'
+    : 'Neutral';
+  const sentColor = sentScore == null ? 'var(--color-text-muted)'
+    : sentScore >= 0.1  ? '#34D399'
+    : sentScore <= -0.1 ? '#F87171'
+    : 'var(--color-amber)';
 
   const localitySlug = listing?.locality ? localityToSlug(listing.locality) : '';
   const sourceLabel  = normalizeSource(listing?.source);
@@ -796,7 +804,8 @@ export default function ListingDetail() {
               { label: 'Avg Rent',        value: localityStats?.avgRent        || '—' },
               { label: 'Active Listings', value: localityStats?.totalListings   || '—' },
               { label: 'Avg Deposit',     value: localityStats?.depositMultiplier || '—' },
-              { label: 'Price Trend',     value: '—' },
+              { label: 'Sentiment',       value: sentLabel || '—', color: sentColor,
+                sub: sentScore != null ? `${sentScore >= 0 ? '+' : ''}${sentScore.toFixed(2)} · ${sentimentData.post_count_7d} posts` : null },
             ].map(stat => (
               <div key={stat.label} style={s.card}>
                 <p style={{ ...s.monoSmall, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
@@ -804,10 +813,13 @@ export default function ListingDetail() {
                 </p>
                 <p style={{
                   fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 500,
-                  color: 'var(--color-text-primary)', letterSpacing: '-0.02em',
+                  color: stat.color || 'var(--color-text-primary)', letterSpacing: '-0.02em',
                 }}>
                   {stat.value}
                 </p>
+                {stat.sub && (
+                  <p style={{ ...s.monoSmall, fontSize: 9, marginTop: 2 }}>{stat.sub}</p>
+                )}
               </div>
             ))}
           </div>
@@ -986,11 +998,15 @@ export default function ListingDetail() {
                   { label: 'Avg Rent',        value: localityStats?.avgRent || '—' },
                   { label: 'Active Listings', value: localityStats?.totalListings || '—' },
                   { label: 'Avg Deposit',     value: localityStats?.depositMultiplier || '—' },
-                  { label: 'Price Trend',     value: '—' },
+                  { label: 'Sentiment',       value: sentLabel || '—', color: sentColor,
+                    sub: sentScore != null ? `${sentScore >= 0 ? '+' : ''}${sentScore.toFixed(2)} · ${sentimentData.post_count_7d} posts` : null },
                 ].map(stat => (
                   <div key={stat.label} style={{ background: 'var(--color-bg-card)', borderRadius: 8, padding: '10px 12px' }}>
                     <p style={{ ...s.monoSmall, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>{stat.label}</p>
-                    <p style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 500, color: 'var(--color-text-primary)' }}>{stat.value}</p>
+                    <p style={{ fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 500, color: stat.color || 'var(--color-text-primary)' }}>{stat.value}</p>
+                    {stat.sub && (
+                      <p style={{ ...s.monoSmall, fontSize: 9, marginTop: 2 }}>{stat.sub}</p>
+                    )}
                   </div>
                 ))}
               </div>

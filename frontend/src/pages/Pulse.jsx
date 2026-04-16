@@ -4,7 +4,7 @@ import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
 import DesktopSidebar from '../components/DesktopSidebar';
 import { useDesktop } from '../hooks/useDesktop';
-import { supabase } from '../lib/supabase';
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -414,9 +414,10 @@ export default function Pulse() {
   const [topicStats, setTopicStats] = useState([]);
   const [localityStats, setLocalityStats] = useState([]);
   const [rentData, setRentData] = useState([]);
+  const [citySentimentData, setCitySentimentData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // ── Data fetching ─────────────────────────────────────────────────────────
+  // ── Data fetching via Flask API ─────────────────────────────────────────────
 
   useEffect(() => {
     let cancelled = false;
@@ -424,97 +425,38 @@ export default function Pulse() {
     async function load() {
       setLoading(true);
 
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-
-      const [postsRes, topicsRes, localityRes, rentRes] = await Promise.all([
-        // Recent tagged posts (discussion + news only, sorted by relevance then recency)
-        supabase
-          .from('locality_feed')
-          .select('id, source, locality, title, body, url, category, canonical_topic, sentiment_score, relevance_score, detected_localities, posted_at, scraped_at')
-          .in('category', ['discussion', 'news'])
-          .gte('relevance_score', 0.3)
-          .order('scraped_at', { ascending: false })
-          .limit(50),
-
-        // Topic volume (last 30 days)
-        supabase
-          .from('locality_feed')
-          .select('canonical_topic, sentiment_score')
-          .in('category', ['discussion', 'news'])
-          .not('canonical_topic', 'is', null)
-          .gte('scraped_at', thirtyDaysAgo),
-
-        // Per-locality average sentiment (last 7 days)
-        supabase
-          .from('locality_feed')
-          .select('locality, sentiment_score')
-          .in('category', ['discussion', 'news'])
-          .not('locality', 'is', null)
-          .not('sentiment_score', 'is', null)
-          .gte('scraped_at', sevenDaysAgo),
-
-        // Rent stats + trend for all localities + BHK combos
-        supabase
-          .from('locality_stats_cache')
-          .select('locality, bhk, median_rent, rent_trend_pct')
-          .order('median_rent', { ascending: false }),
+      const [feedRes, topicsRes, rentRes] = await Promise.all([
+        fetch(`${API_BASE}/api/pulse/feed?limit=50`).then(r => r.json()),
+        fetch(`${API_BASE}/api/pulse/topics`).then(r => r.json()),
+        fetch(`${API_BASE}/api/pulse/trending`).then(r => r.json()),
       ]);
 
       if (cancelled) return;
 
-      setRentData(rentRes.data || []);
-
       // Posts
-      setFeedPosts((postsRes.data || []).map(p => ({
+      setFeedPosts((feedRes.posts || []).map(p => ({
         ...p,
         title: p.title || '',
         body: decodeHTML(p.body) || '',
         timeAgo: timeAgoShort(p.posted_at || p.scraped_at),
       })));
 
-      // Topic aggregation: count + avg sentiment per topic
-      if (topicsRes.data) {
-        const byTopic = {};
-        for (const row of topicsRes.data) {
-          const t = row.canonical_topic;
-          if (!t || t === 'other') continue;
-          if (!byTopic[t]) byTopic[t] = { count: 0, sentimentSum: 0 };
-          byTopic[t].count++;
-          byTopic[t].sentimentSum += (row.sentiment_score || 0);
-        }
-        const sorted = Object.entries(byTopic)
-          .map(([slug, d]) => ({
-            slug,
-            label: slug.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-            count: d.count,
-            avg_sentiment: d.count > 0 ? d.sentimentSum / d.count : 0,
-          }))
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 8);
-        setTopicStats(sorted);
-      }
+      // City sentiment (server-computed from all 7-day posts)
+      setCitySentimentData({
+        score: feedRes.city_sentiment || 0,
+        count: feedRes.city_sentiment_count || 0,
+      });
 
-      // Locality aggregation: avg sentiment per locality
-      if (localityRes.data) {
-        const byLoc = {};
-        for (const row of localityRes.data) {
-          const loc = row.locality;
-          if (!byLoc[loc]) byLoc[loc] = { count: 0, sentimentSum: 0 };
-          byLoc[loc].count++;
-          byLoc[loc].sentimentSum += (row.sentiment_score || 0);
-        }
-        const sorted = Object.entries(byLoc)
-          .map(([locality, d]) => ({
-            locality,
-            count: d.count,
-            avg_sentiment: d.count > 0 ? d.sentimentSum / d.count : 0,
-          }))
-          .filter(l => l.count >= 2)
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 8);
-        setLocalityStats(sorted);
-      }
+      // Locality sentiments (server-computed)
+      setLocalityStats(feedRes.locality_sentiments || []);
+
+      // Topics (server-aggregated)
+      setTopicStats(topicsRes.topics || []);
+
+      try {
+        const rentDataRes = await fetch(`${API_BASE}/api/pulse/rent-overview`).then(r => r.json());
+        setRentData(rentDataRes.rent_data || []);
+      } catch { setRentData([]); }
 
       setLoading(false);
     }
@@ -523,20 +465,18 @@ export default function Pulse() {
     return () => { cancelled = true; };
   }, []);
 
-  // ── Derived: aggregated city sentiment ─────────────────────────────────────
+  // ── Derived: aggregated city sentiment (from API, not limited to 50 posts)
 
   const citySentiment = useMemo(() => {
-    if (feedPosts.length === 0) return { score: 0, label: 'Calibrating' };
-    const scores = feedPosts.filter(p => p.sentiment_score != null).map(p => p.sentiment_score);
-    if (scores.length === 0) return { score: 0, label: 'Calibrating' };
-    const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+    if (!citySentimentData) return { score: 0, label: 'Calibrating', count: 0 };
+    const avg = citySentimentData.score;
     let label = 'Neutral';
     if (avg >= 0.3) label = 'Bullish';
     else if (avg >= 0.1) label = 'Cautiously Optimistic';
     else if (avg <= -0.3) label = 'Bearish';
     else if (avg <= -0.1) label = 'Cautiously Pessimistic';
-    return { score: avg, label };
-  }, [feedPosts]);
+    return { score: avg, label, count: citySentimentData.count };
+  }, [citySentimentData]);
 
   // ── Derived: filtered feed ────────────────────────────────────────────────
 
@@ -597,7 +537,7 @@ export default function Pulse() {
                 marginBottom: 2,
                 fontSize: 'var(--text-xs)',
               }}>
-                Aggregated Sentiment
+                City Sentiment · {citySentiment.count || 0} posts (7d)
               </p>
               <p className="type-data" style={{
                 color: 'var(--color-text-primary)',

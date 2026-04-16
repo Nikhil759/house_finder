@@ -174,7 +174,7 @@ DETAIL_FIELDS = [
     "amenities", "property_type",
 ]
 
-FRESHNESS_DECAY = 0.1  # e^(-0.1 * age_days)
+FRESHNESS_DECAY = 0.05  # e^(-0.05 * age_days) — 7-day listing keeps ~70%
 
 
 def run_quality_rescoring():
@@ -194,17 +194,32 @@ def run_quality_rescoring():
         locality_sentiment = _load_locality_sentiment(conn)
 
         cur.execute("""
-            SELECT id, source, rent, bhk, locality, furnishing, deposit,
-                   area_sqft, floor_info, contact_phone, address,
-                   amenities, property_type, first_seen_at, status
-            FROM listings
-            WHERE status IN ('active', 'stale')
+            SELECT l.id, l.source, l.rent, l.bhk, l.locality, l.furnishing,
+                   l.deposit, l.area_sqft, l.floor_info, l.contact_phone,
+                   l.address, l.amenities, l.property_type, l.first_seen_at,
+                   l.status, lc.is_listing
+            FROM listings l
+            LEFT JOIN listings_curated lc ON lc.listing_id = l.id
+            WHERE l.status IN ('active', 'stale')
         """)
         rows = cur.fetchall()
         processed = len(rows)
 
         update_cur = conn.cursor()
         for row in rows:
+            # Non-listings get zeroed out
+            if row["is_listing"] is False:
+                update_cur.execute("""
+                    INSERT INTO listings_curated
+                        (listing_id, quality_score, detail_score, price_comp_score,
+                         locality_sent_score, freshness_score, updated_at)
+                    VALUES (%s, 0, 0, 0, 0, 0, NOW())
+                    ON CONFLICT (listing_id) DO UPDATE SET
+                        quality_score = 0, detail_score = 0, price_comp_score = 0,
+                        locality_sent_score = 0, freshness_score = 0, updated_at = NOW()
+                """, (row["id"],))
+                continue
+
             source = row["source"]
             w_detail, w_price, w_sent, w_fresh = WEIGHTS.get(source, DEFAULT_WEIGHTS)
 
@@ -281,8 +296,11 @@ def _load_locality_sentiment(conn) -> dict:
     return result
 
 
+STRUCTURED_SOURCES = {"nobroker", "housing"}
+
 def _score_detail(row: dict, max_score: int) -> int:
-    """Score listing completeness (0 to max_score)."""
+    """Score listing completeness (0 to max_score).
+    Structured sources get a base bonus since their data is verified."""
     filled = 0
     total = len(DETAIL_FIELDS)
     for field in DETAIL_FIELDS:
@@ -297,7 +315,12 @@ def _score_detail(row: dict, max_score: int) -> int:
             else:
                 filled += 1
 
-    return round((filled / total) * max_score)
+    ratio = filled / total
+    source = row.get("source", "")
+    if source in STRUCTURED_SOURCES:
+        # Structured sources: base 40% + 60% from field completeness
+        return round((0.4 + 0.6 * ratio) * max_score)
+    return round(ratio * max_score)
 
 
 def _score_price_competitiveness(row: dict, stats: dict, max_score: int) -> int:
@@ -332,25 +355,38 @@ def _score_price_competitiveness(row: dict, stats: dict, max_score: int) -> int:
         ratio = rent / median_rent
 
     # ratio < 1 = cheaper than median (good), ratio > 1 = expensive
-    # Map ratio to score: 0.5 → max, 1.0 → mid, 1.5+ → 0
+    # Curve: 0.5 → max, 1.0 → 70% of max (good deal at market rate),
+    #         1.3 → 30%, 1.6+ → 0
     if ratio <= 0.5:
         return max_score
-    elif ratio >= 1.5:
-        return 0
+    elif ratio <= 1.0:
+        # 0.5→100%, 1.0→70% — gentle slope for at-or-below market
+        pct = 1.0 - 0.3 * ((ratio - 0.5) / 0.5)
+        return round(pct * max_score)
+    elif ratio <= 1.6:
+        # 1.0→70%, 1.6→0% — steeper penalty for above market
+        pct = 0.7 * (1.0 - (ratio - 1.0) / 0.6)
+        return max(0, round(pct * max_score))
     else:
-        normalized = 1.0 - ((ratio - 0.5) / 1.0)
-        return round(normalized * max_score)
+        return 0
 
 
 def _score_locality_sentiment(row: dict, sentiment: dict, max_score: int) -> int:
-    """Score based on locality's rolling avg sentiment."""
+    """Score based on locality's rolling avg sentiment.
+    sentiment_score ranges -1 to +1. Map so that:
+      -1.0 → 0, 0.0 → 60% of max (neutral is okay), +1.0 → max
+    """
     locality = row.get("locality")
     if not locality or locality not in sentiment:
-        return max_score // 2
+        return round(max_score * 0.5)
 
-    avg_sent = sentiment[locality]
-    # sentiment_score is 0-1, map to 0-max_score
-    return round(avg_sent * max_score)
+    avg_sent = sentiment[locality]  # range: -1.0 to +1.0
+    # Linear map: -1→0%, 0→60%, +1→100%
+    if avg_sent >= 0:
+        pct = 0.6 + 0.4 * avg_sent
+    else:
+        pct = 0.6 + 0.6 * avg_sent  # -1 → 0%, -0.5 → 30%, 0 → 60%
+    return max(0, round(pct * max_score))
 
 
 def _score_freshness(row: dict, max_score: int) -> int:

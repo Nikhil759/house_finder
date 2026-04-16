@@ -4,8 +4,9 @@ import { useTheme } from '../ThemeContext'
 import Navbar from '../components/Navbar'
 import { MobileNav } from '../components/MobileNav'
 import { BackgroundPattern } from '../components/BackgroundPattern'
-import { supabase } from '../lib/supabase'
 import '../global.css'
+
+const API_BASE = import.meta.env.VITE_API_URL || ''
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -376,67 +377,37 @@ export default function LocalityGuide() {
   const [feedFilter, setFeedFilter] = useState('All')
   const [feedShowAll, setFeedShowAll] = useState(false)
 
-  // Fetch both cache tables once on mount
+  // Fetch all data via Flask APIs
   useEffect(() => {
     let cancelled = false
     async function load() {
       setLoading(true)
-      const [{ data: lData }, { data: dData }] = await Promise.all([
-        supabase
-          .from('locality_stats_cache')
-          .select('*')
-          .order('median_rent', { ascending: false }),
-        supabase
-          .from('deposit_stats_cache')
-          .select('*')
-          .order('bhk'),
+      setFeedLoading(true)
+
+      const [statsRes, topicsRes, feedRes] = await Promise.all([
+        fetch(`${API_BASE}/api/locality-stats-all`).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/api/pulse/topics`).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/api/pulse/feed?limit=20`).then(r => r.json()).catch(() => null),
       ])
+
       if (cancelled) return
-      setLocalityRows(lData || [])
-      setDepositRows(dData || [])
-      if (lData && lData.length > 0) {
-        // Use the most recently updated row as the cache timestamp
+
+      // Locality stats + deposit
+      const lData = statsRes?.locality_stats || []
+      setLocalityRows(lData)
+      setDepositRows(statsRes?.deposit_stats || [])
+      if (lData.length > 0) {
         const latest = lData.reduce((a, b) =>
           new Date(a.updated_at) > new Date(b.updated_at) ? a : b
         )
         setUpdatedAt(latest.updated_at)
       }
       setLoading(false)
-    }
-    load()
-    return () => { cancelled = true }
-  }, [])
 
-  // Fetch locality feed (topics + posts)
-  useEffect(() => {
-    let cancelled = false
-    async function loadFeed() {
-      setFeedLoading(true)
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-      const [{ data: topicData }, { data: postsData }] = await Promise.all([
-        supabase
-          .from('locality_feed')
-          .select('topic')
-          .not('topic', 'is', null)
-          .gte('scraped_at', thirtyDaysAgo),
-        supabase
-          .from('locality_feed')
-          .select('id, source, author, locality, title, body, url, topic, sentiment, engagement, posted_at')
-          .not('topic', 'is', null)
-          .not('sentiment', 'is', null)
-          .order('posted_at', { ascending: false })
-          .limit(20),
-      ])
-      if (cancelled) return
-
-      // Aggregate topic counts client-side — "other" always pinned last
-      if (topicData) {
-        const counts = {}
-        for (const { topic } of topicData) {
-          counts[topic] = (counts[topic] || 0) + 1
-        }
-        const sorted = Object.entries(counts)
-          .map(([topic, count]) => ({ topic, count }))
+      // Topics (server-aggregated)
+      if (topicsRes?.topics) {
+        const sorted = topicsRes.topics
+          .map(t => ({ topic: t.slug, count: t.count }))
           .sort((a, b) => {
             if (a.topic === 'other') return 1
             if (b.topic === 'other') return -1
@@ -445,10 +416,19 @@ export default function LocalityGuide() {
         setTopicCounts(sorted)
       }
 
-      setFeedPosts(postsData || [])
+      // Feed posts (mapped to match expected shape)
+      if (feedRes?.posts) {
+        setFeedPosts(feedRes.posts.map(p => ({
+          ...p,
+          topic: p.canonical_topic,
+          sentiment: p.sentiment_score >= 0.2 ? 'positive'
+            : p.sentiment_score <= -0.2 ? 'negative' : 'neutral',
+        })))
+      }
+
       setFeedLoading(false)
     }
-    loadFeed()
+    load()
     return () => { cancelled = true }
   }, [])
 

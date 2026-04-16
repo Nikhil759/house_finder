@@ -4,8 +4,9 @@ import { useTheme } from '../ThemeContext'
 import Navbar from '../components/Navbar'
 import { MobileNav } from '../components/MobileNav'
 import { BackgroundPattern } from '../components/BackgroundPattern'
-import { supabase } from '../lib/supabase'
 import '../global.css'
+
+const API_BASE = import.meta.env.VITE_API_URL || ''
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -236,6 +237,7 @@ export default function LocalityDetail() {
   const [notFound, setNotFound]     = useState(false)
   const [feedFilter, setFeedFilter] = useState('All')
   const [feedShowAll, setFeedShowAll] = useState(false)
+  const [sentimentData, setSentimentData] = useState(null)
 
   // Set page title
   useEffect(() => {
@@ -243,24 +245,47 @@ export default function LocalityDetail() {
     return () => { document.title = 'NestIQ' }
   }, [locality])
 
-  // Fetch stats
+  // Fetch all data via Flask APIs
   useEffect(() => {
     let cancelled = false
+    const loc = encodeURIComponent(locality)
+
     async function load() {
       setLoading(true)
-      const { data } = await supabase
-        .from('locality_stats_cache')
-        .select('bhk, median_rent, p25_rent, p75_rent, listing_count, updated_at')
-        .eq('locality', locality)
-        .order('bhk')
+      setFeedLoading(true)
+
+      const [statsRes, sentRes, feedRes] = await Promise.all([
+        fetch(`${API_BASE}/api/locality-stats/${loc}`).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/api/pulse/locality/${loc}`).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/api/pulse/feed-for-locality/${loc}`).then(r => r.json()).catch(() => null),
+      ])
+
       if (cancelled) return
-      if (!data || data.length === 0) {
+
+      const sData = statsRes?.rent_stats || []
+      if (sData.length === 0) {
         setNotFound(true)
       } else {
-        setStatsRows(data)
+        setStatsRows(sData)
       }
+
+      if (sentRes) setSentimentData(sentRes)
+
+      if (feedRes) {
+        const sorted = (feedRes.topics || [])
+          .sort((a, b) => {
+            if (a.topic === 'other') return 1
+            if (b.topic === 'other') return -1
+            return b.count - a.count
+          })
+        setTopicCounts(sorted)
+        setFeedPosts(feedRes.posts || [])
+      }
+
       setLoading(false)
+      setFeedLoading(false)
     }
+
     load()
     return () => { cancelled = true }
   }, [locality])
@@ -272,50 +297,18 @@ export default function LocalityDetail() {
     }
   }, [notFound, loading, navigate])
 
-  // Fetch feed
-  useEffect(() => {
-    let cancelled = false
-    async function loadFeed() {
-      setFeedLoading(true)
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-      const [{ data: topicData }, { data: postsData }] = await Promise.all([
-        supabase
-          .from('locality_feed')
-          .select('topic')
-          .eq('locality', locality)
-          .not('topic', 'is', null)
-          .gte('scraped_at', thirtyDaysAgo),
-        supabase
-          .from('locality_feed')
-          .select('id, source, author, locality, title, body, url, topic, sentiment, engagement, posted_at')
-          .eq('locality', locality)
-          .not('topic', 'is', null)
-          .not('sentiment', 'is', null)
-          .order('posted_at', { ascending: false })
-          .limit(20),
-      ])
-      if (cancelled) return
-
-      if (topicData) {
-        const counts = {}
-        for (const { topic } of topicData) {
-          counts[topic] = (counts[topic] || 0) + 1
-        }
-        const sorted = Object.entries(counts)
-          .map(([topic, count]) => ({ topic, count }))
-          .sort((a, b) => {
-            if (a.topic === 'other') return 1
-            if (b.topic === 'other') return -1
-            return b.count - a.count
-          })
-        setTopicCounts(sorted)
-      }
-      setFeedPosts(postsData || [])
-      setFeedLoading(false)
-    }
-    loadFeed()
-    return () => { cancelled = true }
-  }, [locality])
+  // ── Derived sentiment
+  const sentScore = sentimentData?.avg_sentiment_7d
+  const sentLabel = sentScore == null ? null
+    : sentScore >= 0.3  ? 'Bullish'
+    : sentScore >= 0.1  ? 'Optimistic'
+    : sentScore <= -0.3 ? 'Bearish'
+    : sentScore <= -0.1 ? 'Pessimistic'
+    : 'Neutral'
+  const sentColor = sentScore == null ? 'var(--ld-muted)'
+    : sentScore >= 0.1  ? '#34D399'
+    : sentScore <= -0.1 ? '#FF6060'
+    : '#F5A623'
 
   // ── Derived
   const bhk2 = statsRows.find(r => r.bhk === '2 BHK')
@@ -411,6 +404,35 @@ export default function LocalityDetail() {
                   </>
                 )}
               </div>
+
+              {/* Sentiment card */}
+              {sentLabel && (
+                <div style={{
+                  background: 'var(--ld-surface)',
+                  border: '1px solid var(--ld-border)',
+                  borderRadius: 10,
+                  padding: 16,
+                  marginTop: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}>
+                  <div>
+                    <div className="ld-stat-label">Locality Sentiment</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: sentColor }}>
+                      {sentLabel}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: sentColor, fontFamily: 'var(--font-mono, monospace)' }}>
+                      {sentScore >= 0 ? '+' : ''}{sentScore.toFixed(2)}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--ld-muted)' }}>
+                      {sentimentData.post_count_7d} posts (7d)
+                    </div>
+                  </div>
+                </div>
+              )}
             </section>
 
             {/* ── Rent by BHK ── */}

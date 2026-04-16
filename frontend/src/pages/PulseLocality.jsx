@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
-import { supabase } from '../lib/supabase';
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 const FEED_TABS = ['All', 'Reddit', 'Telegram', 'News'];
 
@@ -161,76 +161,48 @@ export default function PulseLocality() {
   const [feedLoading,  setFeedLoading]  = useState(true);
   const [notFound,     setNotFound]     = useState(false);
   const [localityImage, setLocalityImage] = useState(null);
+  const [sentimentData, setSentimentData] = useState(null);
 
-  // Fetch stats + global deposit benchmarks
+  // Fetch all data via Flask APIs
   useEffect(() => {
     let cancelled = false;
+    const loc = encodeURIComponent(locality);
+
     async function load() {
       setLoading(true);
+      setFeedLoading(true);
       setNotFound(false);
-      const [{ data: sData }, { data: dData }, { data: imgData }] = await Promise.all([
-        supabase
-          .from('locality_stats_cache')
-          .select('bhk, median_rent, p25_rent, p75_rent, listing_count, updated_at')
-          .ilike('locality', locality)
-          .order('bhk'),
-        supabase
-          .from('deposit_stats_cache')
-          .select('bhk, avg_multiplier, median_deposit')
-          .order('bhk'),
-        supabase
-          .from('locality_images')
-          .select('image_url, attribution')
-          .ilike('locality', locality)
-          .maybeSingle(),
+
+      const [statsRes, sentRes, imgRes, feedRes] = await Promise.all([
+        fetch(`${API_BASE}/api/locality-stats/${loc}`).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/api/pulse/locality/${loc}`).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/api/locality-image/${loc}`).then(r => r.json()).catch(() => null),
+        fetch(`${API_BASE}/api/pulse/feed-for-locality/${loc}`).then(r => r.json()).catch(() => null),
       ]);
+
       if (cancelled) return;
-      if (!sData || sData.length === 0) {
+
+      // Stats + deposit
+      const sData = statsRes?.rent_stats || [];
+      if (sData.length === 0) {
         setNotFound(true);
       } else {
         setStatsRows(sData);
-        setDepositRows(dData || []);
+        setDepositRows(statsRes?.deposit_stats || []);
       }
-      if (imgData?.image_url) setLocalityImage(imgData);
-      setLoading(false);
-    }
-    load();
-    return () => { cancelled = true; };
-  }, [locality]);
 
-  // Fetch locality feed (topics + posts)
-  useEffect(() => {
-    let cancelled = false;
-    async function loadFeed() {
-      setFeedLoading(true);
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const [{ data: tData }, { data: pData }] = await Promise.all([
-        supabase
-          .from('locality_feed')
-          .select('topic')
-          .ilike('locality', locality)
-          .not('topic', 'is', null)
-          .gte('scraped_at', thirtyDaysAgo),
-        supabase
-          .from('locality_feed')
-          .select('id, source, author, locality, title, body, url, topic, sentiment, posted_at')
-          .ilike('locality', locality)
-          .not('topic', 'is', null)
-          .not('sentiment', 'is', null)
-          .order('posted_at', { ascending: false })
-          .limit(30),
-      ]);
-      if (cancelled) return;
+      // Sentiment
+      if (sentRes) setSentimentData(sentRes);
 
-      if (tData) {
-        const counts = {};
-        for (const { topic } of tData) {
-          counts[topic] = (counts[topic] || 0) + 1;
-        }
-        const sorted = Object.entries(counts)
-          .map(([label, count]) => ({
-            label: label.charAt(0).toUpperCase() + label.slice(1),
-            count,
+      // Image
+      if (imgRes?.image_url) setLocalityImage(imgRes);
+
+      // Feed topics + posts
+      if (feedRes) {
+        const sorted = (feedRes.topics || [])
+          .map(t => ({
+            label: t.topic.charAt(0).toUpperCase() + t.topic.slice(1),
+            count: t.count,
           }))
           .sort((a, b) => {
             if (a.label.toLowerCase() === 'other') return 1;
@@ -238,11 +210,14 @@ export default function PulseLocality() {
             return b.count - a.count;
           });
         setTopicCounts(sorted);
+        setFeedPosts(feedRes.posts || []);
       }
-      setFeedPosts(pData || []);
+
+      setLoading(false);
       setFeedLoading(false);
     }
-    loadFeed();
+
+    load();
     return () => { cancelled = true; };
   }, [locality]);
 
@@ -254,16 +229,29 @@ export default function PulseLocality() {
     : null;
   const depositRow2bhk = depositRows.find(r => r.bhk === '2 BHK');
 
+  const sentimentScore = sentimentData?.avg_sentiment_7d;
+  const sentimentLabel = sentimentScore == null ? '—'
+    : sentimentScore >= 0.3  ? 'Bullish'
+    : sentimentScore >= 0.1  ? 'Optimistic'
+    : sentimentScore <= -0.3 ? 'Bearish'
+    : sentimentScore <= -0.1 ? 'Pessimistic'
+    : 'Neutral';
+  const sentimentColor = sentimentScore == null ? 'var(--color-text-muted)'
+    : sentimentScore >= 0.1  ? '#34D399'
+    : sentimentScore <= -0.1 ? '#F87171'
+    : 'var(--color-amber)';
+
   const stats = loading ? [
     { label: 'Avg 2BHK Rent',  value: '—' },
     { label: 'Total Listings', value: '—' },
     { label: 'Deposit Mult.',  value: '—' },
-    { label: 'Price Trend',    value: '—' },
+    { label: 'Sentiment',      value: '—' },
   ] : [
     { label: 'Avg 2BHK Rent',  value: formatRentShort(bhk2?.median_rent) },
     { label: 'Total Listings', value: totalListings > 0 ? String(totalListings) : '—' },
     { label: 'Deposit Mult.',  value: depositRow2bhk ? `${Number(depositRow2bhk.avg_multiplier).toFixed(1)}×` : '—' },
-    { label: 'Price Trend',    value: '—' },
+    { label: 'Sentiment',      value: sentimentLabel, color: sentimentColor,
+      sub: sentimentScore != null ? `${sentimentScore >= 0 ? '+' : ''}${sentimentScore.toFixed(2)} · ${sentimentData.post_count_7d} posts` : null },
   ];
 
   // ── Derived market depth ───────────────────────────────────────────────────
@@ -404,10 +392,13 @@ export default function PulseLocality() {
               </p>
               <p style={{
                 fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 500,
-                color: 'var(--color-text-primary)', letterSpacing: '-0.02em',
+                color: stat.color || 'var(--color-text-primary)', letterSpacing: '-0.02em',
               }}>
                 {stat.value}
               </p>
+              {stat.sub && (
+                <p style={{ ...s.monoSmall, fontSize: 9, marginTop: 2 }}>{stat.sub}</p>
+              )}
             </div>
           ))}
         </div>

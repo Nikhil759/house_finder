@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
@@ -8,6 +8,8 @@ import { useSavedListings } from '../hooks/useSavedListings';
 import { useSavedSearches } from '../hooks/useSavedSearches';
 import { useNewListings } from '../hooks/useNewListings';
 import { useDesktop } from '../hooks/useDesktop';
+
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 // ── Static data ───────────────────────────────────────────────────────────────
 const PIPELINE_STAGES = ['Saved', 'Interested', 'Contacted', 'Visited'];
@@ -270,13 +272,32 @@ const STATUS_PILLS = [
   { key: 'Visited',    activeBg: '#3B82F6', activeText: '#020D1A' },
 ];
 
-function MyListingCard({ listing, onRemove, onStageChange, onNoteSave }) {
+function StaleBadge({ listingStatus }) {
+  if (!listingStatus || listingStatus === 'active') return null;
+  const isExpired = listingStatus === 'expired';
+  const color = isExpired ? '#ef4444' : '#f59e0b';
+  const label = isExpired ? 'Expired' : 'No longer active';
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 6,
+      background: `${color}12`, border: `1px solid ${color}30`,
+      borderRadius: 8, padding: '6px 12px', marginBottom: 10,
+      fontSize: 11, fontFamily: 'var(--font-mono)', letterSpacing: '0.04em', color,
+    }}>
+      <i className="fa-solid fa-triangle-exclamation" style={{ fontSize: 10 }} />
+      {label} — this listing may no longer be available
+    </div>
+  );
+}
+
+function MyListingCard({ listing, onRemove, onStageChange, onNoteSave, listingStatus }) {
   const [stage, setStage]             = useState(listing.stage);
   const [noteText, setNoteText]       = useState(listing.note || '');
   const [noteEditing, setNoteEditing] = useState(false);
 
   const srcColor    = SOURCE_COLORS[listing.source] || '#666';
   const showWhatsApp = listing.source === 'Telegram' || (listing.source === 'Reddit' && listing.phone);
+  const isStaleOrExpired = listingStatus === 'stale' || listingStatus === 'expired';
 
   function handleStageChange(newStage) {
     setStage(newStage);
@@ -297,11 +318,15 @@ function MyListingCard({ listing, onRemove, onStageChange, onNoteSave }) {
   return (
     <article style={{
       background: '#1A1A1A',
-      border: '0.5px solid #2A2A2A',
+      border: `0.5px solid ${isStaleOrExpired ? 'rgba(245,158,11,0.3)' : '#2A2A2A'}`,
       borderRadius: 12,
       padding: 16,
       marginBottom: 8,
+      opacity: isStaleOrExpired ? 0.75 : 1,
+      transition: 'opacity 0.2s',
     }}>
+
+      <StaleBadge listingStatus={listingStatus} />
 
       {/* ── Top row: source dot · price / time ── */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -677,6 +702,23 @@ export default function MyHub() {
     markAllSeen,
   } = useNewListings(user, savedSearches, sinceOverride);
 
+  // ── Fetch listing statuses for stale/expired detection ─────────────────
+  const [listingStatuses, setListingStatuses] = useState({});
+
+  useEffect(() => {
+    if (!savedListings.length) return;
+    const ids = savedListings.map(l => stableListingId(l));
+    if (!ids.length) return;
+    fetch(`${API_BASE}/api/listing-statuses`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    })
+      .then(r => r.json())
+      .then(data => { if (data && !data.error) setListingStatuses(data); })
+      .catch(() => {});
+  }, [savedListings]);
+
   // ── Derived data ──────────────────────────────────────────────────────────
   // Normalize saved listings for card display
   const normalizedListings = useMemo(
@@ -978,6 +1020,7 @@ export default function MyHub() {
                   <MyListingCard
                     key={listing.id}
                     listing={listing}
+                    listingStatus={listingStatuses[listing.id]}
                     onRemove={handleRemove}
                     onStageChange={handleStageChange}
                     onNoteSave={handleNoteSave}

@@ -67,7 +67,7 @@ const QUICK_FILTERS = [
   { key: 'u35k',       label: '< ₹35k',             category: 'price'     },
   { key: 'u50k',       label: '< ₹50k',             category: 'price'     },
   { key: 'community',  label: 'Community listings',  category: 'source'    },
-  { key: 'high_score', label: 'High score 80+',      category: 'quality'   },
+  { key: 'high_score', label: 'High score 70+',      category: 'quality'   },
 ];
 
 const DEFAULT_FILTERS = {
@@ -96,8 +96,8 @@ function formatPrice(rent) {
 }
 
 function scoreColor(score) {
-  if (score >= 80) return '#E8A020';             // full amber
-  if (score >= 60) return 'rgba(232,160,32,0.5)'; // dim amber
+  if (score >= 70) return '#E8A020';             // full amber
+  if (score >= 50) return 'rgba(232,160,32,0.5)'; // dim amber
   return '#555555';                               // muted gray
 }
 
@@ -1127,13 +1127,13 @@ function SearchMapView({ listings }) {
       }
 
       const scoreColor =
-        listing.score >= 80 ? '#E8A020' :
-        listing.score >= 60 ? 'rgba(232,160,32,0.7)' :
+        listing.score >= 70 ? '#E8A020' :
+        listing.score >= 50 ? 'rgba(232,160,32,0.7)' :
                               (isDark ? '#4b5563' : '#9ca3af');
 
       const markerColor =
-        listing.score >= 80 ? '#E8A020' :
-        listing.score >= 60 ? 'rgba(232,160,32,0.6)' :
+        listing.score >= 70 ? '#E8A020' :
+        listing.score >= 50 ? 'rgba(232,160,32,0.6)' :
                               '#555555';
 
       const icon = L.divIcon({
@@ -1266,7 +1266,7 @@ function SearchMapView({ listings }) {
           {mappableCount} of {listings.length} listings on map
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 10, fontFamily: 'var(--font-mono)' }}>
-          {[['#E8A020', '80+ score'], ['rgba(232,160,32,0.6)', '60–79'], ['#555555', '<60']].map(([c, l]) => (
+          {[['#E8A020', '70+ score'], ['rgba(232,160,32,0.6)', '50–69'], ['#555555', '<50']].map(([c, l]) => (
             <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: c, display: 'inline-block', flexShrink: 0 }} />
               <span style={{ color: 'var(--color-text-muted)', letterSpacing: '0.04em' }}>{l}</span>
@@ -1781,7 +1781,7 @@ export default function Search() {
     const params = new URLSearchParams({
       sources:   'reddit,telegram,nobroker,housing',
       sort:      'score',
-      min_score: isDefaultLoad ? 60 : 20,
+      min_score: isDefaultLoad ? 40 : 20,
       limit:     isDefaultLoad ? 20 : 50,
       ...(area ? { area } : {}),
     });
@@ -1992,7 +1992,7 @@ export default function Search() {
         if (key === 'u35k')      return qRent == null || qRent < 35000;
         if (key === 'u50k')      return qRent == null || qRent < 50000;
         if (key === 'community') return listing.rawSource === 'reddit' || listing.rawSource === 'telegram';
-        if (key === 'high_score')return listing.score >= 80;
+        if (key === 'high_score')return listing.score >= 70;
         return true;
       };
 
