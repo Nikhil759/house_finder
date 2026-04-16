@@ -265,14 +265,15 @@ def _load_locality_sentiment(conn) -> dict:
     cur = conn.cursor()
     cur.execute("""
         SELECT
-            unnest(detected_localities) AS locality,
+            loc AS locality,
             AVG(sentiment_score) AS avg_sentiment
-        FROM locality_feed
+        FROM locality_feed,
+            unnest(detected_localities) AS loc
         WHERE scraped_at > NOW() - INTERVAL '30 days'
           AND sentiment_score IS NOT NULL
           AND relevance_score IS NOT NULL
           AND relevance_score > 0.3
-        GROUP BY locality
+        GROUP BY loc
     """)
     result = {}
     for locality, avg_sent in cur.fetchall():
