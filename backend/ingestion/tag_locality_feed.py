@@ -91,12 +91,11 @@ If the post clearly fits one of these, use it. \
 If NOT, return a single lowercase word that best captures the topic \
 (e.g. "pets", "parking", "pollution", "festivals"). \
 Do NOT force-fit into an existing topic — a specific new word is better.
-- "sentiment_score": float from -1.0 to 1.0 where: \
--1.0 = extremely negative (outrage, danger, severe complaint), \
--0.5 = moderately negative (frustration, concern), \
-0.0 = neutral (factual, informational), \
-0.5 = moderately positive (appreciation, mild praise), \
-1.0 = extremely positive (enthusiastic recommendation, celebration).
+- "sentiment_score": float from -1.0 to 1.0 in 0.1 increments (e.g. -0.7, -0.3, 0.2, 0.6). \
+Use the full range, not just -1/-0.5/0/0.5/1. Guidelines: \
+-1.0 = extreme outrage/danger, -0.7 = strong frustration, -0.4 = mild complaint, \
+-0.1 = slightly negative, 0.0 = purely neutral/factual, 0.1 = slightly positive, \
+0.4 = mild appreciation, 0.7 = strong praise, 1.0 = enthusiastic celebration.
 - "relevance_score": float from 0.0 to 1.0. How relevant is this post to \
 understanding neighbourhood sentiment in Bengaluru? \
 1.0 = highly relevant discussion or news. 0.0 = spam or completely off-topic.
