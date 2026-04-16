@@ -112,11 +112,11 @@ The following tables exist in the schema but are not used by any active code pat
 
 **Fast-path jobs (event-driven, wired to each ingestion flow):**
 - [x] Fuzzy locality matching job (`transforms/locality_matcher.py`) — rapidfuzz second pass for unmatched Reddit/Telegram posts
-- [ ] Reddit/Telegram listing filter + structured extraction job (Gemini Flash Lite):
+- [x] Reddit/Telegram listing filter + structured extraction job (`transforms/listing_extractor.py`):
   - Regex pre-filter drops obvious non-listings ("looking for", "seeking", "need flatmate")
-  - Single batch Gemini call returns `is_listing` boolean + all structured fields + `rent_type`
-  - Posts with `is_listing = false` are excluded from `listings_curated`
-  - Set `gemini_tagged = true` on success; `gemini_fallback = true` + Claude Haiku retry on API error
+  - Gemini Flash Lite batch call extracts `is_listing`, `bhk`, `rent`, `locality`, `furnishing`, `rent_type`
+  - Claude Haiku one-retry fallback on Gemini API error
+  - Sets `gemini_tagged = true` on success; `gemini_fallback = true` on API failure
 - [x] Stale marking job — wired via `run_post_ingest_transforms()` calling `mark_stale()` (Phase 1)
 
 **Slow-path jobs (daily at 2:30–2:45 AM UTC):**

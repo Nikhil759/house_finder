@@ -94,23 +94,37 @@ def _run_fuzzy_locality_matching(source: str):
 
 def _run_listing_filter_and_extraction(source: str):
     """
-    For Reddit/Telegram: detect non-listings + extract structured fields
-    via Gemini Flash Lite.
-
-    TODO (Phase 2): Implement Gemini batch extraction.
+    For Reddit/Telegram: regex pre-filter + Gemini Flash Lite extraction.
+    Determines is_listing, extracts bhk/rent/locality/furnishing/rent_type.
     """
+    from datetime import datetime, timezone
+    started_at = datetime.now(timezone.utc)
     run_id = record_transform_start("listing_extraction", source)
     try:
-        # Phase 2: implement listing filter + Gemini extraction here
+        from transforms.listing_extractor import extract_listings_batch
+        stats = extract_listings_batch(source)
         record_transform_end(
             run_id,
             status="success",
-            records_processed=0,
-            metadata={"note": "stub — implementation in Phase 2"},
+            records_processed=stats["processed"],
+            records_failed=stats["errors"],
+            gemini_calls=stats["gemini_calls"],
+            gemini_fallback_count=stats["gemini_fallback_count"],
+            started_at=started_at,
+            metadata={
+                "listings_found": stats["listings_found"],
+                "non_listings": stats["non_listings"],
+                "regex_filtered": stats["regex_filtered"],
+            },
+        )
+        logger.info(
+            "Listing extraction for %s: %d processed, %d listings, %d non-listings, %d regex-filtered",
+            source, stats["processed"], stats["listings_found"],
+            stats["non_listings"], stats["regex_filtered"],
         )
     except Exception as e:
         logger.error("Listing extraction failed for %s: %s", source, e)
-        record_transform_end(run_id, status="failed", error_message=str(e))
+        record_transform_end(run_id, status="failed", error_message=str(e), started_at=started_at)
 
 
 # ─────────────────────────────────────────────
