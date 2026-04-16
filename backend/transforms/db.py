@@ -9,11 +9,20 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, Optional
 
 import psycopg2
 
 logger = logging.getLogger(__name__)
+
+
+def _json_default(obj):
+    if isinstance(obj, Decimal):
+        return float(obj)
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
 def get_connection():
@@ -87,7 +96,7 @@ def record_transform_end(
             gemini_calls,
             gemini_fallback_count,
             error_message,
-            json.dumps(metadata) if metadata else None,
+            json.dumps(metadata, default=_json_default) if metadata else None,
             row_id,
         ))
         conn.commit()
