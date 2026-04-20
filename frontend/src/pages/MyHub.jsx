@@ -737,8 +737,8 @@ export default function MyHub() {
   }
 
   function handleRemove(id) {
-    const raw = savedListings.find(p => String(p.id) === String(id));
-    if (raw) saveListing(raw); // toggles unsave → deletes from Supabase
+    const raw = savedListings.find(p => stableListingId(p) === String(id));
+    if (raw) saveListing(raw);
   }
 
   function handleNoteSave(id, notes) {
