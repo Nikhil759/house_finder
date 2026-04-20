@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Analytics } from "@vercel/analytics/react";
 import { ThemeProvider } from "./ThemeContext";
 import LandingPage from "./pages/Landing";
@@ -27,8 +27,10 @@ const ADMIN_EMAIL = "bn5799@gmail.com";
 
 function AdminRoute({ element }) {
   const { user, loading } = useAuth();
+  const location = useLocation();
   if (loading) return null;
-  if (!user || user.email !== ADMIN_EMAIL) return <Navigate to="/" replace />;
+  if (!user || user.email !== ADMIN_EMAIL)
+    return <Navigate to={`/?redirect=${encodeURIComponent(location.pathname)}`} replace />;
   return element;
 }
 

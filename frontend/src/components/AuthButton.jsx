@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
 function Avatar({ user }) {
@@ -47,6 +47,7 @@ function Avatar({ user }) {
 
 export function AuthButton() {
   const { user, loading, signInWithGoogle } = useAuth()
+  const [searchParams] = useSearchParams()
 
   if (loading) return null
 
@@ -61,9 +62,11 @@ export function AuthButton() {
     )
   }
 
+  const redirectPath = searchParams.get('redirect') || undefined;
+
   return (
     <button
-      onClick={signInWithGoogle}
+      onClick={() => signInWithGoogle(redirectPath)}
       style={{
         display: 'flex',
         alignItems: 'center',
