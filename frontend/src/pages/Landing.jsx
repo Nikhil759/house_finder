@@ -23,7 +23,7 @@ const s = {
     background: 'var(--color-bg-primary)',
     color: 'var(--color-text-primary)',
     fontFamily: 'var(--font-sans)',
-    minHeight: '100vh',
+    minHeight: '100svh',
     paddingBottom: 80,
   },
   section: {
@@ -160,10 +160,10 @@ function MagneticSearchBar({ children }) {
 
 /* ── Framer Motion animation variants ───────────────────────────────────── */
 const fadeSlideUp = {
-  hidden: { opacity: 0, y: 24 },
+  hidden: { opacity: 0, y: 20 },
   visible: (delay = 0) => ({
     opacity: 1, y: 0,
-    transition: { duration: 0.7, ease: [0.25, 0.46, 0.45, 0.94], delay },
+    transition: { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94], delay },
   }),
 };
 
@@ -173,6 +173,8 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
   const [isFocused, setIsFocused] = useState(false);
   const [sourceCounts, setSourceCounts] = useState(null);
   const [totalListings, setTotalListings] = useState(null);
+  // Freeze hero height at first render so it never shifts due to viewport/layout changes
+  const heroHeight = useState(() => window.innerHeight - 56)[0];
 
   useEffect(() => {
     let cancelled = false;
@@ -207,7 +209,7 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
     <section style={{
       position: 'relative',
       overflow: 'hidden',
-      minHeight: 'calc(100vh - 56px)',
+      height: heroHeight,
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'center',
@@ -259,7 +261,7 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
           variants={fadeSlideUp}
           initial="hidden"
           animate="visible"
-          custom={0.12}
+          custom={0.1}
           style={{
             fontFamily: "'Playfair Display', serif",
             fontWeight: 300,
@@ -272,8 +274,8 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
             color: '#F0EFE9',
           }}
         >
-          Rental Intelligence for{' '}
-          <span style={{ color: '#E8A020' }}>Bangalore</span>
+          Rental Intelligence<br />
+          for <span style={{ color: '#E8A020' }}>Bangalore</span>
         </motion.h1>
 
         {/* Sub-heading — Inter */}
@@ -281,7 +283,7 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
           variants={fadeSlideUp}
           initial="hidden"
           animate="visible"
-          custom={0.24}
+          custom={0.2}
           style={{
             fontFamily: 'Inter, sans-serif',
             fontWeight: 300,
@@ -304,7 +306,7 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
           variants={fadeSlideUp}
           initial="hidden"
           animate="visible"
-          custom={0.38}
+          custom={0.3}
           style={{ width: '100%', maxWidth: isDesktop ? 600 : '100%', position: 'relative', marginBottom: 14 }}
         >
           <MagneticSearchBar>
@@ -424,7 +426,7 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
           variants={fadeSlideUp}
           initial="hidden"
           animate="visible"
-          custom={0.48}
+          custom={0.4}
           style={{
             fontFamily: 'Inter, sans-serif',
             fontSize: 12,
@@ -441,7 +443,7 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
           variants={fadeSlideUp}
           initial="hidden"
           animate="visible"
-          custom={0.58}
+          custom={0.5}
           style={{
             display: 'flex',
             flexDirection: 'column',
@@ -466,23 +468,20 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
               boxShadow: '0 0 6px rgba(232,160,32,0.6)',
               flexShrink: 0,
             }} />
-            {totalListings != null && totalListings > 0 ? (
-              <>
-                Indexing{' '}
-                <span style={{
-                  color: '#E8A020',
-                  fontSize: 13,
-                  fontWeight: 500,
-                  letterSpacing: '-0.02em',
-                  padding: '0 1px',
-                }}>
-                  {formatCount(totalListings)}+
-                </span>
-                {' '}listings across
-              </>
-            ) : (
-              <>Indexing listings across</>
-            )}
+            Indexing{' '}
+            <span style={{
+              color: '#E8A020',
+              fontSize: 13,
+              fontWeight: 500,
+              letterSpacing: '-0.02em',
+              padding: '0 1px',
+              minWidth: '3ch',
+              display: 'inline-block',
+              textAlign: 'center',
+            }}>
+              {totalListings != null && totalListings > 0 ? `${formatCount(totalListings)}+` : '—'}
+            </span>
+            {' '}listings across
           </div>
           <div style={{
             display: 'flex',
@@ -526,14 +525,17 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
                     }}>
                       soon
                     </span>
-                  ) : count != null && (
+                  ) : (
                     <span style={{
                       fontFamily: "'DM Mono', monospace",
                       fontSize: 10,
                       color: '#666',
                       marginLeft: 2,
+                      display: 'inline-block',
+                      minWidth: '3ch',
+                      textAlign: 'center',
                     }}>
-                      {formatCount(count)}
+                      {count != null ? formatCount(count) : '—'}
                     </span>
                   )}
                 </div>
