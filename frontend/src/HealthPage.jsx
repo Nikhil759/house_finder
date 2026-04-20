@@ -16,6 +16,11 @@ const FEED_SOURCE_META = {
   reddit: { label: "Reddit Discussions",      icon: "💬", refreshLabel: "Local cron every 6h" },
 };
 
+const FEED_INGEST_META = {
+  news:                { label: "News API" },
+  reddit_discussions:  { label: "Reddit Discussions" },
+};
+
 function statusFor(source, info) {
   if (!info || info.count === 0) return "dead";
   const meta = SOURCE_META[source];
@@ -213,8 +218,10 @@ function relativeTime(isoStr) {
   return `${days}d ago`;
 }
 
-function RunStatusBadge({ status }) {
-  const key = status === "completed" ? "success" : status === "running" ? "running" : status === "partial" ? "partial" : "failed";
+function RunStatusBadge({ status, totalFetched }) {
+  const isZeroFetch = (status === "success" || status === "completed") && totalFetched === 0;
+  const effectiveStatus = isZeroFetch ? "partial" : status;
+  const key = (effectiveStatus === "completed" || effectiveStatus === "success") ? "success" : effectiveStatus === "running" ? "running" : effectiveStatus === "partial" ? "partial" : "failed";
   const cfg = STATUS_CONFIG[key] || STATUS_CONFIG.dead;
   return (
     <span style={{
@@ -223,47 +230,275 @@ function RunStatusBadge({ status }) {
       borderRadius: 20, padding: "2px 8px", fontSize: 10, fontWeight: 500, color: cfg.dot,
     }}>
       <span style={{ width: 5, height: 5, borderRadius: "50%", background: cfg.dot, display: "inline-block" }} />
-      {status || "unknown"}
+      {effectiveStatus || "unknown"}
     </span>
+  );
+}
+
+function RunDotsLegend({ isDark }) {
+  const muted = isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.45)";
+  const items = [
+    { color: STATUS_CONFIG.success.dot, label: "Success" },
+    { color: STATUS_CONFIG.partial.dot,  label: "Partial (some errors / 0 fetched)" },
+    { color: STATUS_CONFIG.failed.dot,   label: "Failed" },
+    { color: STATUS_CONFIG.running.dot,  label: "Running" },
+    { color: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)", label: "No run", border: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)" },
+  ];
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", marginBottom: 16 }}>
+      {items.map(({ color, label, border }) => (
+        <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{
+            width: 9, height: 9, borderRadius: "50%",
+            background: color,
+            border: border ? `1px solid ${border}` : "none",
+            flexShrink: 0, display: "inline-block",
+          }} />
+          <span style={{ fontSize: 11, fontFamily: "monospace", color: muted }}>{label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RunTooltip({ run, pos, isDark }) {
+  if (!run) return null;
+  const isIngestion = "total_fetched" in run;
+  const isZeroFetch = (run.status === "success" || run.status === "completed") && run.total_fetched === 0;
+  const statusKey = isZeroFetch ? "partial"
+    : (run.status === "completed" || run.status === "success") ? "success"
+    : run.status === "failed"  ? "failed"
+    : run.status === "running" ? "running"
+    : run.status === "partial" ? "partial"
+    : "failed";
+  const statusColor = STATUS_CONFIG[statusKey]?.dot ?? "#f59e0b";
+  const bg  = isDark ? "#1a1a1a" : "#ffffff";
+  const border = isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)";
+  const muted = isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.45)";
+
+  const rows = isIngestion ? [
+    ["Fetched",  run.total_fetched  ?? "—"],
+    ["New",      run.total_new      ?? "—", run.total_new > 0 ? "#22c55e" : undefined],
+    ["Updated",  run.total_updated  ?? "—"],
+    ["Stale",    run.total_stale    ?? "—", run.total_stale > 0 ? "#f59e0b" : undefined],
+    ["Errors",   run.total_errors   ?? 0,   run.total_errors > 0 ? "#ef4444" : undefined],
+  ] : [
+    ["Processed", run.records_processed ?? "—"],
+    ["Failed",    run.records_failed    ?? 0, run.records_failed > 0 ? "#ef4444" : undefined],
+    ["Gemini",    run.gemini_calls      ?? "—"],
+    ["Fallback",  run.gemini_fallback_count ?? "—"],
+  ];
+
+  const tooltipWidth = 200;
+  const viewportW = window.innerWidth;
+  const left = Math.min(pos.x + 14, viewportW - tooltipWidth - 12);
+
+  return (
+    <div style={{
+      position: "fixed",
+      left,
+      top: pos.y - 8,
+      transform: pos.y > window.innerHeight * 0.6 ? "translateY(-100%)" : undefined,
+      zIndex: 9999,
+      background: bg,
+      border: `1px solid ${border}`,
+      borderRadius: 10,
+      padding: "10px 14px",
+      width: tooltipWidth,
+      boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+      fontFamily: "monospace",
+      fontSize: 12,
+      pointerEvents: "none",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+        <span style={{ width: 8, height: 8, borderRadius: "50%", background: statusColor, flexShrink: 0 }} />
+        <span style={{ fontWeight: 700, color: statusColor, textTransform: "capitalize" }}>
+          {run.status}
+        </span>
+        <span style={{ marginLeft: "auto", color: muted, fontSize: 11 }}>
+          {relativeTime(run.started_at)}
+        </span>
+      </div>
+      <div style={{ color: muted, fontSize: 11, marginBottom: 8 }}>
+        Duration: {formatDuration(run.duration_ms)}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+        {rows.map(([label, val, color]) => (
+          <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+            <span style={{ color: muted }}>{label}</span>
+            <span style={{ fontWeight: 600, color: color || "inherit" }}>{val}</span>
+          </div>
+        ))}
+      </div>
+      {run.error_message && (
+        <div style={{
+          marginTop: 8, paddingTop: 8,
+          borderTop: `1px solid ${border}`,
+          color: "#ef4444", fontSize: 11,
+          wordBreak: "break-word", maxWidth: 240,
+        }}>
+          {run.error_message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RunDots({ runs, label, isDark }) {
+  // oldest on left, newest on right; empty slots pad the left
+  const reversed = [...runs].reverse();
+  const offset = 5 - runs.length;
+  const slots = Array.from({ length: 5 }, (_, i) => i >= offset ? reversed[i - offset] : null);
+  const mutedBorder = isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)";
+  const [tooltip, setTooltip] = useState({ run: null, pos: { x: 0, y: 0 } });
+
+  const show = (run, x, y) => setTooltip({ run, pos: { x, y } });
+  const hide = () => setTooltip({ run: null, pos: { x: 0, y: 0 } });
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+      <span style={{
+        fontFamily: "monospace", fontSize: 12, minWidth: 90,
+        opacity: 0.7, letterSpacing: "0.02em",
+      }}>
+        {label}
+      </span>
+      <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+        {slots.map((run, i) => {
+          const isZeroFetch = (run?.status === "success" || run?.status === "completed") && run?.total_fetched === 0;
+          const statusKey = isZeroFetch ? "partial"
+            : (run?.status === "completed" || run?.status === "success") ? "success"
+            : run?.status === "failed"  ? "failed"
+            : run?.status === "running" ? "running"
+            : run?.status === "partial" ? "partial"
+            : null;
+          const color = !run ? (isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)")
+            : STATUS_CONFIG[statusKey]?.dot ?? "#f59e0b";
+          return (
+            <span
+              key={i}
+              onMouseEnter={run ? (e) => show(run, e.clientX, e.clientY) : undefined}
+              onMouseMove={run ? (e) => show(run, e.clientX, e.clientY) : undefined}
+              onMouseLeave={run ? hide : undefined}
+              onTouchStart={run ? (e) => {
+                e.preventDefault();
+                const t = e.touches[0];
+                show(run, t.clientX, t.clientY);
+              } : undefined}
+              onTouchEnd={run ? hide : undefined}
+              style={{
+                width: 11, height: 11, borderRadius: "50%",
+                background: color,
+                border: run ? "none" : `1px solid ${mutedBorder}`,
+                display: "inline-block",
+                flexShrink: 0,
+                cursor: run ? "default" : undefined,
+                touchAction: "none",
+                WebkitTapHighlightColor: "transparent",
+              }}
+            />
+          );
+        })}
+      </div>
+      <RunTooltip run={tooltip.run} pos={tooltip.pos} isDark={isDark} />
+    </div>
+  );
+}
+
+const PAGE_SIZE = 10;
+
+function FilterPills({ options, active, onChange, isDark }) {
+  const pill = (val, label) => {
+    const isActive = active === val;
+    return (
+      <button key={val} onClick={() => onChange(val)} style={{
+        fontFamily: "monospace", fontSize: 11, letterSpacing: "0.04em",
+        padding: "3px 10px", borderRadius: 20, cursor: "pointer",
+        border: `1px solid ${isActive
+          ? "rgba(232,160,32,0.6)"
+          : isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)"}`,
+        background: isActive
+          ? "rgba(232,160,32,0.12)"
+          : "transparent",
+        color: isActive ? "var(--color-amber)" : "inherit",
+        opacity: isActive ? 1 : 0.6,
+        transition: "all 0.15s",
+      }}>{label}</button>
+    );
+  };
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+      {pill("all", "All")}
+      {options.map(o => pill(o, o))}
+    </div>
+  );
+}
+
+function ShowMoreFooter({ shown, total, onShowMore, isDark }) {
+  if (shown >= total) return null;
+  const remaining = total - shown;
+  return (
+    <button onClick={onShowMore} style={{
+      width: "100%", padding: "10px 0",
+      background: "transparent",
+      border: "none",
+      borderTop: `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}`,
+      cursor: "pointer", fontFamily: "monospace", fontSize: 12,
+      opacity: 0.55,
+      color: "inherit",
+    }}>
+      Show {remaining} more ↓
+    </button>
   );
 }
 
 function IngestionRunsTable({ runs, isDark }) {
   if (!runs || runs.length === 0) return null;
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [shown, setShown] = useState(PAGE_SIZE);
+
+  const sources = [...new Set(runs.map(r => r.source))].sort();
+  const filtered = sourceFilter === "all" ? runs : runs.filter(r => r.source === sourceFilter);
+  const visible = filtered.slice(0, shown);
+
   const headerBg = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
   const rowBorder = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)";
+
   return (
-    <div style={{
-      background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-      border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
-      borderRadius: 12, overflow: "hidden",
-    }}>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, fontFamily: "monospace" }}>
-          <thead>
-            <tr style={{ background: headerBg }}>
-              {["Source", "Status", "Fetched", "New", "Updated", "Stale", "Errors", "Duration", "When"].map(h => (
-                <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontWeight: 600, fontSize: 11, opacity: 0.7, whiteSpace: "nowrap" }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {runs.map((run, i) => (
-              <tr key={i} style={{ borderBottom: `1px solid ${rowBorder}` }}
-                  title={run.error_message || ""}>
-                <td style={{ padding: "8px 12px", fontWeight: 500 }}>{run.source}</td>
-                <td style={{ padding: "8px 12px" }}><RunStatusBadge status={run.status} /></td>
-                <td style={{ padding: "8px 12px" }}>{run.total_fetched ?? "—"}</td>
-                <td style={{ padding: "8px 12px", color: run.total_new > 0 ? "#22c55e" : undefined }}>{run.total_new ?? "—"}</td>
-                <td style={{ padding: "8px 12px" }}>{run.total_updated ?? "—"}</td>
-                <td style={{ padding: "8px 12px", color: run.total_stale > 0 ? "#f59e0b" : undefined }}>{run.total_stale ?? "—"}</td>
-                <td style={{ padding: "8px 12px", color: run.total_errors > 0 ? "#ef4444" : undefined }}>{run.total_errors ?? 0}</td>
-                <td style={{ padding: "8px 12px" }}>{formatDuration(run.duration_ms)}</td>
-                <td style={{ padding: "8px 12px", opacity: 0.6, whiteSpace: "nowrap" }}>{relativeTime(run.started_at)}</td>
+    <div>
+      <FilterPills options={sources} active={sourceFilter} onChange={v => { setSourceFilter(v); setShown(PAGE_SIZE); }} isDark={isDark} />
+      <div style={{
+        background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+        border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
+        borderRadius: 12, overflow: "hidden",
+      }}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, fontFamily: "monospace" }}>
+            <thead>
+              <tr style={{ background: headerBg }}>
+                {["Source", "Status", "Fetched", "New", "Updated", "Stale", "Errors", "Duration", "When"].map(h => (
+                  <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontWeight: 600, fontSize: 11, opacity: 0.7, whiteSpace: "nowrap" }}>{h}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {visible.map((run, i) => (
+                <tr key={i} style={{ borderBottom: `1px solid ${rowBorder}` }} title={run.error_message || ""}>
+                  <td style={{ padding: "8px 12px", fontWeight: 500 }}>{run.source}</td>
+                  <td style={{ padding: "8px 12px" }}><RunStatusBadge status={run.status} totalFetched={run.total_fetched} /></td>
+                  <td style={{ padding: "8px 12px" }}>{run.total_fetched ?? "—"}</td>
+                  <td style={{ padding: "8px 12px", color: run.total_new > 0 ? "#22c55e" : undefined }}>{run.total_new ?? "—"}</td>
+                  <td style={{ padding: "8px 12px" }}>{run.total_updated ?? "—"}</td>
+                  <td style={{ padding: "8px 12px", color: run.total_stale > 0 ? "#f59e0b" : undefined }}>{run.total_stale ?? "—"}</td>
+                  <td style={{ padding: "8px 12px", color: run.total_errors > 0 ? "#ef4444" : undefined }}>{run.total_errors ?? 0}</td>
+                  <td style={{ padding: "8px 12px" }}>{formatDuration(run.duration_ms)}</td>
+                  <td style={{ padding: "8px 12px", opacity: 0.6, whiteSpace: "nowrap" }}>{relativeTime(run.started_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <ShowMoreFooter shown={shown} total={filtered.length} onShowMore={() => setShown(s => s + PAGE_SIZE)} isDark={isDark} />
       </div>
     </div>
   );
@@ -271,52 +506,126 @@ function IngestionRunsTable({ runs, isDark }) {
 
 function TransformRunsTable({ runs, isDark }) {
   if (!runs || runs.length === 0) return null;
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [shown, setShown] = useState(PAGE_SIZE);
+
+  const sources = [...new Set(runs.map(r => r.source).filter(Boolean))].sort();
+  const filtered = sourceFilter === "all" ? runs : runs.filter(r => r.source === sourceFilter);
+  const visible = filtered.slice(0, shown);
+
   const headerBg = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
   const rowBorder = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)";
+
+  return (
+    <div>
+      <FilterPills options={sources} active={sourceFilter} onChange={v => { setSourceFilter(v); setShown(PAGE_SIZE); }} isDark={isDark} />
+      <div style={{
+        background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+        border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
+        borderRadius: 12, overflow: "hidden",
+      }}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, fontFamily: "monospace" }}>
+            <thead>
+              <tr style={{ background: headerBg }}>
+                {["Job", "Source", "Status", "Processed", "Failed", "Gemini", "Fallback", "Duration", "When"].map(h => (
+                  <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontWeight: 600, fontSize: 11, opacity: 0.7, whiteSpace: "nowrap" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((run, i) => {
+                const fallbackRate = run.gemini_calls > 0 ? ((run.gemini_fallback_count || 0) / run.gemini_calls * 100).toFixed(1) : null;
+                const fbColor = fallbackRate > 10 ? "#ef4444" : fallbackRate > 5 ? "#f59e0b" : "#22c55e";
+                return (
+                  <tr key={i} style={{ borderBottom: `1px solid ${rowBorder}` }} title={run.error_message || ""}>
+                    <td style={{ padding: "8px 12px", fontWeight: 500 }}>{run.job_name}</td>
+                    <td style={{ padding: "8px 12px" }}>{run.source || "—"}</td>
+                    <td style={{ padding: "8px 12px" }}><RunStatusBadge status={run.status} /></td>
+                    <td style={{ padding: "8px 12px" }}>{run.records_processed ?? "—"}</td>
+                    <td style={{ padding: "8px 12px", color: run.records_failed > 0 ? "#ef4444" : undefined }}>{run.records_failed ?? 0}</td>
+                    <td style={{ padding: "8px 12px" }}>{run.gemini_calls ?? "—"}</td>
+                    <td style={{ padding: "8px 12px" }}>
+                      {run.gemini_fallback_count != null ? (
+                        <span style={{ color: fbColor }}>
+                          {run.gemini_fallback_count}
+                          {fallbackRate != null && <span style={{ opacity: 0.6 }}> ({fallbackRate}%)</span>}
+                        </span>
+                      ) : "—"}
+                    </td>
+                    <td style={{ padding: "8px 12px" }}>{formatDuration(run.duration_ms)}</td>
+                    <td style={{ padding: "8px 12px", opacity: 0.6, whiteSpace: "nowrap" }}>{relativeTime(run.started_at)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <ShowMoreFooter shown={shown} total={filtered.length} onShowMore={() => setShown(s => s + PAGE_SIZE)} isDark={isDark} />
+      </div>
+    </div>
+  );
+}
+
+function GeminiHealthCard({ isDark }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/gemini-health`)
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => { setData({ status: "unavailable", model: null, latency_ms: null }); setLoading(false); });
+  }, []);
+
+  const bg = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)";
+  const statusColor = !data || loading ? "#6b7280"
+    : data.status === "ok"          ? "#22c55e"
+    : data.status === "no_key"      ? "#f59e0b"
+    : "#ef4444";
+  const statusLabel = loading ? "Checking…"
+    : data?.status === "ok"         ? "Available"
+    : data?.status === "no_key"     ? "No API key"
+    : "Unavailable";
+
   return (
     <div style={{
-      background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
-      border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
-      borderRadius: 12, overflow: "hidden",
+      background: bg,
+      border: `1px solid ${statusColor}33`,
+      borderRadius: 12, padding: "16px 20px",
     }}>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, fontFamily: "monospace" }}>
-          <thead>
-            <tr style={{ background: headerBg }}>
-              {["Job", "Source", "Status", "Processed", "Failed", "Gemini", "Fallback", "Duration", "When"].map(h => (
-                <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontWeight: 600, fontSize: 11, opacity: 0.7, whiteSpace: "nowrap" }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {runs.map((run, i) => {
-              const fallbackRate = run.gemini_calls > 0 ? ((run.gemini_fallback_count || 0) / run.gemini_calls * 100).toFixed(1) : null;
-              const fbColor = fallbackRate > 10 ? "#ef4444" : fallbackRate > 5 ? "#f59e0b" : "#22c55e";
-              return (
-                <tr key={i} style={{ borderBottom: `1px solid ${rowBorder}` }}
-                    title={run.error_message || ""}>
-                  <td style={{ padding: "8px 12px", fontWeight: 500 }}>{run.job_name}</td>
-                  <td style={{ padding: "8px 12px" }}>{run.source || "—"}</td>
-                  <td style={{ padding: "8px 12px" }}><RunStatusBadge status={run.status} /></td>
-                  <td style={{ padding: "8px 12px" }}>{run.records_processed ?? "—"}</td>
-                  <td style={{ padding: "8px 12px", color: run.records_failed > 0 ? "#ef4444" : undefined }}>{run.records_failed ?? 0}</td>
-                  <td style={{ padding: "8px 12px" }}>{run.gemini_calls ?? "—"}</td>
-                  <td style={{ padding: "8px 12px" }}>
-                    {run.gemini_fallback_count != null ? (
-                      <span style={{ color: fbColor }}>
-                        {run.gemini_fallback_count}
-                        {fallbackRate != null && <span style={{ opacity: 0.6 }}> ({fallbackRate}%)</span>}
-                      </span>
-                    ) : "—"}
-                  </td>
-                  <td style={{ padding: "8px 12px" }}>{formatDuration(run.duration_ms)}</td>
-                  <td style={{ padding: "8px 12px", opacity: 0.6, whiteSpace: "nowrap" }}>{relativeTime(run.started_at)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Gemini API</div>
+          <div style={{ fontSize: 12, opacity: 0.6 }}>
+            {data?.status === "ok" ? data.model : "Primary model: gemini-2.0-flash-lite"}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          {data?.latency_ms != null && (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "monospace", color: data.latency_ms > 3000 ? "#f59e0b" : "#22c55e" }}>
+                {data.latency_ms}
+              </div>
+              <div style={{ fontSize: 10, opacity: 0.5 }}>ms</div>
+            </div>
+          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: statusColor, display: "inline-block" }} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: statusColor }}>{statusLabel}</span>
+          </div>
+        </div>
       </div>
+      {data?.error && (
+        <div style={{
+          marginTop: 10, paddingTop: 10,
+          borderTop: `1px solid ${statusColor}22`,
+          fontSize: 12, color: "#ef4444", fontFamily: "monospace",
+          wordBreak: "break-word",
+        }}>
+          {data.error}
+        </div>
+      )}
     </div>
   );
 }
@@ -653,6 +962,80 @@ export default function HealthPage() {
         {/* ═══════ TAB: PIPELINE RUNS ═══════ */}
         {activeTab === "runs" && (
           <>
+            {/* Recent ingestion runs */}
+            <div style={{ marginBottom: 32 }}>
+              <div style={{
+                fontSize: 11, fontWeight: 600, letterSpacing: "0.08em",
+                textTransform: "uppercase", opacity: 0.45, marginBottom: 12,
+              }}>
+                Recent Ingestion Runs (last 5 per source)
+              </div>
+              {(() => {
+                const byListings = Object.fromEntries(Object.keys(SOURCE_META).map(s => [s, []]));
+                const byFeed = Object.fromEntries(Object.keys(FEED_INGEST_META).map(s => [s, []]));
+                (pipelineData?.recent_runs || []).forEach(r => {
+                  if (byListings[r.source] !== undefined && byListings[r.source].length < 5)
+                    byListings[r.source].push(r);
+                  else if (byFeed[r.source] !== undefined && byFeed[r.source].length < 5)
+                    byFeed[r.source].push(r);
+                });
+                const groupLabel = (text) => (
+                  <div style={{
+                    fontSize: 10, fontWeight: 600, letterSpacing: "0.1em",
+                    textTransform: "uppercase", opacity: 0.4, marginBottom: 6, marginTop: 4,
+                  }}>{text}</div>
+                );
+                return (
+                  <>
+                    <RunDotsLegend isDark={isDark} />
+                    <div style={{ marginBottom: 16 }}>
+                      {groupLabel("Listings")}
+                      {Object.entries(byListings).map(([src, runs]) => (
+                        <RunDots key={src} label={SOURCE_META[src]?.label || src} runs={runs} isDark={isDark} />
+                      ))}
+                      {groupLabel("Feed")}
+                      {Object.entries(byFeed).map(([src, runs]) => (
+                        <RunDots key={src} label={FEED_INGEST_META[src]?.label || src} runs={runs} isDark={isDark} />
+                      ))}
+                    </div>
+                    {pipelineData?.recent_runs?.length > 0
+                      ? <IngestionRunsTable runs={pipelineData.recent_runs} isDark={isDark} />
+                      : <div style={{ fontSize: 13, opacity: 0.5, padding: "16px 0" }}>No ingestion runs recorded yet.</div>
+                    }
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Transform runs — last 5 per job */}
+            <div style={{ marginBottom: 32 }}>
+              <div style={{
+                fontSize: 11, fontWeight: 600, letterSpacing: "0.08em",
+                textTransform: "uppercase", opacity: 0.45, marginBottom: 12,
+              }}>
+                Transform Runs (last 5 per job)
+              </div>
+              {pipelineData?.transform_runs?.length > 0 ? (() => {
+                const byJob = {};
+                pipelineData.transform_runs.forEach(r => {
+                  if (!byJob[r.job_name]) byJob[r.job_name] = [];
+                  if (byJob[r.job_name].length < 5) byJob[r.job_name].push(r);
+                });
+                return (
+                  <>
+                    <div style={{ marginBottom: 16 }}>
+                      {Object.entries(byJob).map(([job, runs]) => (
+                        <RunDots key={job} label={job} runs={runs} isDark={isDark} />
+                      ))}
+                    </div>
+                    <TransformRunsTable runs={pipelineData.transform_runs} isDark={isDark} />
+                  </>
+                );
+              })() : (
+                <div style={{ fontSize: 13, opacity: 0.5, padding: "16px 0" }}>No transform runs recorded yet.</div>
+              )}
+            </div>
+
             {/* Listing health by source x status */}
             <div style={{ marginBottom: 32 }}>
               <div style={{
@@ -664,39 +1047,12 @@ export default function HealthPage() {
               <ListingHealthBar statusCounts={pipelineData?.by_source_status} isDark={isDark} />
             </div>
 
-            {/* Gemini fallback card */}
+            {/* Gemini status */}
+            <div style={{ marginBottom: 12 }}>
+              <GeminiHealthCard isDark={isDark} />
+            </div>
             <div style={{ marginBottom: 32 }}>
               <GeminiFallbackCard pending={pipelineData?.gemini_fallback_pending} isDark={isDark} />
-            </div>
-
-            {/* Recent ingestion runs */}
-            <div style={{ marginBottom: 32 }}>
-              <div style={{
-                fontSize: 11, fontWeight: 600, letterSpacing: "0.08em",
-                textTransform: "uppercase", opacity: 0.45, marginBottom: 12,
-              }}>
-                Recent Ingestion Runs (last 20)
-              </div>
-              {pipelineData?.recent_runs?.length > 0 ? (
-                <IngestionRunsTable runs={pipelineData.recent_runs} isDark={isDark} />
-              ) : (
-                <div style={{ fontSize: 13, opacity: 0.5, padding: "16px 0" }}>No ingestion runs recorded yet.</div>
-              )}
-            </div>
-
-            {/* Transform runs — last per job */}
-            <div style={{ marginBottom: 32 }}>
-              <div style={{
-                fontSize: 11, fontWeight: 600, letterSpacing: "0.08em",
-                textTransform: "uppercase", opacity: 0.45, marginBottom: 12,
-              }}>
-                Transform Runs (latest per job)
-              </div>
-              {pipelineData?.transform_runs?.length > 0 ? (
-                <TransformRunsTable runs={pipelineData.transform_runs} isDark={isDark} />
-              ) : (
-                <div style={{ fontSize: 13, opacity: 0.5, padding: "16px 0" }}>No transform runs recorded yet.</div>
-              )}
             </div>
           </>
         )}

@@ -355,11 +355,13 @@ def main():
             finally:
                 _conn.close()
 
+    final_status = "success" if (stats.total_errors == 0 and len(all_listings) > 0) else "partial"
     record_run_end(
         db_run_id,
-        status="success",
+        status=final_status,
         stats=stats,
         total_fetched=len(all_listings),
+        error_message=None if final_status == "success" else f"{stats.total_errors} errors, {len(all_listings)} fetched",
         started_at=started_at,
     )
     logger.info(

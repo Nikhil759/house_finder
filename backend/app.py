@@ -1094,6 +1094,40 @@ def health():
     return jsonify({"status": "ok", "telegram": telegram_ready})
 
 
+@app.route("/api/gemini-health")
+def gemini_health():
+    import time, requests as _req
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if not api_key:
+        return jsonify({"status": "no_key", "model": None, "latency_ms": None})
+
+    candidates = [
+        ("v1beta", "gemini-2.0-flash-lite"),
+        ("v1beta", "gemini-flash-lite-latest"),
+        ("v1beta", "gemini-2.0-flash"),
+        ("v1beta", "gemini-flash-latest"),
+        ("v1beta", "gemini-2.5-flash"),
+    ]
+    payload = {
+        "contents": [{"parts": [{"text": "Reply with: ok"}]}],
+        "generationConfig": {"maxOutputTokens": 5},
+    }
+    last_error = None
+    for api_version, model in candidates:
+        url = f"https://generativelanguage.googleapis.com/{api_version}/models/{model}:generateContent"
+        try:
+            t0 = time.time()
+            resp = _req.post(url, params={"key": api_key}, json=payload, timeout=10)
+            latency_ms = int((time.time() - t0) * 1000)
+            if resp.status_code == 200:
+                return jsonify({"status": "ok", "model": model, "latency_ms": latency_ms})
+            err_body = resp.json() if resp.content else {}
+            last_error = err_body.get("error", {}).get("message") or f"HTTP {resp.status_code}"
+        except Exception as e:
+            last_error = str(e)
+    return jsonify({"status": "unavailable", "model": None, "latency_ms": None, "error": last_error})
+
+
 @app.route("/api/search")
 def search():
     area       = request.args.get("area", "").strip()
@@ -2075,9 +2109,12 @@ def pipeline_status():
             SELECT source, started_at, finished_at, status,
                    total_fetched, total_new, total_updated, total_stale,
                    total_errors, duration_ms, error_message
-            FROM ingestion_runs
-            ORDER BY started_at DESC
-            LIMIT 20
+            FROM (
+                SELECT *, ROW_NUMBER() OVER (PARTITION BY source ORDER BY started_at DESC) AS rn
+                FROM ingestion_runs
+            ) t
+            WHERE rn <= 5
+            ORDER BY source, started_at DESC
         """)
         cols = [d[0] for d in cur.description]
         recent_runs = [dict(zip(cols, row)) for row in cur.fetchall()]
@@ -2113,13 +2150,16 @@ def pipeline_status():
                 if hasattr(v, 'isoformat'):
                     run[k] = v.isoformat()
 
-        # Transform runs (last run per job)
+        # Transform runs (last 5 per job)
         cur.execute("""
-            SELECT DISTINCT ON (job_name)
-                job_name, source, started_at, finished_at, status,
-                duration_ms, records_processed, records_failed,
-                gemini_calls, gemini_fallback_count, error_message
-            FROM transform_runs
+            SELECT job_name, source, started_at, finished_at, status,
+                   duration_ms, records_processed, records_failed,
+                   gemini_calls, gemini_fallback_count, error_message
+            FROM (
+                SELECT *, ROW_NUMBER() OVER (PARTITION BY job_name ORDER BY started_at DESC) AS rn
+                FROM transform_runs
+            ) t
+            WHERE rn <= 5
             ORDER BY job_name, started_at DESC
         """)
         tcols = [d[0] for d in cur.description]

@@ -33,7 +33,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 import requests
 
-from ingestion.db import get_connection
+from ingestion.db import get_connection, record_run_start, record_run_end, UpsertStats
 
 logging.basicConfig(
     level=logging.INFO,
@@ -184,6 +184,10 @@ def insert_articles(conn, locality: str | None, articles: list[dict]) -> tuple[i
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
+    from datetime import datetime, timezone
+    started_at = datetime.now(timezone.utc)
+    db_run_id  = record_run_start("news")
+
     api_key = _get_api_key()
     conn    = get_connection()
 
@@ -224,6 +228,18 @@ def main():
         time.sleep(0.5)
 
     conn.close()
+
+    stats = UpsertStats()
+    stats.total_new = total_inserted
+    final_status = "success" if total_inserted > 0 else "partial"
+    record_run_end(
+        db_run_id,
+        status=final_status,
+        stats=stats,
+        total_fetched=total_fetched,
+        error_message=None if final_status == "success" else f"{total_fetched} fetched, 0 new (all duplicates?)",
+        started_at=started_at,
+    )
 
     print(
         f"\nNews scrape complete.\n"
