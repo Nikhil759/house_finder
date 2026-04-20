@@ -258,7 +258,7 @@ function PipelineTracker({ listings, activeStage }) {
 
 // Ghost icon button base style (used in MyListingCard action row)
 const ghostIconBtn = {
-  background: 'none', border: '0.5px solid #2A2A2A', borderRadius: 6,
+  background: 'none', border: '1px solid #2E2E2E', borderRadius: 6,
   width: 30, height: 30, cursor: 'pointer', padding: 0,
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   color: 'var(--color-text-muted)', fontSize: 13,
@@ -317,9 +317,9 @@ function MyListingCard({ listing, onRemove, onStageChange, onNoteSave, listingSt
 
   return (
     <article style={{
-      background: '#1A1A1A',
-      border: `0.5px solid ${isStaleOrExpired ? 'rgba(245,158,11,0.3)' : '#2A2A2A'}`,
-      borderRadius: 12,
+      background: '#111111',
+      border: `1px solid ${isStaleOrExpired ? 'rgba(245,158,11,0.35)' : '#2E2E2E'}`,
+      borderRadius: 8,
       padding: 16,
       marginBottom: 8,
       opacity: isStaleOrExpired ? 0.75 : 1,
@@ -373,7 +373,7 @@ function MyListingCard({ listing, onRemove, onStageChange, onNoteSave, listingSt
           <span key={spec} style={{
             fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
             color: 'var(--color-text-muted)', background: '#111111',
-            border: '0.5px solid #2A2A2A', borderRadius: 6, padding: '3px 8px',
+            border: '1px solid #2E2E2E', borderRadius: 6, padding: '3px 8px',
           }}>
             {spec}
           </span>
@@ -389,7 +389,7 @@ function MyListingCard({ listing, onRemove, onStageChange, onNoteSave, listingSt
       </div>
 
       {/* ════ DIVIDER — everything below is the redesigned bottom section ════ */}
-      <div style={{ borderTop: '0.5px solid #222', paddingTop: 10 }}>
+      <div style={{ borderTop: '1px solid #2A2A2A', paddingTop: 10 }}>
 
         {/* ── Note preview / inline editor ── */}
         {noteEditing ? (
@@ -401,7 +401,7 @@ function MyListingCard({ listing, onRemove, onStageChange, onNoteSave, listingSt
             placeholder="Add a note…"
             style={{
               width: '100%', minHeight: 64, marginBottom: 10,
-              background: '#111111', border: '0.5px solid #2A2A2A', borderRadius: 8,
+              background: '#0D0D0D', border: '1px solid #2E2E2E', borderRadius: 6,
               padding: '8px 10px', color: 'var(--color-text-primary)',
               fontFamily: 'var(--font-sans)', fontSize: 12, lineHeight: 1.6,
               resize: 'vertical', outline: 'none', boxSizing: 'border-box',
@@ -433,9 +433,9 @@ function MyListingCard({ listing, onRemove, onStageChange, onNoteSave, listingSt
                   fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em',
                   textTransform: 'uppercase', borderRadius: 99,
                   padding: '5px 12px', cursor: 'pointer', whiteSpace: 'nowrap',
-                  background: isActive ? activeBg : '#111111',
+                  background: isActive ? activeBg : '#0D0D0D',
                   color: isActive ? activeText : '#666',
-                  border: isActive ? 'none' : '0.5px solid #2A2A2A',
+                  border: isActive ? 'none' : '1px solid #2E2E2E',
                   transition: 'background 0.15s, color 0.15s',
                 }}
               >
@@ -461,7 +461,7 @@ function MyListingCard({ listing, onRemove, onStageChange, onNoteSave, listingSt
           <button
             onClick={handleCopyOutreach}
             style={{
-              background: 'none', border: '0.5px solid #2A2A2A', borderRadius: 6,
+              background: 'none', border: '1px solid #2E2E2E', borderRadius: 6,
               height: 30, padding: '0 10px', cursor: 'pointer',
               fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
               color: 'var(--color-text-muted)',
@@ -757,7 +757,7 @@ export default function MyHub() {
   function SkeletonCard() {
     return (
       <div style={{
-        background: '#1A1A1A', border: '0.5px solid #2A2A2A', borderRadius: 12,
+        background: '#111111', border: '1px solid #2E2E2E', borderRadius: 8,
         padding: 16, marginBottom: 8,
       }}>
         {[80, 120, 60].map(w => (
