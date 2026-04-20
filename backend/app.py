@@ -1657,14 +1657,14 @@ def pulse_feed():
 
         # City-wide sentiment (all posts, last 7 days)
         cur.execute("""
-            SELECT AVG(sentiment_score), COUNT(*)
+            SELECT AVG(sentiment_score), COUNT(*), MAX(scraped_at)
             FROM locality_feed
             WHERE category IN ('discussion', 'news')
               AND sentiment_score IS NOT NULL
               AND relevance_score >= 0.3
               AND scraped_at >= NOW() - INTERVAL '7 days'
         """)
-        avg_sent, sent_count = cur.fetchone()
+        avg_sent, sent_count, last_scraped = cur.fetchone()
 
         # Per-locality sentiment (last 7 days)
         cur.execute("""
@@ -1673,11 +1673,10 @@ def pulse_feed():
             WHERE category IN ('discussion', 'news')
               AND locality IS NOT NULL
               AND sentiment_score IS NOT NULL
-              AND scraped_at >= NOW() - INTERVAL '7 days'
+              AND scraped_at >= NOW() - INTERVAL '30 days'
             GROUP BY locality
-            HAVING COUNT(*) >= 2
             ORDER BY COUNT(*) DESC
-            LIMIT 10
+            LIMIT 20
         """)
         locality_sentiments = [
             {"locality": loc, "avg_sentiment": round(float(s), 3), "count": c}
@@ -1688,6 +1687,7 @@ def pulse_feed():
             "posts": rows,
             "city_sentiment": round(float(avg_sent), 3) if avg_sent else 0,
             "city_sentiment_count": sent_count or 0,
+            "city_sentiment_updated_at": last_scraped.isoformat() if last_scraped else None,
             "locality_sentiments": locality_sentiments,
         })
 

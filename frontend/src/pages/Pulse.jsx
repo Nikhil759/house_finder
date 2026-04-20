@@ -9,7 +9,7 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const FEED_TABS = ['All', 'Discussion', 'News'];
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 5;
 
 const SENTIMENT_COLORS = {
   positive: '#34D399',
@@ -159,10 +159,11 @@ function SignalCard({ post }) {
       borderRadius: 'var(--radius-card)',
       padding: '20px',
       marginBottom: 10,
-      borderLeft: '3px solid transparent',
-      borderImage: post.relevance_score >= 0.7
-        ? 'linear-gradient(to bottom, var(--color-amber), transparent) 1'
-        : undefined,
+      borderLeft: `2px solid ${
+        Number(post.sentiment_score) >= 0.15 ? 'rgba(52,211,153,0.25)' :
+        Number(post.sentiment_score) <= -0.15 ? 'rgba(248,113,113,0.25)' :
+        'rgba(156,163,175,0.15)'
+      }`,
     }}>
       {/* Top row: sentiment badge + category + time */}
       <div style={{
@@ -259,8 +260,11 @@ function SignalCard({ post }) {
 
 const BHK_OPTIONS = ['1 BHK', '2 BHK', '3 BHK'];
 
+const LOCALITY_INITIAL_ROWS = 10;
+
 function LocalityActivityCard({ localities, rentData, navigate }) {
   const [selectedBhk, setSelectedBhk] = useState('2 BHK');
+  const [showAll, setShowAll] = useState(false);
 
   if (!localities || localities.length === 0) return null;
 
@@ -339,13 +343,13 @@ function LocalityActivityCard({ localities, rentData, navigate }) {
         <span className="type-eyebrow" style={{ color: 'var(--color-text-muted)', fontSize: '10px', width: 70, textAlign: 'right' }}>
           Avg Rent
         </span>
-        <span className="type-eyebrow" style={{ color: 'var(--color-text-muted)', fontSize: '10px', width: 70, textAlign: 'right' }}>
-          Status
+        <span className="type-eyebrow" style={{ color: 'var(--color-text-muted)', fontSize: '10px', width: 80, textAlign: 'right' }}>
+          Sentiment
         </span>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {localities.map(loc => {
+        {(showAll ? localities : localities.slice(0, LOCALITY_INITIAL_ROWS)).map(loc => {
           const arrow = sentimentArrow(loc.avg_sentiment);
           let status = 'STABLE';
           if (loc.avg_sentiment >= 0.3) status = 'OPTIMAL';
@@ -360,7 +364,7 @@ function LocalityActivityCard({ localities, rentData, navigate }) {
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
-                alignItems: 'center',
+                alignItems: 'flex-start',
                 cursor: 'pointer',
                 padding: '8px 0',
                 borderBottom: '1px solid var(--color-border)',
@@ -384,18 +388,45 @@ function LocalityActivityCard({ localities, rentData, navigate }) {
               }}>
                 {formatRent(rentInfo?.median)}
               </span>
-              <span className="type-data" style={{
-                color: arrow.color,
-                fontSize: 'var(--text-xs)',
-                width: 70,
-                textAlign: 'right',
+              <div style={{
+                width: 80,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-end',
+                gap: 2,
               }}>
-                {status}
-              </span>
+                <span className="type-data" style={{ color: arrow.color, fontSize: 'var(--text-xs)' }}>
+                  {formatScore(loc.avg_sentiment)}
+                </span>
+                <span className="type-data" style={{ color: arrow.color, fontSize: 9, opacity: 0.8 }}>
+                  {status}
+                </span>
+              </div>
             </div>
           );
         })}
       </div>
+
+      {localities.length > LOCALITY_INITIAL_ROWS && (
+        <button
+          onClick={() => setShowAll(v => !v)}
+          className="type-data"
+          style={{
+            marginTop: 12,
+            width: '100%',
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--color-amber)',
+            fontSize: 'var(--text-xs)',
+            cursor: 'pointer',
+            textAlign: 'center',
+            opacity: 0.8,
+            padding: '4px 0',
+          }}
+        >
+          {showAll ? '↑ Show less' : `↓ Show ${localities.length - LOCALITY_INITIAL_ROWS} more`}
+        </button>
+      )}
     </div>
   );
 }
@@ -445,6 +476,7 @@ export default function Pulse() {
       setCitySentimentData({
         score: feedRes.city_sentiment || 0,
         count: feedRes.city_sentiment_count || 0,
+        updatedAt: feedRes.city_sentiment_updated_at || null,
       });
 
       // Locality sentiments (server-computed)
@@ -468,14 +500,19 @@ export default function Pulse() {
   // ── Derived: aggregated city sentiment (from API, not limited to 50 posts)
 
   const citySentiment = useMemo(() => {
-    if (!citySentimentData) return { score: 0, label: 'Calibrating', count: 0 };
+    if (!citySentimentData) return { score: 0, label: 'Calibrating', count: 0, lastSignal: null };
     const avg = citySentimentData.score;
     let label = 'Neutral';
     if (avg >= 0.3) label = 'Bullish';
     else if (avg >= 0.1) label = 'Cautiously Optimistic';
     else if (avg <= -0.3) label = 'Bearish';
     else if (avg <= -0.1) label = 'Cautiously Pessimistic';
-    return { score: avg, label, count: citySentimentData.count };
+    return {
+      score: avg,
+      label,
+      count: citySentimentData.count,
+      lastSignal: citySentimentData.updatedAt ? timeAgoShort(citySentimentData.updatedAt) : null,
+    };
   }, [citySentimentData]);
 
   // ── Derived: filtered feed ────────────────────────────────────────────────
@@ -542,9 +579,20 @@ export default function Pulse() {
               <p className="type-data" style={{
                 color: 'var(--color-text-primary)',
                 fontSize: 'var(--text-sm)',
+                marginBottom: citySentiment.lastSignal ? 2 : 0,
               }}>
                 {citySentiment.label}
               </p>
+              {citySentiment.lastSignal && (
+                <p className="type-eyebrow" style={{
+                  color: 'var(--color-text-muted)',
+                  fontSize: 'var(--text-xs)',
+                  opacity: 0.5,
+                  margin: 0,
+                }}>
+                  last updated {citySentiment.lastSignal}
+                </p>
+              )}
             </div>
           </div>
         </div>
