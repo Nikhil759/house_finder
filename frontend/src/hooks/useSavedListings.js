@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
 const LS_KEY = 'nestiq_saved_listings_v2'
@@ -34,6 +34,7 @@ function migrateOldLS() {
 export function useSavedListings(user) {
   const [savedListings, setSavedListings] = useState([])
   const [loading, setLoading] = useState(true)
+  const inFlight = useRef(new Set())
 
   // Load on mount / user change
   useEffect(() => {
@@ -112,49 +113,63 @@ export function useSavedListings(user) {
   )
 
   const saveListing = useCallback(async (post) => {
-    const alreadySaved = isSaved(post.id)
+    const postId = String(post.id)
 
-    if (alreadySaved) {
-      // Unsave
-      if (user?.id) {
-        await supabase
-          .from('saved_listings')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('listing_id', String(post.id))
-      }
-      const updated = savedListings.filter(p => String(p.id) !== String(post.id))
-      setSavedListings(updated)
-      if (!user?.id) writeLS(updated)
-    } else {
-      // Save
-      const enriched = {
-        ...post,
-        _status: 'interested',
-        _notes: '',
-        _saved_at: new Date().toISOString(),
-      }
-      if (user?.id) {
-        const { data, error } = await supabase
-          .from('saved_listings')
-          .insert({
-            user_id: user.id,
-            listing_id: String(post.id),
-            status: 'interested',
-            notes: null,
-            listing_snapshot: post,
-          })
-          .select()
-          .single()
-        if (!error && data) {
-          enriched._saved_id = data.id
+    // Guard: ignore duplicate in-flight calls for the same listing
+    if (inFlight.current.has(postId)) return
+    inFlight.current.add(postId)
+
+    try {
+      const alreadySaved = isSaved(postId)
+
+      if (alreadySaved) {
+        // Optimistic remove — update UI immediately, then sync to Supabase
+        setSavedListings(prev => {
+          const updated = prev.filter(p => String(p.id) !== postId)
+          if (!user?.id) writeLS(updated)
+          return updated
+        })
+        if (user?.id) {
+          await supabase
+            .from('saved_listings')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('listing_id', postId)
         }
+      } else {
+        // Save
+        const enriched = {
+          ...post,
+          _status: 'interested',
+          _notes: '',
+          _saved_at: new Date().toISOString(),
+        }
+        if (user?.id) {
+          const { data, error } = await supabase
+            .from('saved_listings')
+            .insert({
+              user_id: user.id,
+              listing_id: postId,
+              status: 'interested',
+              notes: null,
+              listing_snapshot: post,
+            })
+            .select()
+            .single()
+          if (!error && data) {
+            enriched._saved_id = data.id
+          }
+        }
+        setSavedListings(prev => {
+          const updated = [enriched, ...prev]
+          if (!user?.id) writeLS(updated)
+          return updated
+        })
       }
-      const updated = [enriched, ...savedListings]
-      setSavedListings(updated)
-      if (!user?.id) writeLS(updated)
+    } finally {
+      inFlight.current.delete(postId)
     }
-  }, [user, savedListings, isSaved])
+  }, [user, isSaved])
 
   const updateStatus = useCallback(async (postId, newStatus) => {
     if (user?.id) {
