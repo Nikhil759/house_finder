@@ -652,6 +652,10 @@ def score_post(post):
             score += 2
         return max(0, min(100, score + 15))
 
+    # 99acres — structured source, skip broker penalty (descriptions may mention broker/agent)
+    if post.get("source") == "99acres":
+        return max(0, min(100, score + 15))
+
     broker_hits = sum(1 for s in _BROKER_SIGNALS if s in text)
     if broker_hits >= 2:
         score -= 20
