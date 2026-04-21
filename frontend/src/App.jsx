@@ -15,10 +15,11 @@ const API_BASE = import.meta.env.VITE_API_URL || "";
 const SUBREDDITS = ["r/bangalore", "r/bengaluru", "r/indianrealestate", "r/bangalorerentals", "r/FlatandFlatmatesBLR", "r/FlatmatesinBangalore"];
 
 const SOURCE_DEFS = [
-  { id: "reddit",   label: "Reddit",      iconClass: "fa-brands fa-reddit", color: "#ff4500" },
-  { id: "telegram", label: "Telegram",    iconClass: "fa-brands fa-telegram", color: "#229ed9" },
-  { id: "nobroker", label: "NoBroker",    iconClass: "fa-solid fa-building", color: "#e63946" },
-  { id: "housing",  label: "Housing.com", iconClass: "fa-solid fa-house", color: "#7c3aed" },
+  { id: "reddit",    label: "Reddit",      iconClass: "fa-brands fa-reddit", color: "#ff4500" },
+  { id: "telegram",  label: "Telegram",    iconClass: "fa-brands fa-telegram", color: "#229ed9" },
+  { id: "nobroker",  label: "NoBroker",    iconClass: "fa-solid fa-building", color: "#e63946" },
+  { id: "housing",   label: "Housing.com", iconClass: "fa-solid fa-house", color: "#7c3aed" },
+  { id: "99acres",   label: "99acres",     iconClass: "fa-solid fa-landmark", color: "#0076be" },
 ];
 
 /** True at max-width — show listing actions without relying on hover (touch / mobile). */
@@ -361,16 +362,17 @@ function PostCard({ post, index, lastVisit, isSaved, onSave, onHide, onToast }) 
   const isTelegram      = post.source === "telegram";
   const isNoBroker      = post.source === "nobroker";
   const isHousing       = post.source === "housing";
+  const is99Acres       = post.source === "99acres";
 
-  // For Reddit: extract from text. For Telegram/NoBroker/Housing: prefer server-provided fields.
-  const bodyText = (isTelegram || isNoBroker || isHousing) ? (post.body || "") : (post.selftext || "");
+  // For Reddit: extract from text. For Telegram/NoBroker/Housing/99acres: prefer server-provided fields.
+  const bodyText = (isTelegram || isNoBroker || isHousing || is99Acres) ? (post.body || "") : (post.selftext || "");
   const { bhk: clientBhk, locality: clientLocality, price: clientPrice, furnished: clientFurnished, phone: clientPhone } =
     extractListingInfo(post.title, bodyText);
 
-  const displayPrice = (isTelegram || isNoBroker || isHousing)
+  const displayPrice = (isTelegram || isNoBroker || isHousing || is99Acres)
     ? formatPriceValue(post.price, post.price_formatted)
     : (clientPrice || post.price);
-  const displayContact  = (isNoBroker || isHousing) ? null : (isTelegram ? post.contact : (clientPhone || post.contact));
+  const displayContact  = (isNoBroker || isHousing || is99Acres) ? null : (isTelegram ? post.contact : (clientPhone || post.contact));
   const displayBhk      = (isNoBroker || isHousing) ? post.bhk      : (isTelegram ? (post.bhk      || clientBhk)      : clientBhk);
   const displayLocality = (isNoBroker || isHousing) ? post.locality  : (isTelegram ? (post.locality || clientLocality) : clientLocality);
   const displayFurnished = (isNoBroker || isHousing) ? post.furnishing : (isTelegram ? (post.furnishing || clientFurnished) : clientFurnished);
@@ -873,16 +875,17 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
   const isTelegram      = post.source === "telegram";
   const isNoBroker      = post.source === "nobroker";
   const isHousing       = post.source === "housing";
-  const accentColor     = isHousing ? "#7c3aed" : isNoBroker ? "#e63946" : isTelegram ? "#229ed9" : "#ff4500";
+  const is99Acres       = post.source === "99acres";
+  const accentColor     = isHousing ? "#7c3aed" : isNoBroker ? "#e63946" : isTelegram ? "#229ed9" : is99Acres ? "#0076be" : "#ff4500";
 
-  const bodyText = (isTelegram || isNoBroker || isHousing) ? (post.body || "") : (post.selftext || "");
+  const bodyText = (isTelegram || isNoBroker || isHousing || is99Acres) ? (post.body || "") : (post.selftext || "");
   const { bhk: clientBhk, locality: clientLocality, price: clientPrice, furnished: clientFurnished, phone: clientPhone } =
     extractListingInfo(post.title, bodyText);
-  const displayPrice = (isTelegram || isNoBroker || isHousing)
+  const displayPrice = (isTelegram || isNoBroker || isHousing || is99Acres)
     ? formatPriceValue(post.price, post.price_formatted)
     : (clientPrice || post.price);
-  const displayContact   = (isNoBroker || isHousing) ? null : (isTelegram ? post.contact : (clientPhone || post.contact));
-  const displayBhk       = (isNoBroker || isHousing) ? post.bhk       : (isTelegram ? (post.bhk       || clientBhk)       : clientBhk);
+  const displayContact   = (isNoBroker || isHousing || is99Acres) ? null : (isTelegram ? post.contact : (clientPhone || post.contact));
+  const displayBhk       = (isNoBroker || isHousing || is99Acres) ? post.bhk       : (isTelegram ? (post.bhk       || clientBhk)       : clientBhk);
   const displayLocality  = (isNoBroker || isHousing) ? post.locality   : (isTelegram ? (post.locality  || clientLocality)  : clientLocality);
   const displayFurnished = (isNoBroker || isHousing) ? post.furnishing : (isTelegram ? (post.furnishing || clientFurnished) : clientFurnished);
 
@@ -1036,6 +1039,8 @@ function PostTile({ post, lastVisit, isSaved, onSave, onHide, onToast }) {
             ? (post.society || post.owner_name
                 ? `${post.society || ""}${post.society && post.owner_name ? " · " : ""}${post.owner_name ? "Owner: " + post.owner_name : ""}`
                 : "nobroker.in")
+            : is99Acres
+            ? "99acres.com"
             : isTelegram ? post.group : `r/${post.subreddit}`}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -1753,6 +1758,11 @@ function buildScoreBreakdown(post) {
     return rows;
   }
 
+  if (post.source === "99acres") {
+    rows.push({ pts: +15, label: "99acres trust bonus (structured listing)" });
+    return rows;
+  }
+
   const brokerHits = _BK_BROKER.filter(s => text.includes(s));
   if (brokerHits.length >= 2)      rows.push({ pts: -20, label: `Broker signals (${brokerHits.slice(0,2).join(", ")})` });
   else if (brokerHits.length === 1) rows.push({ pts: -10, label: `Broker signal ("${brokerHits[0]}")` });
@@ -1974,7 +1984,7 @@ export default function App() {
   const [keywords,       setKeywords]       = useState("");
   const [sortBy,         setSortBy]         = useState("score");
   const [minScore,       setMinScore]       = useState(20);
-  const [sources,        setSources]        = useState({ reddit: true, telegram: true, nobroker: true, housing: true });
+  const [sources,        setSources]        = useState({ reddit: true, telegram: true, nobroker: true, housing: true, '99acres': true });
   const [posts,          setPosts]          = useState([]);
   const [loading,        setLoading]        = useState(false);
   const [error,          setError]          = useState("");
@@ -2146,7 +2156,7 @@ export default function App() {
     } else { setBudgetMax(0); setBudgetMin(0); }
     setKeywords(s.keywords || "");
     if (s.sources) {
-      const srcMap = { reddit: false, telegram: false, nobroker: false, housing: false };
+      const srcMap = { reddit: false, telegram: false, nobroker: false, housing: false, '99acres': false };
       s.sources.forEach(src => { if (src in srcMap) srcMap[src] = true; });
       setSources(srcMap);
     }
@@ -2689,7 +2699,8 @@ export default function App() {
               const telegramCount = sorted.filter(p => p.source === "telegram").length;
               const nobrokerCount = sorted.filter(p => p.source === "nobroker").length;
               const housingCount  = sorted.filter(p => p.source === "housing").length;
-              const multiSource   = (redditCount > 0 ? 1 : 0) + (telegramCount > 0 ? 1 : 0) + (nobrokerCount > 0 ? 1 : 0) + (housingCount > 0 ? 1 : 0) > 1;
+              const acresCount    = sorted.filter(p => p.source === "99acres").length;
+              const multiSource   = (redditCount > 0 ? 1 : 0) + (telegramCount > 0 ? 1 : 0) + (nobrokerCount > 0 ? 1 : 0) + (housingCount > 0 ? 1 : 0) + (acresCount > 0 ? 1 : 0) > 1;
               return (
                 <>
                   {newCount > 0 && viewMode !== "map" && (
@@ -2762,6 +2773,12 @@ export default function App() {
                             <span style={{ color: "#7c3aed", display: "inline-flex", alignItems: "center", gap: "5px" }}>
                               <FaIcon name="fa-solid fa-house" size={10} />
                               <span>{housingCount} Housing.com</span>
+                            </span>
+                          )}
+                          {acresCount > 0 && (
+                            <span style={{ color: "#0076be", display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                              <FaIcon name="fa-solid fa-landmark" size={10} />
+                              <span>{acresCount} 99acres</span>
                             </span>
                           )}
                         </span>

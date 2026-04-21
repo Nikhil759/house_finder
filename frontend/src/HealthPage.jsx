@@ -5,10 +5,11 @@ import Navbar from "./components/Navbar";
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
 const SOURCE_META = {
-  reddit:   { label: "Reddit",      icon: "🟠", ttlHours: 7,  refreshLabel: "Cron job every 6h (local machine)" },
-  telegram: { label: "Telegram",    icon: "✈️",  ttlHours: 4,  refreshLabel: "Background worker every 3h" },
-  nobroker: { label: "NoBroker",    icon: "🔴", ttlHours: 4,  refreshLabel: "Background worker every 3h" },
-  housing:  { label: "Housing.com", icon: "🏠", ttlHours: 4,  refreshLabel: "Background worker every 3h" },
+  reddit:    { label: "Reddit",      icon: "🟠", ttlHours: 7,  refreshLabel: "Cron job every 6h (local machine)" },
+  telegram:  { label: "Telegram",    icon: "✈️",  ttlHours: 4,  refreshLabel: "Background worker every 3h" },
+  nobroker:  { label: "NoBroker",    icon: "🔴", ttlHours: 4,  refreshLabel: "Background worker every 3h" },
+  housing:   { label: "Housing.com", icon: "🏠", ttlHours: 4,  refreshLabel: "Background worker every 3h" },
+  '99acres': { label: "99acres",     icon: "🏷️", ttlHours: 4,  refreshLabel: "Railway cron every 3h" },
 };
 
 const FEED_SOURCE_META = {
@@ -748,7 +749,7 @@ export default function HealthPage() {
   const cardBord = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
 
   const bySource = data?.by_source || {};
-  const allSourceIds = ["reddit", "telegram", "nobroker", "housing"];
+  const allSourceIds = ["reddit", "telegram", "nobroker", "housing", "99acres"];
   const totalAllSources = data?.total_listings_all ?? null;
 
   const overallStatus = allSourceIds.every(s => statusFor(s, bySource[s]) === "ok")

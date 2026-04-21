@@ -23,10 +23,11 @@ const NOMINATIM_VIEWBOX = '77.35,13.22,77.85,12.75'; // west, north, east, south
 
 // ── Source config ─────────────────────────────────────────────────────────────
 const SOURCE_CONFIG = {
-  reddit:   { label: 'Reddit',      color: '#F97316', icon: 'fa-brands fa-reddit-alien' },
-  nobroker: { label: 'NoBroker',    color: '#E63946', icon: 'fa-solid fa-house' },
-  housing:  { label: 'Housing.com', color: '#7C3AED', icon: 'fa-solid fa-building' },
-  telegram: { label: 'Telegram',    color: '#38BDF8', icon: 'fa-brands fa-telegram' },
+  reddit:    { label: 'Reddit',      color: '#F97316', icon: 'fa-brands fa-reddit-alien' },
+  nobroker:  { label: 'NoBroker',    color: '#E63946', icon: 'fa-solid fa-house' },
+  housing:   { label: 'Housing.com', color: '#7C3AED', icon: 'fa-solid fa-building' },
+  telegram:  { label: 'Telegram',    color: '#38BDF8', icon: 'fa-brands fa-telegram' },
+  '99acres': { label: '99acres',     color: '#0076BE', icon: 'fa-solid fa-landmark' },
 };
 
 const SOURCE_LABELS = Object.fromEntries(
@@ -77,7 +78,7 @@ const DEFAULT_FILTERS = {
   maxBudget: '',
   furnished: 'Any',
   keywords:  '',
-  sources:   { reddit: true, nobroker: true, housing: true, telegram: true },
+  sources:   { reddit: true, nobroker: true, housing: true, telegram: true, '99acres': true },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -102,7 +103,7 @@ function scoreColor(score) {
   return '#555555';                               // muted gray
 }
 
-const KNOWN_SOURCES = new Set(['reddit', 'nobroker', 'telegram', 'housing']);
+const KNOWN_SOURCES = new Set(['reddit', 'nobroker', 'telegram', 'housing', '99acres']);
 
 // Always returns a stable compound ID: "{source}_{source_id}"
 // Handles: DB listings (already compound), live NoBroker cache (nb_xxx), live Reddit (bare id)
@@ -1386,7 +1387,7 @@ export default function Search() {
     setLoading(true);
     const isDefaultLoad = !area;
     const params = new URLSearchParams({
-      sources:   'reddit,telegram,nobroker,housing',
+      sources:   'reddit,telegram,nobroker,housing,99acres',
       sort:      'score',
       min_score: isDefaultLoad ? 40 : 20,
       limit:     isDefaultLoad ? 20 : 50,
@@ -1598,7 +1599,7 @@ export default function Search() {
   const communityActive = quickFilters.has('community');
   Object.entries(SOURCE_CONFIG).forEach(([key, cfg]) => {
     if (!activeFilters.sources[key]) {
-      if (communityActive && (key === 'nobroker' || key === 'housing')) return;
+                  if (communityActive && (key === 'nobroker' || key === 'housing' || key === '99acres')) return;
       activePills.push(`No ${cfg.label}`);
     }
   });
@@ -1629,11 +1630,11 @@ export default function Search() {
   function toggleSourceFilter(rawSource) {
     // If community filter is active and user re-enables nobroker or housing,
     // treat it as "exit community mode" and turn that source back on
-    if (quickFilters.has('community') && (rawSource === 'nobroker' || rawSource === 'housing')) {
+    if (quickFilters.has('community') && (rawSource === 'nobroker' || rawSource === 'housing' || rawSource === '99acres')) {
       setQuickFilters(prev => { const n = new Set(prev); n.delete('community'); return n; });
       setActiveFilters(prev => ({
         ...prev,
-        sources: { ...prev.sources, nobroker: true, housing: true },
+        sources: { ...prev.sources, nobroker: true, housing: true, '99acres': true },
       }));
     } else {
       setActiveFilters(prev => ({
@@ -2478,8 +2479,9 @@ export default function Search() {
                       ...f,
                       sources: {
                         ...f.sources,
-                        nobroker: !turning_on,
-                        housing:  !turning_on,
+                        nobroker:  !turning_on,
+                        housing:   !turning_on,
+                        '99acres': !turning_on,
                       },
                     }));
                   }
@@ -2564,7 +2566,7 @@ export default function Search() {
                 onClick={() => {
                   setQuickFilters(prev => { const n = new Set(prev); n.delete(key); return n; });
                   if (key === 'community') {
-                    setActiveFilters(f => ({ ...f, sources: { ...f.sources, nobroker: true, housing: true } }));
+                    setActiveFilters(f => ({ ...f, sources: { ...f.sources, nobroker: true, housing: true, '99acres': true } }));
                   }
                   setPage(1);
                 }}

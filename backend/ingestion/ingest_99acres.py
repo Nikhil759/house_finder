@@ -92,11 +92,21 @@ LOCALITY_SLUGS: dict[str, str] = {
     # ── North ─────────────────────────────────────────────────────────────────
     "Hebbal":            "hebbal-bangalore-north-ffid",
     "Yelahanka":         "yelahanka-bangalore-north-ffid",
-    "HBR Layout":        "hbr-layout-bangalore-north-ffid",
-    # ── Northwest ─────────────────────────────────────────────────────────────
-    "Rajajinagar":       "rajajinagar-bangalore-northwest-ffid",
-    "Malleshwaram":      "malleshwaram-bangalore-northwest-ffid",
-    "Yeshwanthpur":      "yeshwanthpur-bangalore-northwest-ffid",
+    # ── Northwest / West (use search-URL format — no ffid SRP exists) ─────────
+    "HBR Layout":        "_search_hbr-layout-bangalore",
+    "Rajajinagar":       "_search_rajajinagar-bangalore",
+    "Malleshwaram":      "_search_malleshwaram-bangalore-north",
+    "Yeshwanthpur":      "_search_yeshwanthpur-bangalore",
+}
+
+# Localities whose SRP pages live under the search URL format rather than the
+# canonical /property-for-rent-in-{slug}-ffid path.  Values are the base query
+# string (without &page=N) that gets appended for these localities.
+_SEARCH_URL_BASES: dict[str, str] = {
+    "_search_hbr-layout-bangalore":        "https://www.99acres.com/search/property/rent/hbr-layout-bangalore?city=22&locality=5260&preference=R&area_unit=1&budget_min=0&res_com=R&isPreLeased=N",
+    "_search_rajajinagar-bangalore":        "https://www.99acres.com/search/property/rent/rajajinagar-bangalore?city=252&locality=2367&preference=R&area_unit=1&budget_min=0&res_com=R&isPreLeased=N",
+    "_search_malleshwaram-bangalore-north": "https://www.99acres.com/search/property/rent/malleshwaram-bangalore-north?city=21&locality=358&preference=R&area_unit=1&budget_min=0&res_com=R&isPreLeased=N",
+    "_search_yeshwanthpur-bangalore":       "https://www.99acres.com/search/property/rent/yeshwanthpur-bangalore?city=252&locality=7973&preference=R&area_unit=1&budget_min=0&res_com=R&isPreLeased=N",
 }
 
 # JSON-LD @type values that represent individual property listings.
@@ -187,8 +197,11 @@ def _build_session():
 # ── HTTP fetch ─────────────────────────────────────────────────────────────────
 
 def _build_url(slug: str, page: int) -> str:
-    # Slug already includes the "-ffid" suffix (e.g. "koramangala-bangalore-south-ffid")
-    # Full SRP pattern: https://www.99acres.com/property-for-rent-in-<slug>
+    if slug in _SEARCH_URL_BASES:
+        # Search-format URL — params already in the base; append &page=N for p>1
+        base = _SEARCH_URL_BASES[slug]
+        return base if page == 1 else f"{base}&page={page}"
+    # Standard SRP format: /property-for-rent-in-{slug}-ffid
     base = f"https://www.99acres.com/property-for-rent-in-{slug}"
     return base if page == 1 else f"{base}?page={page}"
 
