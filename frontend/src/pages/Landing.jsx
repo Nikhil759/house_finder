@@ -363,7 +363,7 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
 
               <input
                 type="text"
-                placeholder="Whitefield, HSR Layout, Korama..."
+                placeholder="Whitefield, HSR Layout, Koramangala, Indiranagar…"
                 value={searchValue}
                 onChange={e => setSearchValue(e.target.value)}
                 onFocus={() => setIsFocused(true)}

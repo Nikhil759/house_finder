@@ -4,6 +4,8 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faLaptopCode, faBuilding, faTree, faBeerMugEmpty,
   faHammer, faWater, faHouse, faBolt,
+  faCity, faRoad, faLeaf, faStar, faUmbrellaBeach,
+  faTrain, faShop, faSchool,
 } from '@fortawesome/free-solid-svg-icons';
 import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
@@ -16,19 +18,8 @@ import { useDesktop } from '../hooks/useDesktop';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
-// ── Locality autocomplete list (mirrors App.jsx) ──────────────────────────────
-const BANGALORE_AREAS = [
-  'Indiranagar', 'Whitefield', 'Koramangala', 'HSR Layout', 'HSR',
-  'Bellandur', 'Marathahalli', 'Sarjapur Road', 'Sarjapur', 'BTM Layout', 'BTM',
-  'Jayanagar', 'Hebbal', 'Yelahanka', 'Electronic City', 'Bannerghatta',
-  'Cunningham Road', 'MG Road', 'Frazer Town', 'Banaswadi', 'Hoodi',
-  'KR Puram', 'Domlur', 'Madiwala', 'Bommanahalli', 'Brookefield',
-  'Kadubeesanahalli', 'Panathur', 'Varthur', 'Thubarahalli', 'Kadugodi',
-  'JP Nagar', 'Banashankari', 'Rajajinagar', 'Malleshwaram', 'Yeshwanthpur',
-  'Nagawara', 'HBR Layout', 'CV Raman Nagar', 'Old Airport Road',
-  'ITPL', 'Manyata', 'Thanisandra', 'Hennur', 'Kalyan Nagar', 'RT Nagar',
-  'Ejipura', 'Ulsoor', 'Basavanagudi', 'Sadashivanagar', 'Vijayanagar', 'Kengeri',
-];
+// Nominatim search bounding box for Bangalore
+const NOMINATIM_VIEWBOX = '77.35,13.22,77.85,12.75'; // west, north, east, south
 
 // ── Source config ─────────────────────────────────────────────────────────────
 const SOURCE_CONFIG = {
@@ -47,14 +38,24 @@ const BHK_OPTIONS       = ['Studio', '1', '2', '3', '4+'];
 const FURNISHED_OPTIONS = ['Any', 'Furnished', 'Unfurnished'];
 
 const LOCALITY_CHIPS = [
-  { label: 'Koramangala',    icon: faBeerMugEmpty },
-  { label: 'HSR Layout',     icon: faLaptopCode   },
-  { label: 'Whitefield',     icon: faBuilding     },
-  { label: 'Indiranagar',    icon: faTree         },
-  { label: 'Hoodi',          icon: faHammer       },
-  { label: 'Bellandur',      icon: faWater        },
-  { label: 'BTM Layout',     icon: faHouse        },
-  { label: 'Electronic City',icon: faBolt         },
+  { label: 'Koramangala',    icon: faBeerMugEmpty  },
+  { label: 'HSR Layout',     icon: faLaptopCode    },
+  { label: 'Indiranagar',    icon: faTree          },
+  { label: 'Whitefield',     icon: faBuilding      },
+  { label: 'Marathahalli',   icon: faRoad          },
+  { label: 'Sarjapur Road',  icon: faCity          },
+  { label: 'Bellandur',      icon: faWater         },
+  { label: 'BTM Layout',     icon: faHouse         },
+  { label: 'Hoodi',          icon: faHammer        },
+  { label: 'Electronic City',icon: faBolt          },
+  { label: 'Hebbal',         icon: faTrain         },
+  { label: 'Jayanagar',      icon: faLeaf          },
+  { label: 'JP Nagar',       icon: faSchool        },
+  { label: 'Malleshwaram',   icon: faShop          },
+  { label: 'Banaswadi',      icon: faStar          },
+  { label: 'Yelahanka',      icon: faUmbrellaBeach },
+  { label: 'Banashankari',   icon: faHouse         },
+  { label: 'Bannerghatta',   icon: faLeaf          },
 ];
 
 const QUICK_FILTERS = [
@@ -1242,9 +1243,9 @@ function SearchMapView({ listings }) {
   return (
     <div>
       <style>{`
-        .search-map-container { height: 560px; border-radius: 10px; overflow: hidden; border: 1px solid var(--color-border); }
+        .search-map-container { height: 560px; border-radius: 10px; overflow: hidden; border: 1px solid var(--color-border); isolation: isolate; }
         @media (min-width: 769px) { .search-map-container { height: calc(100vh - 270px); min-height: 400px; } }
-        @media (max-width: 768px) { .search-map-container { height: 58vh; min-height: 300px; } }
+        @media (max-width: 768px) { .search-map-container { height: calc(100svh - 210px); min-height: 300px; } }
         .dark-popup .leaflet-popup-content-wrapper { background:#13131f!important;border:1px solid #2a2a3a!important;border-radius:10px!important;box-shadow:0 8px 32px rgba(0,0,0,0.8)!important;padding:0!important; }
         .dark-popup .leaflet-popup-content { margin:14px 16px!important; }
         .dark-popup .leaflet-popup-tip { background:#13131f!important; }
@@ -1290,404 +1291,8 @@ function haversineKm(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.asin(Math.sqrt(a));
 }
 
-// ── Geo-radius modal (bottom sheet) ──────────────────────────────────────────
-const GEO_RADIUS_OPTIONS = [1, 2, 5, 10, 15, 20];
+const GEO_RADIUS_OPTIONS = [1, 5, 10];
 
-function GeoRadiusModal({ open, onClose, onApply, onClear, currentPin, currentRadius, currentLabel }) {
-  const mapContainerRef = useRef(null);
-  const mapRef          = useRef(null);
-  const markerRef       = useRef(null);
-  const circleRef       = useRef(null);
-
-  const [pin, setPin]           = useState(currentPin  || null);
-  const [radius, setRadius]     = useState(currentRadius || 5);
-  const [locInput, setLocInput] = useState('');
-  const [suggestions, setSuggestions] = useState([]); // [{name, lat, lng}]
-  const [searching, setSearching]     = useState(false);
-  const debounceRef = useRef(null);
-
-  // Sync incoming values when opening
-  useEffect(() => {
-    if (open) {
-      setPin(currentPin || null);
-      setRadius(currentRadius || 5);
-      setLocInput(currentPin ? (currentLabel || '') : '');
-      setSuggestions([]);
-    }
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Init/destroy Leaflet map when sheet opens/closes
-  useEffect(() => {
-    if (!open) return;
-    const L = window.L;
-    if (!L) return;
-
-    // Wait one tick for the container to mount
-    const tid = setTimeout(() => {
-      if (!mapContainerRef.current || mapRef.current) return;
-      const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-      const tile = isDark
-        ? 'https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png'
-        : 'https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png';
-
-      const initialCenter = currentPin ? [currentPin.lat, currentPin.lng] : [12.9716, 77.5946];
-      const map = L.map(mapContainerRef.current, {
-        center: initialCenter,
-        zoom: currentPin ? 13 : 12,
-        preferCanvas: true,
-        zoomControl: false, // added manually below at bottom-right
-      });
-      L.control.zoom({ position: 'bottomright' }).addTo(map);
-      L.tileLayer(tile, { attribution: '© OSM contributors © CartoDB', maxZoom: 19 }).addTo(map);
-
-      map.on('click', (e) => {
-        setPin({ lat: e.latlng.lat, lng: e.latlng.lng });
-      });
-
-      mapRef.current = map;
-    }, 80);
-
-    return () => {
-      clearTimeout(tid);
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current  = null;
-        markerRef.current = null;
-        circleRef.current = null;
-      }
-    };
-  }, [open]);
-
-  // Update pin marker + radius circle whenever pin or radius changes
-  useEffect(() => {
-    const L   = window.L;
-    const map = mapRef.current;
-    if (!L || !map) return;
-
-    if (markerRef.current) { markerRef.current.remove(); markerRef.current = null; }
-    if (circleRef.current) { circleRef.current.remove(); circleRef.current = null; }
-
-    if (!pin) return;
-
-    const label = locInput.trim();
-    markerRef.current = L.marker([pin.lat, pin.lng], {
-      icon: L.divIcon({
-        html: `<div style="position:relative;width:28px;height:28px;">
-          <div style="position:absolute;top:50%;left:0;right:0;height:1px;background:#E8A020;transform:translateY(-50%);opacity:0.7;"></div>
-          <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:#E8A020;transform:translateX(-50%);opacity:0.7;"></div>
-          <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-            width:12px;height:12px;border-radius:50%;
-            background:#E8A020;border:2.5px solid #fff;
-            box-shadow:0 2px 10px rgba(232,160,32,0.7);
-          "></div>
-          ${label ? `<div style="
-            position:absolute;top:18px;left:50%;transform:translateX(-50%);
-            color:#E8A020;
-            font-family:'DM Sans',sans-serif;font-size:11px;font-weight:500;
-            white-space:nowrap;
-            text-shadow:0 1px 4px rgba(0,0,0,0.9),0 0 8px rgba(0,0,0,0.8);
-            pointer-events:none;
-          ">${label}</div>` : ''}
-        </div>`,
-        className: '',
-        iconSize:   [28, 28],
-        iconAnchor: [14, 14],
-      }),
-    }).addTo(map);
-
-    circleRef.current = L.circle([pin.lat, pin.lng], {
-      radius:      radius * 1000,
-      color:       '#E8A020',
-      weight:      1.5,
-      fillColor:   '#E8A020',
-      fillOpacity: 0.08,
-      dashArray:   '5 5',
-    }).addTo(map);
-
-    // Fit the map view to the circle bounds so the full radius is always visible
-    map.fitBounds(circleRef.current.getBounds(), { padding: [24, 24], maxZoom: 15 });
-  }, [pin, radius, locInput]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function handleLocInput(val) {
-    setLocInput(val);
-    clearTimeout(debounceRef.current);
-
-    if (!val.trim() || val.trim().length < 2) {
-      setSuggestions([]);
-      setSearching(false);
-      return;
-    }
-
-    // ── 1. Instant local results from known localities ────────────────────────
-    const lower = val.toLowerCase();
-    const localHits = Object.keys(LOCALITY_COORDS)
-      .filter(k => k.toLowerCase().includes(lower))
-      .slice(0, 3)
-      .map(name => ({
-        name,
-        sub: 'Bangalore locality',
-        lat: LOCALITY_COORDS[name][0],
-        lng: LOCALITY_COORDS[name][1],
-        local: true,
-      }));
-    setSuggestions(localHits);
-    setSearching(true);
-
-    // ── 2. Debounced Nominatim search (bounding box = Bangalore, no city suffix) ─
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const q       = encodeURIComponent(val.trim());
-        const viewbox = '77.35,13.22,77.85,12.75'; // west, north, east, south
-        const url     = `https://nominatim.openstreetmap.org/search?format=json&q=${q}&limit=7&countrycodes=in&viewbox=${viewbox}&bounded=0&addressdetails=1`;
-        const res  = await fetch(url, { headers: { 'Accept-Language': 'en' } });
-        const data = await res.json();
-
-        const remote = data.map(r => {
-          const parts = r.display_name.split(',');
-          return {
-            name: parts.slice(0, 2).join(', ').trim(),
-            sub:  parts.slice(2, 4).join(', ').trim() || r.type,
-            lat:  parseFloat(r.lat),
-            lng:  parseFloat(r.lon),
-            local: false,
-          };
-        });
-
-        // Merge: local first, remote after (skip duplicates)
-        const merged = [
-          ...localHits,
-          ...remote.filter(r =>
-            !localHits.some(l => l.name.toLowerCase() === r.name.toLowerCase())
-          ),
-        ].slice(0, 8);
-
-        setSuggestions(merged.length > 0 ? merged : [{ __empty: true }]);
-      } catch {
-        if (localHits.length === 0) setSuggestions([{ __empty: true }]);
-      } finally {
-        setSearching(false);
-      }
-    }, 380);
-  }
-
-  function pickSuggestion(s) {
-    if (s.__empty) return;
-    setPin({ lat: s.lat, lng: s.lng });
-    setLocInput(s.name);
-    setSuggestions([]);
-  }
-
-  if (!open) return null;
-
-  const canApply = pin !== null;
-
-  return (
-    <>
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        style={{
-          position: 'fixed', inset: 0, zIndex: 2000,
-          background: 'rgba(0,0,0,0.65)',
-          backdropFilter: 'blur(2px)',
-          WebkitBackdropFilter: 'blur(2px)',
-        }}
-      />
-
-      {/* Sheet */}
-      <div className="geo-radius-modal-sheet" style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 2001,
-        background: '#111111',
-        borderRadius: '16px 16px 0 0',
-        display: 'flex', flexDirection: 'column',
-        maxHeight: '90vh',
-        animation: 'slideUp 0.25s ease-out',
-      }}>
-        {/* Drag handle */}
-        <div className="geo-modal-drag-handle" style={{ display: 'flex', justifyContent: 'center', paddingTop: 14, paddingBottom: 6 }}>
-          <div style={{ width: 40, height: 4, background: '#333', borderRadius: 2 }} />
-        </div>
-
-        {/* Header */}
-        <div style={{
-          padding: '6px 20px 14px',
-          borderBottom: '1px solid var(--color-border)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontFamily: 'var(--font-sans)', fontSize: 16, fontWeight: 400, letterSpacing: '-0.01em' }}>
-              Search by area
-            </span>
-            <button
-              onClick={onClose}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: 18, padding: 4 }}
-            >×</button>
-          </div>
-          <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--color-text-muted)', margin: '4px 0 0', lineHeight: 1.5 }}>
-            Type a landmark or tap anywhere on the map, then pick a radius to see only listings nearby.
-          </p>
-        </div>
-
-        {/* Location input — lives OUTSIDE the scroll container so the dropdown isn't clipped.
-            zIndex: 1100 beats Leaflet's control panes (.leaflet-top z-index:1000) which share
-            the sheet's stacking context because .leaflet-container has no z-index of its own. */}
-        <div style={{ position: 'relative', padding: '12px 20px 0', zIndex: 1100 }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            background: 'var(--color-bg-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 10, padding: '10px 14px',
-          }}>
-            <i className="fa-solid fa-magnifying-glass" style={{ color: 'var(--color-text-muted)', fontSize: 12 }} />
-            <input
-              value={locInput}
-              onChange={e => handleLocInput(e.target.value)}
-              onBlur={() => setTimeout(() => setSuggestions([]), 150)}
-              placeholder="Locality or landmark…"
-              style={{
-                flex: 1, background: 'transparent', border: 'none', outline: 'none',
-                fontFamily: 'var(--font-sans)', fontSize: 14,
-                color: 'var(--color-text-primary)',
-              }}
-            />
-            {locInput && (
-              <button
-                onMouseDown={() => { setLocInput(''); setSuggestions([]); clearTimeout(debounceRef.current); setSearching(false); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: 0, fontSize: 14 }}
-              >×</button>
-            )}
-            {searching && (
-              <i className="fa-solid fa-spinner fa-spin" style={{ color: 'var(--color-text-muted)', fontSize: 11 }} />
-            )}
-          </div>
-          {suggestions.length > 0 && (
-            <ul style={{
-              position: 'absolute', top: 'calc(100% + 2px)', left: 0, right: 0, zIndex: 1000,
-              margin: 0, padding: '4px 0', listStyle: 'none',
-              background: '#16161f', border: '1px solid var(--color-border)',
-              borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.7)',
-            }}>
-              {suggestions.map((s, i) => s.__empty ? (
-                <li key="empty" style={{
-                  padding: '14px 14px',
-                  fontFamily: 'var(--font-sans)', fontSize: 13,
-                  color: 'var(--color-text-muted)', fontStyle: 'italic',
-                  display: 'flex', alignItems: 'center', gap: 8,
-                }}>
-                  <i className="fa-solid fa-circle-xmark" style={{ fontSize: 12, opacity: 0.5 }} />
-                  Not found in map data — tap the map to pin manually
-                </li>
-              ) : (
-                <li
-                  key={i}
-                  onMouseDown={() => pickSuggestion(s)}
-                  style={{
-                    display: 'flex', alignItems: 'flex-start', gap: 10,
-                    padding: '9px 14px',
-                    cursor: 'pointer',
-                    borderBottom: i < suggestions.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(232,160,32,0.08)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                >
-                  <i
-                    className={s.local ? 'fa-solid fa-map-pin' : 'fa-solid fa-location-dot'}
-                    style={{ fontSize: 11, color: s.local ? '#E8A020' : 'var(--color-text-muted)', marginTop: 3, flexShrink: 0 }}
-                  />
-                  <div>
-                    <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--color-text-primary)', lineHeight: 1.35 }}>
-                      {s.name}
-                    </div>
-                    {s.sub && (
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)', letterSpacing: '0.03em', marginTop: 1 }}>
-                        {s.sub}
-                      </div>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* Scrollable body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px 0' }}>
-
-          {/* Hint */}
-          <p style={{
-            fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em',
-            color: 'var(--color-text-muted)', marginBottom: 10,
-            textAlign: 'center',
-          }}>
-            {pin ? '📍 Location set — adjust radius below' : 'Tap the map to pin any location'}
-          </p>
-
-          {/* Map */}
-          <div
-            ref={mapContainerRef}
-            className="geo-modal-map"
-            style={{
-              height: 240, borderRadius: 10, overflow: 'hidden',
-              border: '1px solid var(--color-border)', marginBottom: 16,
-            }}
-          />
-
-          {/* Radius selector */}
-          <p style={{
-            fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em',
-            textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 10,
-          }}>Radius</p>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-            {GEO_RADIUS_OPTIONS.map(km => (
-              <button
-                key={km}
-                onClick={() => setRadius(km)}
-                style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.04em',
-                  background: radius === km ? 'rgba(232,160,32,0.15)' : 'var(--color-bg-surface)',
-                  color: radius === km ? '#E8A020' : 'var(--color-text-muted)',
-                  border: `1px solid ${radius === km ? 'rgba(232,160,32,0.5)' : 'var(--color-border)'}`,
-                  borderRadius: 8, padding: '6px 14px', cursor: 'pointer',
-                  transition: 'all 0.15s',
-                }}
-              >{km} km</button>
-            ))}
-          </div>
-        </div>
-
-        {/* Footer buttons */}
-        <div style={{
-          display: 'flex', gap: 10, padding: '14px 20px 28px',
-          borderTop: '1px solid var(--color-border)',
-        }}>
-          <button
-            onClick={() => { onClear(); onClose(); }}
-            style={{
-              flex: 1, fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.06em',
-              background: 'var(--color-bg-surface)',
-              color: 'var(--color-text-muted)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 10, padding: '12px 0', cursor: 'pointer',
-            }}
-          >Clear</button>
-          <button
-            onClick={() => { if (canApply) { onApply(pin, radius, locInput.trim()); onClose(); } }}
-            disabled={!canApply}
-            style={{
-              flex: 2, fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.06em',
-              background: canApply ? 'rgba(232,160,32,0.15)' : 'var(--color-bg-surface)',
-              color: canApply ? '#E8A020' : 'var(--color-text-muted)',
-              border: `1px solid ${canApply ? 'rgba(232,160,32,0.4)' : 'var(--color-border)'}`,
-              borderRadius: 10, padding: '12px 0', cursor: canApply ? 'pointer' : 'not-allowed',
-              transition: 'all 0.15s',
-            }}
-          >
-            {canApply ? `Show listings within ${radius} km` : 'Pin a location first'}
-          </button>
-        </div>
-      </div>
-    </>
-  );
-}
 
 function SkeletonCard() {
   return (
@@ -1728,6 +1333,8 @@ export default function Search() {
   })();
 
   const [query, setQuery]             = useState(searchParams.get('q') || '');
+  // Separate from `query` (live input) — only updates when a search is actually committed
+  const [searchedLabel, setSearchedLabel] = useState(searchParams.get('q') || '');
   const [view, setView]               = useState(_saved.view  || searchParams.get('view') || 'grid');
   const [sort, setSort]               = useState(_saved.sort  || searchParams.get('sort') || 'Score');
   const [activeFilters, setActiveFilters] = useState(() => _saved.activeFilters ?? ({
@@ -1735,17 +1342,17 @@ export default function Search() {
     sources: { ...DEFAULT_FILTERS.sources },
   }));
   const [sheetOpen, setSheetOpen]     = useState(false);
-  const [geoOpen, setGeoOpen]         = useState(false);
   const [geoPin, setGeoPin]           = useState(_saved.geoPin    ?? null);
-  const [geoRadius, setGeoRadius]     = useState(_saved.geoRadius ?? 5);
+  const [geoRadius, setGeoRadius]     = useState(GEO_RADIUS_OPTIONS.includes(_saved.geoRadius) ? _saved.geoRadius : 5);
   const [geoActive, setGeoActive]     = useState(_saved.geoActive ?? false);
   const [geoLabel, setGeoLabel]       = useState(_saved.geoLabel  ?? '');
   const isDesktop = useDesktop();
   const [activeLocality, setActiveLocality] = useState(null);
   const [quickFilters, setQuickFilters]     = useState(new Set());
-  const [areaSuggestions, setAreaSuggestions] = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [activeSuggestion, setActiveSuggestion] = useState(-1);
+  const [geoSuggestions, setGeoSuggestions] = useState([]);
+  const [showGeoSuggestions, setShowGeoSuggestions] = useState(false);
+  const [geoSearching, setGeoSearching]     = useState(false);
+  const geoDebounceRef  = useRef(null);
   const areaInputRef    = useRef(null);
   const pillsRowRef     = useRef(null);
   const wasLoadingRef   = useRef(false);
@@ -1835,7 +1442,103 @@ export default function Search() {
   function doLocalitySearch(area) {
     setGeoActive(false);
     setGeoPin(null);
+    setSearchedLabel(area);
     doSearch(area);
+  }
+
+  // ── Shared Nominatim autocomplete handler (used by both search bars) ─────────
+  function handleGeoInput(val) {
+    setQuery(val);
+    clearTimeout(geoDebounceRef.current);
+
+    if (!val.trim() || val.trim().length < 2) {
+      setGeoSuggestions([]);
+      setShowGeoSuggestions(false);
+      setGeoSearching(false);
+      return;
+    }
+
+    const lower = val.toLowerCase();
+    const localHits = Object.keys(LOCALITY_COORDS)
+      .filter(k => k.toLowerCase().includes(lower))
+      .slice(0, 3)
+      .map(name => ({
+        name,
+        sub: 'Bangalore locality',
+        lat: LOCALITY_COORDS[name][0],
+        lng: LOCALITY_COORDS[name][1],
+        local: true,
+      }));
+    setGeoSuggestions(localHits);
+    setShowGeoSuggestions(true);
+    setGeoSearching(true);
+
+    geoDebounceRef.current = setTimeout(async () => {
+      try {
+        const q   = encodeURIComponent(val.trim());
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${q}&limit=7&countrycodes=in&viewbox=${NOMINATIM_VIEWBOX}&bounded=0&addressdetails=1`;
+        const res  = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+        const data = await res.json();
+        const remote = data.map(r => {
+          const parts = r.display_name.split(',');
+          return {
+            name:  parts.slice(0, 2).join(', ').trim(),
+            sub:   parts.slice(2, 4).join(', ').trim() || r.type,
+            lat:   parseFloat(r.lat),
+            lng:   parseFloat(r.lon),
+            local: false,
+          };
+        });
+        const merged = [
+          ...localHits,
+          ...remote.filter(r => !localHits.some(l => l.name.toLowerCase() === r.name.toLowerCase())),
+        ].slice(0, 8);
+        setGeoSuggestions(merged.length > 0 ? merged : [{ __empty: true }]);
+        setShowGeoSuggestions(true);
+      } catch {
+        if (localHits.length === 0) setGeoSuggestions([{ __empty: true }]);
+      } finally {
+        setGeoSearching(false);
+      }
+    }, 380);
+  }
+
+  // Pick a suggestion: known locality → backend text search; geocoded → geo-radius mode
+  function pickGeoSuggestion(s) {
+    if (s.__empty) return;
+    setShowGeoSuggestions(false);
+    setGeoSuggestions([]);
+    setQuery(s.name);
+    setActiveLocality(null);
+    if (s.local) {
+      // Known locality: fast backend text search
+      setGeoActive(false);
+      setGeoPin(null);
+      setSearchedLabel(s.name);
+      doSearch(s.name);
+    } else {
+      // Arbitrary geocoded location: switch to radius mode
+      // Truncate label to first comma segment (e.g. "Vasanth Nagar, Bengaluru..." → "Vasanth Nagar")
+      const shortLabel = s.name.split(',')[0].trim();
+      setGeoPin({ lat: s.lat, lng: s.lng });
+      setGeoLabel(shortLabel);
+      setGeoActive(true);
+      if (geoRadius === 0) setGeoRadius(5);
+      doSearch('');
+    }
+  }
+
+  // Clear search bar and reset geo state
+  function clearGeoSearch() {
+    setQuery('');
+    setSearchedLabel('');
+    setGeoSuggestions([]);
+    setShowGeoSuggestions(false);
+    setGeoActive(false);
+    setGeoPin(null);
+    setGeoLabel('');
+    setActiveLocality(null);
+    doSearch('');
   }
 
   // ── Progress bar state machine ───────────────────────────────────────────────
@@ -2051,7 +1754,7 @@ export default function Search() {
       color: 'var(--color-text-primary)',
       fontFamily: 'var(--font-sans)',
       minHeight: '100vh',
-      paddingBottom: isDesktop ? 0 : 80,
+      paddingBottom: isDesktop ? 0 : 'calc(80px + env(safe-area-inset-bottom))',
       marginLeft: isDesktop ? 240 : 0,
     }}>
       <DesktopSidebar />
@@ -2073,81 +1776,98 @@ export default function Search() {
             background: 'var(--color-bg-primary)',
           }}>
 
-            {/* Search input */}
+            {/* Search input — Nominatim-powered */}
             <div style={{ position: 'relative', marginBottom: 14 }}>
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 background: 'var(--color-bg-surface)',
-                border: '1px solid var(--color-border)',
+                border: `1px solid ${geoActive ? 'rgba(232,160,32,0.4)' : 'var(--color-border)'}`,
                 borderRadius: 'var(--radius-pill)',
                 padding: '10px 14px',
+                transition: 'border-color 0.2s',
               }}>
-                <i className="fa-solid fa-location-dot" style={{ color: 'var(--color-text-muted)', fontSize: 13 }} />
+                <i
+                  className={geoActive ? 'fa-solid fa-location-dot' : 'fa-solid fa-magnifying-glass'}
+                  style={{ color: geoActive ? 'var(--color-amber)' : 'var(--color-text-muted)', fontSize: 13, flexShrink: 0 }}
+                />
                 <input
                   ref={areaInputRef}
-                  type="search"
+                  type="text"
                   value={query}
                   autoComplete="off"
-                  onChange={e => {
-                    const val = e.target.value;
-                    setQuery(val);
-                    setActiveSuggestion(-1);
-                    if (val.trim().length >= 2) {
-                      const lower = val.toLowerCase();
-                      const matches = BANGALORE_AREAS.filter(a => a.toLowerCase().includes(lower)).slice(0, 8);
-                      setAreaSuggestions(matches);
-                      setShowSuggestions(matches.length > 0);
-                    } else {
-                      setAreaSuggestions([]);
-                      setShowSuggestions(false);
-                    }
-                  }}
+                  onChange={e => handleGeoInput(e.target.value)}
                   onKeyDown={e => {
-                    if (e.key === 'Enter') { setShowSuggestions(false); doLocalitySearch(query); }
-                    else if (e.key === 'Escape') setShowSuggestions(false);
+                    if (e.key === 'Enter') { setShowGeoSuggestions(false); if (query.trim()) doLocalitySearch(query.trim()); }
+                    else if (e.key === 'Escape') setShowGeoSuggestions(false);
                   }}
-                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-                  placeholder="Locality…"
+                  onBlur={() => setTimeout(() => setShowGeoSuggestions(false), 150)}
+                  onFocus={() => { if (geoSuggestions.length > 0) setShowGeoSuggestions(true); }}
+                  placeholder="Locality, landmark, or address…"
                   style={{
                     flex: 1, background: 'transparent', border: 'none', outline: 'none',
                     fontFamily: 'var(--font-sans)', fontSize: 14,
                     color: 'var(--color-text-primary)', minWidth: 0,
                   }}
                 />
-                <button
-                  onClick={() => { setShowSuggestions(false); doLocalitySearch(query); }}
-                  style={{
-                    background: 'var(--color-amber)', color: '#1a0a00',
-                    border: 'none', borderRadius: 20, padding: '6px 14px',
-                    cursor: 'pointer', fontFamily: 'var(--font-mono)',
-                    fontSize: 11, fontWeight: 500, letterSpacing: '0.04em', flexShrink: 0,
-                  }}
-                >
-                  Search
-                </button>
+                {geoSearching && (
+                  <i className="fa-solid fa-spinner fa-spin" style={{ color: 'var(--color-text-muted)', fontSize: 11, flexShrink: 0 }} />
+                )}
+                {query && !geoSearching && (
+                  <button
+                    onMouseDown={e => { e.preventDefault(); clearGeoSearch(); }}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: 'var(--color-amber)', fontSize: 15, padding: '0 2px',
+                      display: 'flex', alignItems: 'center', lineHeight: 1, flexShrink: 0,
+                    }}
+                    aria-label="Clear search"
+                  >×</button>
+                )}
               </div>
-              {/* Suggestions */}
-              {showSuggestions && areaSuggestions.length > 0 && (
+              {/* Nominatim suggestions */}
+              {showGeoSuggestions && geoSuggestions.length > 0 && (
                 <ul style={{
-                  position: 'absolute', top: '100%', left: 0, right: 0,
-                  background: '#1a1a1a', border: '1px solid var(--color-border)',
+                  position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+                  background: '#1a1a1a', border: '1px solid rgba(232,160,32,0.2)',
                   borderRadius: 10, zIndex: 200, listStyle: 'none',
-                  margin: '4px 0 0', padding: 0, overflow: 'hidden',
+                  margin: 0, padding: '4px 0', overflow: 'hidden',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
                 }}>
-                  {areaSuggestions.map((s, i) => (
+                  {geoSuggestions.map((s, i) => s.__empty ? (
+                    <li key="empty" style={{
+                      padding: '10px 14px', fontFamily: 'var(--font-sans)', fontSize: 13,
+                      color: 'var(--color-text-muted)', fontStyle: 'italic',
+                      display: 'flex', alignItems: 'center', gap: 8,
+                    }}>
+                      <i className="fa-solid fa-circle-xmark" style={{ fontSize: 11, opacity: 0.5 }} />
+                      No results found
+                    </li>
+                  ) : (
                     <li
-                      key={s}
-                      onMouseDown={() => { setQuery(s); setShowSuggestions(false); doLocalitySearch(s); }}
+                      key={i}
+                      onMouseDown={() => pickGeoSuggestion(s)}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        padding: '10px 14px', fontSize: 13, cursor: 'pointer',
-                        background: i === activeSuggestion ? 'rgba(232,160,32,0.1)' : 'transparent',
-                        color: i === activeSuggestion ? 'var(--color-amber)' : 'var(--color-text-primary)',
-                        borderBottom: i < areaSuggestions.length - 1 ? '1px solid var(--color-border)' : 'none',
+                        display: 'flex', alignItems: 'flex-start', gap: 8,
+                        padding: '9px 14px', cursor: 'pointer',
+                        borderBottom: i < geoSuggestions.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
                       }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(232,160,32,0.08)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                     >
-                      <i className="fa-solid fa-location-dot" style={{ fontSize: 11, color: 'var(--color-text-muted)' }} />
-                      {s}
+                      <i
+                        className={s.local ? 'fa-solid fa-map-pin' : 'fa-solid fa-location-dot'}
+                        style={{ fontSize: 11, color: s.local ? '#E8A020' : 'var(--color-text-muted)', marginTop: 3, flexShrink: 0 }}
+                      />
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--color-text-primary)', lineHeight: 1.35 }}>
+                          {s.name}
+                        </div>
+                        {s.sub && (
+                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)', letterSpacing: '0.03em', marginTop: 1 }}>
+                            {s.sub}
+                          </div>
+                        )}
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -2245,59 +1965,22 @@ export default function Search() {
                 </div>
               </div>
 
-              {/* Nearby radius */}
-              <div style={{ marginBottom: 16 }}>
-                <p style={monoLabel}>Nearby</p>
-                {geoActive && geoPin ? (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    background: 'rgba(232,160,32,0.08)',
-                    border: '1px solid rgba(232,160,32,0.3)',
-                    borderRadius: 8, padding: '8px 12px',
-                  }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#E8A020', letterSpacing: '0.04em' }}>
-                      <i className="fa-solid fa-location-dot" style={{ marginRight: 6 }} />
-                      Within {geoRadius} km
-                    </span>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button
-                        onClick={() => setGeoOpen(true)}
-                        style={{
-                          fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.05em',
-                          background: 'none', border: '1px solid rgba(232,160,32,0.3)',
-                          color: '#E8A020', borderRadius: 6, padding: '3px 8px', cursor: 'pointer',
-                        }}
-                      >Edit</button>
-                      <button
-                        onClick={() => { setGeoActive(false); setGeoPin(null); }}
-                        style={{
-                          fontFamily: 'var(--font-mono)', fontSize: 10,
-                          background: 'none', border: '1px solid var(--color-border)',
-                          color: 'var(--color-text-muted)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer',
-                        }}
-                      >Clear</button>
-                    </div>
+              {/* Radius (only shown when geo-search is active) */}
+              {geoActive && geoPin && (
+                <div style={{ marginBottom: 16 }}>
+                  <p style={monoLabel}>Radius</p>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {GEO_RADIUS_OPTIONS.map(km => (
+                      <PillToggle
+                        key={km}
+                        label={`${km} km`}
+                        active={geoRadius === km}
+                        onClick={() => { setGeoRadius(km); setPage(1); }}
+                      />
+                    ))}
                   </div>
-                ) : (
-                  <button
-                    onClick={() => setGeoOpen(true)}
-                    style={{
-                      width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-                      fontFamily: 'var(--font-sans)', fontSize: 13,
-                      background: 'var(--color-bg-surface)',
-                      color: 'var(--color-text-muted)',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: 8, padding: '9px 12px', cursor: 'pointer',
-                      transition: 'border-color 0.15s, color 0.15s',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-text-muted)'; e.currentTarget.style.color = 'var(--color-text-primary)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-muted)'; }}
-                  >
-                    <i className="fa-solid fa-location-dot" style={{ fontSize: 12 }} />
-                    Set location &amp; radius…
-                  </button>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Sort */}
               <div style={{ marginBottom: 20 }}>
@@ -2339,10 +2022,10 @@ export default function Search() {
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <h1 style={{ fontWeight: 300, fontSize: 20, letterSpacing: '-0.025em', marginBottom: 4 }}>
-                  {loading ? '…' : geoActive ? `${displayed.length} homes within ${geoRadius} km${geoLabel ? ` of ${geoLabel}` : ''}` : query.trim() ? `${displayed.length} homes in ${query.trim()}` : isTopPicks ? 'Top picks · Bangalore' : `${displayed.length} homes`}
+                  {loading ? '…' : geoActive ? `${displayed.length} homes within ${geoRadius} km${geoLabel ? ` of ${geoLabel}` : ''}` : searchedLabel ? `${displayed.length} homes in ${searchedLabel}` : isTopPicks ? 'Top picks · Bangalore' : `${displayed.length} homes`}
                 </h1>
                 {!loading && !isTopPicks && (() => {
-                  const searched = query.trim().toLowerCase();
+                  const searched = searchedLabel.toLowerCase();
                   const others = [...new Set(displayed.map(l => l.location).filter(loc => loc && loc.toLowerCase() !== searched))].slice(0, 4);
                   if (others.length === 0) return null;
                   return <NearbyDropdown localities={others} />;
@@ -2477,67 +2160,39 @@ export default function Search() {
         )}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
 
-          {/* Search pill — flex: 1 so it fills available space */}
+          {/* Search pill — full width, Nominatim-powered */}
           <div style={{ flex: 1, position: 'relative' }}>
             <div style={{
               display: 'flex',
               alignItems: 'center',
               gap: 10,
               background: 'var(--color-bg-surface)',
-              border: '1px solid var(--color-border)',
+              border: `1px solid ${geoActive ? 'rgba(232,160,32,0.4)' : 'var(--color-border)'}`,
               borderRadius: 'var(--radius-pill)',
               padding: '10px 16px',
+              transition: 'border-color 0.2s',
             }}>
-              <i className="fa-solid fa-location-dot" style={{ color: 'var(--color-text-muted)', fontSize: 14 }} />
+              <i
+                className="fa-solid fa-location-dot"
+                style={{ color: geoActive ? 'var(--color-amber)' : 'var(--color-text-muted)', fontSize: 14, flexShrink: 0 }}
+              />
               <input
-              ref={areaInputRef}
-              type="text"
-              value={query}
-              autoComplete="off"
-              onChange={e => {
-                const val = e.target.value;
-                setQuery(val);
-                setActiveSuggestion(-1);
-                if (val.trim().length >= 2) {
-                  const lower = val.toLowerCase();
-                  const matches = BANGALORE_AREAS.filter(a =>
-                    a.toLowerCase().includes(lower)
-                  ).slice(0, 8);
-                    setAreaSuggestions(matches);
-                    setShowSuggestions(matches.length > 0);
-                  } else {
-                    setAreaSuggestions([]);
-                    setShowSuggestions(false);
-                  }
-                }}
+                ref={areaInputRef}
+                type="text"
+                value={query}
+                autoComplete="off"
+                onChange={e => handleGeoInput(e.target.value)}
                 onKeyDown={e => {
-                  if (showSuggestions) {
-                    if (e.key === 'ArrowDown') {
-                      e.preventDefault();
-                      setActiveSuggestion(i => Math.min(i + 1, areaSuggestions.length - 1));
-                    } else if (e.key === 'ArrowUp') {
-                      e.preventDefault();
-                      setActiveSuggestion(i => Math.max(i - 1, -1));
-                    } else if (e.key === 'Enter' && activeSuggestion >= 0) {
-                      e.preventDefault();
-                      const chosen = areaSuggestions[activeSuggestion];
-                      setQuery(chosen);
-                      setShowSuggestions(false);
-                      setActiveSuggestion(-1);
-                      doLocalitySearch(chosen);
-                    } else if (e.key === 'Escape') {
-                      setShowSuggestions(false);
-                    } else if (e.key === 'Enter') {
-                      setShowSuggestions(false);
-                      doLocalitySearch(query);
-                    }
-                  } else if (e.key === 'Enter') {
-                    doLocalitySearch(query);
+                  if (e.key === 'Enter') {
+                    setShowGeoSuggestions(false);
+                    if (query.trim()) doLocalitySearch(query.trim());
+                  } else if (e.key === 'Escape') {
+                    setShowGeoSuggestions(false);
                   }
                 }}
-                onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-                onFocus={() => { if (areaSuggestions.length > 0) setShowSuggestions(true); }}
-                placeholder="Koramangala, Indiranagar, HSR Layout..."
+                onBlur={() => setTimeout(() => setShowGeoSuggestions(false), 150)}
+                onFocus={() => { if (geoSuggestions.length > 0) setShowGeoSuggestions(true); }}
+                placeholder="Locality, landmark, or address…"
                 style={{
                   flex: 1,
                   background: 'transparent',
@@ -2550,120 +2205,163 @@ export default function Search() {
                   WebkitAppearance: 'none',
                 }}
               />
-              {query && (
+              {geoSearching && (
+                <i className="fa-solid fa-spinner fa-spin" style={{ color: 'var(--color-text-muted)', fontSize: 11, flexShrink: 0 }} />
+              )}
+              {query && !geoSearching && (
                 <button
-                  onMouseDown={e => { e.preventDefault(); setQuery(''); setActiveLocality(null); doSearch(''); setShowSuggestions(false); }}
+                  onMouseDown={e => { e.preventDefault(); clearGeoSearch(); }}
                   style={{
                     background: 'none', border: 'none', cursor: 'pointer',
-                    color: 'var(--color-amber)', fontSize: 16, padding: '0 2px',
-                    display: 'flex', alignItems: 'center', lineHeight: 1,
+                    color: 'var(--color-text-muted)', fontSize: 16, padding: '0 2px',
+                    display: 'flex', alignItems: 'center', lineHeight: 1, flexShrink: 0,
                   }}
                   aria-label="Clear search"
                 >×</button>
               )}
+              {/* Search submit button — gives mobile users a tap target */}
               <button
-                onClick={() => { setShowSuggestions(false); doLocalitySearch(query); }}
+                onMouseDown={e => {
+                  e.preventDefault();
+                  setShowGeoSuggestions(false);
+                  if (query.trim() && !geoActive) doLocalitySearch(query.trim());
+                }}
                 style={{
-                  background: 'none',
+                  flexShrink: 0,
+                  background: 'transparent',
                   border: '1px solid var(--color-amber)',
                   borderRadius: 8,
-                  padding: '6px 13px',
+                  width: 32, height: 32,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
                   cursor: 'pointer',
-                  color: 'var(--color-amber)',
-                  fontSize: 13,
-                  display: 'flex',
-                  alignItems: 'center',
                 }}
                 aria-label="Search"
               >
-                <i className={loading ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-magnifying-glass'} />
+                <i className="fa-solid fa-magnifying-glass" style={{ color: 'var(--color-amber)', fontSize: 13 }} />
               </button>
             </div>
 
-            {/* Autocomplete dropdown — positioned relative to the search pill only */}
-            {showSuggestions && (
-            <ul style={{
-              position: 'absolute',
-              top: 'calc(100% + 6px)',
-              left: 0,
-              right: 0,
-              zIndex: 200,
-              margin: 0,
-              padding: 0,
-              listStyle: 'none',
-              background: '#111111',
-              border: '1px solid rgba(232,160,32,0.25)',
-              borderRadius: 12,
-              overflow: 'hidden',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-            }}>
-              {areaSuggestions.map((s, i) => (
-                <li
-                  key={s}
-                  onMouseDown={() => {
-                    setQuery(s);
-                    setShowSuggestions(false);
-                    setActiveSuggestion(-1);
-                    doLocalitySearch(s);
-                  }}
-                  onMouseEnter={() => setActiveSuggestion(i)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    padding: '11px 16px',
-                    fontSize: 13,
-                    fontFamily: 'var(--font-sans)',
-                    cursor: 'pointer',
-                    background: i === activeSuggestion ? 'rgba(232,160,32,0.1)' : 'transparent',
-                    color: i === activeSuggestion ? 'var(--color-amber)' : 'var(--color-text-primary)',
-                    borderBottom: i < areaSuggestions.length - 1 ? '1px solid var(--color-border)' : 'none',
-                    transition: 'background 0.1s',
-                  }}
-                >
-                  <i className="fa-solid fa-location-dot" style={{
-                    fontSize: 11,
-                    color: i === activeSuggestion ? 'var(--color-amber)' : 'var(--color-text-muted)',
-                  }} />
-                  {s}
-                </li>
-              ))}
-            </ul>
-          )}
+            {/* Nominatim autocomplete dropdown */}
+            {showGeoSuggestions && geoSuggestions.length > 0 && (
+              <ul style={{
+                position: 'absolute',
+                top: 'calc(100% + 6px)',
+                left: 0,
+                right: 0,
+                zIndex: 200,
+                margin: 0,
+                padding: '4px 0',
+                listStyle: 'none',
+                background: '#111111',
+                border: '1px solid rgba(232,160,32,0.25)',
+                borderRadius: 12,
+                overflow: 'hidden',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+              }}>
+                {geoSuggestions.map((s, i) => s.__empty ? (
+                  <li key="empty" style={{
+                    padding: '12px 16px',
+                    fontFamily: 'var(--font-sans)', fontSize: 13,
+                    color: 'var(--color-text-muted)', fontStyle: 'italic',
+                    display: 'flex', alignItems: 'center', gap: 8,
+                  }}>
+                    <i className="fa-solid fa-circle-xmark" style={{ fontSize: 11, opacity: 0.5 }} />
+                    No results found
+                  </li>
+                ) : (
+                  <li
+                    key={i}
+                    onMouseDown={() => pickGeoSuggestion(s)}
+                    style={{
+                      display: 'flex', alignItems: 'flex-start', gap: 10,
+                      padding: '10px 16px', cursor: 'pointer',
+                      borderBottom: i < geoSuggestions.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(232,160,32,0.08)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <i
+                      className={s.local ? 'fa-solid fa-map-pin' : 'fa-solid fa-location-dot'}
+                      style={{ fontSize: 11, color: s.local ? '#E8A020' : 'var(--color-text-muted)', marginTop: 3, flexShrink: 0 }}
+                    />
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--color-text-primary)', lineHeight: 1.35 }}>
+                        {s.name}
+                      </div>
+                      {s.sub && (
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-text-muted)', letterSpacing: '0.03em', marginTop: 1 }}>
+                          {s.sub}
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>{/* end search pill wrapper */}
-
-          {/* NEARBY — soft rounded square button, same row as search */}
-          <button
-            onClick={() => setGeoOpen(true)}
-            style={{
-              flexShrink: 0,
-              display: 'inline-flex',
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 6,
-              background: geoActive ? 'rgba(232,160,32,0.12)' : 'rgba(232,160,32,0.05)',
-              border: geoActive ? '1px solid rgba(232,160,32,0.4)' : '1px solid rgba(232,160,32,0.2)',
-              borderRadius: 12,
-              padding: '0 14px',
-              height: 44,
-              cursor: 'pointer',
-              color: geoActive ? 'var(--color-amber)' : '#B08040',
-              transition: 'all 0.15s',
-              whiteSpace: 'nowrap',
-            }}
-            onMouseEnter={e => { if (!geoActive) { e.currentTarget.style.borderColor = 'rgba(232,160,32,0.4)'; e.currentTarget.style.color = 'var(--color-amber)'; e.currentTarget.style.background = 'rgba(232,160,32,0.1)'; } }}
-            onMouseLeave={e => { if (!geoActive) { e.currentTarget.style.borderColor = 'rgba(232,160,32,0.2)'; e.currentTarget.style.color = '#B08040'; e.currentTarget.style.background = 'rgba(232,160,32,0.05)'; } }}
-            aria-label="Search by area"
-          >
-            <i className="fa-solid fa-map" style={{ fontSize: 13 }} />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.05em' }}>
-              {geoActive ? `${geoRadius} km` : 'Nearby'}
-            </span>
-          </button>
 
         </div>{/* end flex row */}
 
       </div>
+
+      {/* ── GEO RADIUS SUB-ROW — only when a geocoded location is active ── */}
+      {geoActive && geoPin && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          paddingLeft: 16,
+          paddingRight: 16,
+          paddingTop: 8,
+          paddingBottom: 4,
+          borderBottom: '1px solid rgba(232,160,32,0.12)',
+          background: 'rgba(232,160,32,0.04)',
+        }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em',
+            textTransform: 'uppercase', color: 'var(--color-text-muted)',
+            flexShrink: 0,
+          }}>
+            Within
+          </span>
+          {GEO_RADIUS_OPTIONS.map(km => {
+            const isCurrent = geoRadius === km;
+            return (
+              <button
+                key={km}
+                onClick={() => { setGeoRadius(km); setPage(1); }}
+                style={{
+                  flexShrink: 0,
+                  fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
+                  background: isCurrent ? 'rgba(232,160,32,0.15)' : 'transparent',
+                  color: isCurrent ? '#E8A020' : '#666',
+                  border: `0.5px solid ${isCurrent ? 'rgba(232,160,32,0.5)' : '#333'}`,
+                  borderRadius: 99, padding: '4px 12px',
+                  cursor: 'pointer', whiteSpace: 'nowrap',
+                  transition: 'all 0.12s',
+                }}
+              >
+                {km} km
+              </button>
+            );
+          })}
+          {geoLabel && (
+            <>
+              <span style={{
+                fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em',
+                textTransform: 'uppercase', color: 'var(--color-text-muted)',
+                flexShrink: 0,
+              }}>of</span>
+              <span style={{
+                fontFamily: 'var(--font-sans)', fontSize: 12, color: '#E8A020',
+                flexShrink: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {geoLabel}
+              </span>
+            </>
+          )}
+        </div>
+      )}
 
       {/* ── ROW 1: LOCALITY CHIPS ── */}
       <div style={{
@@ -2764,30 +2462,6 @@ export default function Search() {
           {' '}▼
         </button>
 
-        {/* Geo-radius quick switcher pills (plain toggles — no × here, dismiss via Row 3) */}
-        {geoActive && geoPin && [1, 2, 5, 10].map(km => {
-          const isCurrent = geoRadius === km;
-          return (
-            <button
-              key={km}
-              onClick={() => { setGeoRadius(km); setPage(1); }}
-              style={{
-                flexShrink: 0,
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
-                background: isCurrent ? 'rgba(232,160,32,0.15)' : 'transparent',
-                color: isCurrent ? '#E8A020' : '#888',
-                border: `0.5px solid ${isCurrent ? 'rgba(232,160,32,0.45)' : '#333'}`,
-                borderRadius: 99, padding: '5px 10px',
-                cursor: 'pointer', whiteSpace: 'nowrap',
-                transition: 'all 0.12s',
-              }}
-            >
-              {km} km
-            </button>
-          );
-        })}
-
         {/* Quick toggle pills — fixed order, subtle active state */}
         {QUICK_FILTERS.map(({ key, label }) => {
           const active = quickFilters.has(key);
@@ -2864,9 +2538,9 @@ export default function Search() {
               borderRadius: 99, padding: '4px 10px', whiteSpace: 'nowrap',
             }}>
               <i className="fa-solid fa-location-dot" style={{ fontSize: 9 }} />
-              {geoRadius} km
+              {geoLabel ? `${geoRadius} km · ${geoLabel}` : `${geoRadius} km`}
               <button
-                onClick={() => { setGeoActive(false); setGeoPin(null); }}
+                onClick={() => { setGeoActive(false); setGeoPin(null); setGeoLabel(''); setQuery(''); }}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
                   color: '#E8A020', padding: 0, fontSize: 13, lineHeight: 1,
@@ -2948,14 +2622,14 @@ export default function Search() {
                 ? '…'
                 : geoActive
                   ? `${displayed.length} homes within ${geoRadius} km${geoLabel ? ` of ${geoLabel}` : ''}`
-                  : query.trim()
-                    ? `${displayed.length} homes found in ${query.trim()}`
+                  : searchedLabel
+                    ? `${displayed.length} homes found in ${searchedLabel}`
                     : isTopPicks
                       ? 'Top picks · Bangalore'
                       : `${displayed.length} homes found`}
             </h1>
             {!loading && !isTopPicks && (() => {
-              const searched = query.trim().toLowerCase();
+              const searched = searchedLabel.toLowerCase();
               const others = [...new Set(
                 displayed
                   .map(l => l.location)
@@ -3126,29 +2800,6 @@ export default function Search() {
 
         </>/* end mobile layout */
       )}{/* end isDesktop conditional */}
-
-      {/* ── GEO RADIUS MODAL (shared: desktop + mobile) ── */}
-      <GeoRadiusModal
-        open={geoOpen}
-        onClose={() => setGeoOpen(false)}
-        currentPin={geoPin}
-        currentRadius={geoRadius}
-        currentLabel={geoLabel}
-        onApply={(pin, radius, label) => {
-          setGeoPin(pin);
-          setGeoRadius(radius);
-          setGeoLabel(label || '');
-          setGeoActive(true);
-          setQuery('');
-          setActiveLocality(null);
-          setPage(1);
-          doSearch('');
-        }}
-        onClear={() => {
-          setGeoActive(false);
-          setGeoPin(null);
-        }}
-      />
 
       {/* ── SEARCH LOG TOAST ── */}
       <Toast

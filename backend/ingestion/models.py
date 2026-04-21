@@ -18,7 +18,7 @@ class StandardListing(BaseModel):
     """Canonical listing shape written to the `listings` table."""
 
     # ── Identity ──
-    source: str = Field(..., pattern=r"^(reddit|telegram|nobroker|housing)$")
+    source: str = Field(..., pattern=r"^(reddit|telegram|nobroker|housing|99acres)$")
     source_id: str
     source_url: Optional[str] = None
     source_group: Optional[str] = None

@@ -163,6 +163,7 @@ def _extract_bhk_number(bhk: str) -> int | None:
 WEIGHTS = {
     "nobroker":  (20, 35, 30, 15),
     "housing":   (20, 35, 30, 15),
+    "99acres":   (20, 35, 30, 15),
     "reddit":    (20, 30, 20, 30),
     "telegram":  (20, 30, 20, 30),
 }
@@ -296,7 +297,7 @@ def _load_locality_sentiment(conn) -> dict:
     return result
 
 
-STRUCTURED_SOURCES = {"nobroker", "housing"}
+STRUCTURED_SOURCES = {"nobroker", "housing", "99acres"}
 
 def _score_detail(row: dict, max_score: int) -> int:
     """Score listing completeness (0 to max_score).
