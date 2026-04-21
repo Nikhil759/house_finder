@@ -34,6 +34,7 @@ logger = logging.getLogger("run_all")
 SOURCES = {
     "nobroker":    [sys.executable, "-m", "ingestion.ingest_nobroker"],
     "housing":     [sys.executable, "-m", "ingestion.ingest_housing"],
+    "99acres":     [sys.executable, "-m", "ingestion.ingest_99acres"],
     "telegram":    [sys.executable, "-m", "ingestion.ingest_telegram"],
     "reddit":      [sys.executable, "-m", "ingestion.ingest_reddit"],
     "news":        [sys.executable, "-m", "ingestion.scrape_news"],
@@ -43,7 +44,7 @@ SOURCES = {
 
 PIPELINES = {
     "pulse":    ["discussions", "news", "tag"],
-    "listings": ["nobroker", "housing", "telegram", "reddit"],
+    "listings": ["nobroker", "housing", "99acres", "telegram", "reddit"],
 }
 
 

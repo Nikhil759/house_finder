@@ -112,7 +112,7 @@ def compute_quality_score(
         if no_brokerage:
             score += 15
 
-    if source in ("nobroker", "housing"):
+    if source in ("nobroker", "housing", "99acres"):
         score += 15
 
     # Broker penalty
