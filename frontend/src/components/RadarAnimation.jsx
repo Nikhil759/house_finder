@@ -16,19 +16,10 @@ const DOT_CONFIG = [
   { id: 3, label: 'nobroker', fill: 'rgba(210,35,35,0.6)',  rowOffset: 29, startDelay: 3600, iconSrc: 'https://www.google.com/s2/favicons?domain=nobroker.in&sz=32' },
 ];
 
-// Safe zone for dots (icon-only, no labels → tighter clearance needed):
-//
-//   cx ≤ 180  — full visible width (container 480px, 55% bleed → ~216px visible
-//               → viewBox x ≤ 180). Allow dots anywhere across the visible arc.
-//
-//   cy ≤ 158  — clears the hero headline with icon-only dots.
-//               Icon is 14px tall centred at cy+5→cy+19. Text starts at viewBox
-//               y ≈ 170 (container ~204px, scaling 400/480). 158 + 19 = 177 ≤ 170
-//               is tight but the icon is small — gives ~10px clearance.
-//
-// This spreads dots across the entire upper arc of the visible radar face.
-// Rejection-sampling converges quickly (~35% of ring area is valid).
-function randomPos() {
+// Mobile: constrain dots to upper-left arc (cx ≤ 180, cy ≤ 158) so they
+// don't overlap with hero text that sits centre-left.
+// Desktop: radar is fully visible on the right side, so dots can go anywhere.
+function randomPos(isDesktop = false) {
   let cx, cy, tries = 0;
   do {
     const r = 65 + Math.random() * 110;
@@ -36,7 +27,7 @@ function randomPos() {
     cx = Math.round(200 + r * Math.cos(a));
     cy = Math.round(200 + r * Math.sin(a));
     tries++;
-  } while ((cx > 180 || cy > 158) && tries < 60);
+  } while (!isDesktop && (cx > 180 || cy > 158) && tries < 60);
   return { cx, cy };
 }
 
@@ -47,10 +38,10 @@ const CSS = `
 }
 `;
 
-export default function RadarAnimation({ size = 480 }) {
+export default function RadarAnimation({ size = 480, isDesktop = false }) {
   // Each dot: static config fields + live cx/cy/opacity driven by intervals
   const [dots, setDots] = useState(() =>
-    DOT_CONFIG.map(cfg => ({ ...cfg, ...randomPos(), opacity: 0.6 }))
+    DOT_CONFIG.map(cfg => ({ ...cfg, ...randomPos(isDesktop), opacity: 0.6 }))
   );
 
   const timersRef = useRef([]);
@@ -69,7 +60,7 @@ export default function RadarAnimation({ size = 480 }) {
 
           // 2. After fade-out (0.38s), jump to new position while invisible
           push(setTimeout(() => {
-            const pos = randomPos();
+            const pos = randomPos(isDesktop);
             setDots(prev => prev.map(d => d.id === id ? { ...d, ...pos } : d));
 
             // 3. One tick later, fade in at new position
@@ -99,7 +90,7 @@ export default function RadarAnimation({ size = 480 }) {
       <div
         style={{
           position: 'absolute',
-          right: -(size * 0.55) - 60,
+          right: isDesktop ? -(size * 0.1) - 60 : -(size * 0.55) - 60,
           top: -60,
           width: size + 120,
           height: size + 120,
@@ -109,11 +100,11 @@ export default function RadarAnimation({ size = 480 }) {
         }}
       />
 
-      {/* Radar container — 55% bleeds off right edge */}
+      {/* Radar container */}
       <div
         style={{
           position: 'absolute',
-          right: -(size * 0.55),
+          right: isDesktop ? -(size * 0.1) : -(size * 0.55),
           top: -8,
           width: size,
           height: size,

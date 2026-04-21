@@ -213,6 +213,20 @@ body { transition: background 0.25s ease, color 0.25s ease; }
   100% { background-position:  300% center; }
 }
 
+@keyframes slide-underline-in {
+  from { background-size: 0% 1px; }
+  to   { background-size: 100% 1px; }
+}
+
+.slide-underline {
+  background-image: linear-gradient(rgba(232, 160, 32, 0.5), rgba(232, 160, 32, 0.5));
+  background-size: 0% 1px;
+  background-position: left bottom;
+  background-repeat: no-repeat;
+  animation: slide-underline-in 0.7s ease forwards;
+  animation-delay: 1.6s;
+}
+
 /* ── Desktop sidebar (hidden on mobile) ────────────────────────────────────── */
 .nestiq-desktop-sidebar {
   display: none;

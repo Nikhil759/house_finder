@@ -71,63 +71,76 @@ const s = {
   },
 };
 
+const DIVIDER_SVG_CONTENT = (
+  <>
+    <line x1="40.1365" y1="0.389806" x2="80.2042" y2="45.4661" stroke="#E8A020"/>
+    <line x1="21.1412" y1="23.3952" x2="40.1412" y2="45.3952" stroke="#E8A020"/>
+    <line x1="32.1214" y1="10.3736" x2="66.1214" y2="45.3736" stroke="#E8A020"/>
+    <line x1="10.0991" y1="35.352" x2="21.0991" y2="45.352" stroke="#E8A020"/>
+    <line x1="53.4092" y1="12.3684" x2="65.4092" y2="0.368435" stroke="#E8A020"/>
+    <line x1="74.3923" y1="32.3862" x2="103.392" y2="0.386228" stroke="#E8A020"/>
+    <line x1="121.136" y1="1.38981" x2="161.204" y2="46.4661" stroke="#E8A020"/>
+    <line x1="134.409" y1="13.3684" x2="146.409" y2="1.36844" stroke="#E8A020"/>
+    <line x1="155.392" y1="33.3862" x2="184.392" y2="1.38623" stroke="#E8A020"/>
+    <line x1="113.121" y1="11.3736" x2="147.121" y2="46.3736" stroke="#E8A020"/>
+    <line x1="102.141" y1="24.3952" x2="121.141" y2="46.3952" stroke="#E8A020"/>
+    <line x1="91.0991" y1="36.352" x2="102.099" y2="46.352" stroke="#E8A020"/>
+    <line x1="202.136" y1="2.38981" x2="242.204" y2="47.4661" stroke="#E8A020"/>
+    <line x1="215.409" y1="14.3684" x2="227.409" y2="2.36844" stroke="#E8A020"/>
+    <line x1="236.392" y1="34.3862" x2="265.392" y2="2.38623" stroke="#E8A020"/>
+    <line x1="194.121" y1="12.3736" x2="228.121" y2="47.3736" stroke="#E8A020"/>
+    <line x1="183.141" y1="25.3952" x2="202.141" y2="47.3952" stroke="#E8A020"/>
+    <line x1="172.099" y1="37.352" x2="183.099" y2="47.352" stroke="#E8A020"/>
+    <line x1="283.136" y1="1.38981" x2="323.204" y2="46.4661" stroke="#E8A020"/>
+    <line x1="296.409" y1="13.3684" x2="308.409" y2="1.36844" stroke="#E8A020"/>
+    <line x1="317.392" y1="33.3862" x2="346.392" y2="1.38623" stroke="#E8A020"/>
+    <line x1="275.121" y1="11.3736" x2="309.121" y2="46.3736" stroke="#E8A020"/>
+    <line x1="264.141" y1="24.3952" x2="283.141" y2="46.3952" stroke="#E8A020"/>
+    <line x1="253.099" y1="36.352" x2="264.099" y2="46.352" stroke="#E8A020"/>
+    <line x1="363.136" y1="1.38981" x2="403.204" y2="46.4661" stroke="#E8A020"/>
+    <line x1="376.409" y1="13.3684" x2="388.409" y2="1.36844" stroke="#E8A020"/>
+    <line x1="397.392" y1="33.3862" x2="426.392" y2="1.38623" stroke="#E8A020"/>
+    <line x1="355.121" y1="11.3736" x2="389.121" y2="46.3736" stroke="#E8A020"/>
+    <line x1="344.141" y1="24.3952" x2="363.141" y2="46.3952" stroke="#E8A020"/>
+    <line x1="443.136" y1="1.38981" x2="483.204" y2="46.4661" stroke="#E8A020"/>
+    <line x1="456.409" y1="13.3684" x2="468.409" y2="1.36844" stroke="#E8A020"/>
+    <line x1="477.392" y1="33.3862" x2="506.392" y2="1.38623" stroke="#E8A020"/>
+    <line x1="435.121" y1="11.3736" x2="469.121" y2="46.3736" stroke="#E8A020"/>
+    <line x1="424.141" y1="24.3952" x2="443.141" y2="46.3952" stroke="#E8A020"/>
+    <line x1="494.099" y1="37.352" x2="505.099" y2="47.352" stroke="#E8A020"/>
+    <line x1="0.381378" y1="46.3986" x2="39.3814" y2="0.398644" stroke="#E8A020"/>
+    <line x1="80.3814" y1="46.3986" x2="119.381" y2="0.398644" stroke="#E8A020"/>
+    <line x1="62.4168" y1="23.361" x2="86.4168" y2="0.360994" stroke="#E8A020"/>
+    <line x1="403.381" y1="47.3986" x2="442.381" y2="1.39864" stroke="#E8A020"/>
+    <line x1="483.381" y1="47.3986" x2="522.381" y2="1.39864" stroke="#E8A020"/>
+    <line x1="465.417" y1="24.361" x2="489.417" y2="1.36099" stroke="#E8A020"/>
+    <line x1="323.381" y1="47.3986" x2="362.381" y2="1.39864" stroke="#E8A020"/>
+    <line x1="385.417" y1="24.361" x2="409.417" y2="1.36099" stroke="#E8A020"/>
+    <line x1="243.381" y1="47.3986" x2="282.381" y2="1.39864" stroke="#E8A020"/>
+    <line x1="305.417" y1="24.361" x2="329.417" y2="1.36099" stroke="#E8A020"/>
+    <line x1="162.381" y1="48.3986" x2="201.381" y2="2.39864" stroke="#E8A020"/>
+    <line x1="242.381" y1="48.3986" x2="281.381" y2="2.39864" stroke="#E8A020"/>
+    <line x1="224.417" y1="25.361" x2="248.417" y2="2.36099" stroke="#E8A020"/>
+    <line x1="143.417" y1="24.361" x2="167.417" y2="1.36099" stroke="#E8A020"/>
+  </>
+);
+
+function DividerSvg() {
+  return (
+    <svg viewBox="0 0 523 49" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ height: 24, width: 'auto', flexShrink: 0, display: 'block' }}>
+      {DIVIDER_SVG_CONTENT}
+    </svg>
+  );
+}
+
 function SectionDivider() {
   return (
-    <div style={{ width: '100%', height: 24, opacity: 0.28, overflow: 'hidden', flexShrink: 0 }}>
-      <svg width="100%" height="24" viewBox="0 0 523 49" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <line x1="40.1365" y1="0.389806" x2="80.2042" y2="45.4661" stroke="#E8A020"/>
-        <line x1="21.1412" y1="23.3952" x2="40.1412" y2="45.3952" stroke="#E8A020"/>
-        <line x1="32.1214" y1="10.3736" x2="66.1214" y2="45.3736" stroke="#E8A020"/>
-        <line x1="10.0991" y1="35.352" x2="21.0991" y2="45.352" stroke="#E8A020"/>
-        <line x1="53.4092" y1="12.3684" x2="65.4092" y2="0.368435" stroke="#E8A020"/>
-        <line x1="74.3923" y1="32.3862" x2="103.392" y2="0.386228" stroke="#E8A020"/>
-        <line x1="121.136" y1="1.38981" x2="161.204" y2="46.4661" stroke="#E8A020"/>
-        <line x1="134.409" y1="13.3684" x2="146.409" y2="1.36844" stroke="#E8A020"/>
-        <line x1="155.392" y1="33.3862" x2="184.392" y2="1.38623" stroke="#E8A020"/>
-        <line x1="113.121" y1="11.3736" x2="147.121" y2="46.3736" stroke="#E8A020"/>
-        <line x1="102.141" y1="24.3952" x2="121.141" y2="46.3952" stroke="#E8A020"/>
-        <line x1="91.0991" y1="36.352" x2="102.099" y2="46.352" stroke="#E8A020"/>
-        <line x1="202.136" y1="2.38981" x2="242.204" y2="47.4661" stroke="#E8A020"/>
-        <line x1="215.409" y1="14.3684" x2="227.409" y2="2.36844" stroke="#E8A020"/>
-        <line x1="236.392" y1="34.3862" x2="265.392" y2="2.38623" stroke="#E8A020"/>
-        <line x1="194.121" y1="12.3736" x2="228.121" y2="47.3736" stroke="#E8A020"/>
-        <line x1="183.141" y1="25.3952" x2="202.141" y2="47.3952" stroke="#E8A020"/>
-        <line x1="172.099" y1="37.352" x2="183.099" y2="47.352" stroke="#E8A020"/>
-        <line x1="283.136" y1="1.38981" x2="323.204" y2="46.4661" stroke="#E8A020"/>
-        <line x1="296.409" y1="13.3684" x2="308.409" y2="1.36844" stroke="#E8A020"/>
-        <line x1="317.392" y1="33.3862" x2="346.392" y2="1.38623" stroke="#E8A020"/>
-        <line x1="275.121" y1="11.3736" x2="309.121" y2="46.3736" stroke="#E8A020"/>
-        <line x1="264.141" y1="24.3952" x2="283.141" y2="46.3952" stroke="#E8A020"/>
-        <line x1="253.099" y1="36.352" x2="264.099" y2="46.352" stroke="#E8A020"/>
-        <line x1="363.136" y1="1.38981" x2="403.204" y2="46.4661" stroke="#E8A020"/>
-        <line x1="376.409" y1="13.3684" x2="388.409" y2="1.36844" stroke="#E8A020"/>
-        <line x1="397.392" y1="33.3862" x2="426.392" y2="1.38623" stroke="#E8A020"/>
-        <line x1="355.121" y1="11.3736" x2="389.121" y2="46.3736" stroke="#E8A020"/>
-        <line x1="344.141" y1="24.3952" x2="363.141" y2="46.3952" stroke="#E8A020"/>
-        <line x1="443.136" y1="1.38981" x2="483.204" y2="46.4661" stroke="#E8A020"/>
-        <line x1="456.409" y1="13.3684" x2="468.409" y2="1.36844" stroke="#E8A020"/>
-        <line x1="477.392" y1="33.3862" x2="506.392" y2="1.38623" stroke="#E8A020"/>
-        <line x1="435.121" y1="11.3736" x2="469.121" y2="46.3736" stroke="#E8A020"/>
-        <line x1="424.141" y1="24.3952" x2="443.141" y2="46.3952" stroke="#E8A020"/>
-        <line x1="494.099" y1="37.352" x2="505.099" y2="47.352" stroke="#E8A020"/>
-        <line x1="0.381378" y1="46.3986" x2="39.3814" y2="0.398644" stroke="#E8A020"/>
-        <line x1="80.3814" y1="46.3986" x2="119.381" y2="0.398644" stroke="#E8A020"/>
-        <line x1="62.4168" y1="23.361" x2="86.4168" y2="0.360994" stroke="#E8A020"/>
-        <line x1="403.381" y1="47.3986" x2="442.381" y2="1.39864" stroke="#E8A020"/>
-        <line x1="483.381" y1="47.3986" x2="522.381" y2="1.39864" stroke="#E8A020"/>
-        <line x1="465.417" y1="24.361" x2="489.417" y2="1.36099" stroke="#E8A020"/>
-        <line x1="323.381" y1="47.3986" x2="362.381" y2="1.39864" stroke="#E8A020"/>
-        <line x1="385.417" y1="24.361" x2="409.417" y2="1.36099" stroke="#E8A020"/>
-        <line x1="243.381" y1="47.3986" x2="282.381" y2="1.39864" stroke="#E8A020"/>
-        <line x1="305.417" y1="24.361" x2="329.417" y2="1.36099" stroke="#E8A020"/>
-        <line x1="162.381" y1="48.3986" x2="201.381" y2="2.39864" stroke="#E8A020"/>
-        <line x1="242.381" y1="48.3986" x2="281.381" y2="2.39864" stroke="#E8A020"/>
-        <line x1="224.417" y1="25.361" x2="248.417" y2="2.36099" stroke="#E8A020"/>
-        <line x1="143.417" y1="24.361" x2="167.417" y2="1.36099" stroke="#E8A020"/>
-      </svg>
+    <div style={{ width: '100%', height: 24, opacity: 0.28, overflow: 'hidden', flexShrink: 0, display: 'flex' }}>
+      {Array.from({ length: 10 }).map((_, i) => <DividerSvg key={i} />)}
     </div>
   );
 }
+
 
 /* ── Magnetic search bar wrapper ─────────────────────────────────────────── */
 function MagneticSearchBar({ children }) {
@@ -139,7 +152,7 @@ function MagneticSearchBar({ children }) {
     if (!rect) return;
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
-    setOffset({ x: (e.clientX - cx) * 0.06, y: (e.clientY - cy) * 0.12 });
+    setOffset({ x: (e.clientX - cx) * 0.04, y: (e.clientY - cy) * 0.04 });
   }, []);
 
   const handleMouseLeave = useCallback(() => setOffset({ x: 0, y: 0 }), []);
@@ -150,7 +163,7 @@ function MagneticSearchBar({ children }) {
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       animate={{ x: offset.x, y: offset.y }}
-      transition={{ type: 'spring', stiffness: 250, damping: 18 }}
+      transition={{ type: 'spring', stiffness: 200, damping: 30 }}
       style={{ width: '100%' }}
     >
       {children}
@@ -160,10 +173,10 @@ function MagneticSearchBar({ children }) {
 
 /* ── Framer Motion animation variants ───────────────────────────────────── */
 const fadeSlideUp = {
-  hidden: { opacity: 0, y: 20 },
+  hidden: { opacity: 0, y: 24 },
   visible: (delay = 0) => ({
     opacity: 1, y: 0,
-    transition: { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94], delay },
+    transition: { duration: 0.85, ease: [0.25, 0.46, 0.45, 0.94], delay },
   }),
 };
 
@@ -233,7 +246,7 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
       }} />
 
       {/* Radar animation */}
-      <RadarAnimation size={480} />
+      <RadarAnimation size={480} isDesktop={isDesktop} />
 
       {/* Content */}
       <div style={{ position: 'relative', zIndex: 1, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -244,7 +257,7 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
           variants={fadeSlideUp}
           initial="hidden"
           animate="visible"
-          custom={0}
+          custom={0.1}
           style={{
             fontFamily: "'DM Mono', monospace",
             fontSize: 10,
@@ -261,7 +274,7 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
           variants={fadeSlideUp}
           initial="hidden"
           animate="visible"
-          custom={0.1}
+          custom={0.4}
           style={{
             fontFamily: "'Playfair Display', serif",
             fontWeight: 300,
@@ -283,7 +296,7 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
           variants={fadeSlideUp}
           initial="hidden"
           animate="visible"
-          custom={0.2}
+          custom={0.7}
           style={{
             fontFamily: 'Inter, sans-serif',
             fontWeight: 300,
@@ -296,9 +309,8 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
             textAlign: 'center',
           }}
         >
-          The first search engine for the Bangalore renter. We index the entire
-          market, from major listing portals to community leads—into one
-          intelligent, scored feed.
+          The entire market, scored and surfaced in one place.<br />
+          Free, because <span className="slide-underline">rental intelligence belongs to everyone!</span>
         </motion.p>
 
         {/* Command-palette search bar */}
@@ -306,7 +318,7 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
           variants={fadeSlideUp}
           initial="hidden"
           animate="visible"
-          custom={0.3}
+          custom={1.0}
           style={{ width: '100%', maxWidth: isDesktop ? 600 : '100%', position: 'relative', marginBottom: 14 }}
         >
           <MagneticSearchBar>
@@ -426,7 +438,7 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
           variants={fadeSlideUp}
           initial="hidden"
           animate="visible"
-          custom={0.4}
+          custom={1.2}
           style={{
             fontFamily: 'Inter, sans-serif',
             fontSize: 12,
@@ -443,7 +455,7 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
           variants={fadeSlideUp}
           initial="hidden"
           animate="visible"
-          custom={0.5}
+          custom={1.45}
           style={{
             display: 'flex',
             flexDirection: 'column',
@@ -617,14 +629,16 @@ function AnimatedScoreCircle({ trigger, size = 68, score = 92 }) {
 /* ── Unified Intelligence Section ───────────────────────────────────────── */
 function UnifiedIntelligenceSection({ isDesktop }) {
   const fusionRef = useRef(null);
-  const fusionInView = useInView(fusionRef, { margin: '-120px' });
+  // Trigger only when the animation box is well inside the viewport
+  const fusionInView = useInView(fusionRef, { margin: '-60px' });
 
   const [phase, setPhase] = useState('idle');
   useEffect(() => {
     if (fusionInView) {
-      setPhase('converging');
-      const t1 = setTimeout(() => setPhase('fused'), 1200);
-      return () => clearTimeout(t1);
+      // Wait 800ms so the user's eye has time to land on the animation box
+      const t0 = setTimeout(() => setPhase('converging'), 800);
+      const t1 = setTimeout(() => setPhase('fused'), 800 + 1400);
+      return () => { clearTimeout(t0); clearTimeout(t1); };
     } else {
       setPhase('idle');
     }
@@ -653,6 +667,18 @@ function UnifiedIntelligenceSection({ isDesktop }) {
           transition={{ duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
           style={{ textAlign: 'center', marginBottom: isDesktop ? 80 : 56 }}
         >
+          {/* Section label */}
+          <p style={{
+            fontFamily: "'DM Mono', monospace",
+            fontSize: 9,
+            letterSpacing: '0.2em',
+            textTransform: 'uppercase',
+            color: 'rgba(248,113,113,0.5)',
+            marginBottom: 16,
+          }}>
+            The Problem
+          </p>
+
           <h2 style={{
             fontFamily: "'Playfair Display', serif",
             fontWeight: 300,
@@ -660,27 +686,60 @@ function UnifiedIntelligenceSection({ isDesktop }) {
             lineHeight: 1.2,
             letterSpacing: '-0.02em',
             color: '#F0EFE9',
-            marginBottom: 24,
+            marginBottom: 32,
           }}>
             The search is scattered.<br />
             The process is broken.
           </h2>
-          <p style={{
-            fontFamily: "'DM Sans', sans-serif",
-            fontWeight: 300,
-            fontSize: isDesktop ? 15 : 14,
-            lineHeight: 1.85,
-            color: '#777',
-            maxWidth: 540,
-            margin: '0 auto',
-            letterSpacing: '0.01em',
+
+          {/* Pain point chips */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 10,
           }}>
-            House hunting in Bangalore shouldn't feel like a data entry job. Right
-            now, you're forced to manually monitor multiple platforms daily,
-            juggling tabs just to keep track of what you've already seen. Most
-            listings tell you about the four walls, but leave you in the dark about
-            the context that actually matters.
-          </p>
+            {[
+              '6 tabs open. Still no leads.',
+              'That good listing? Already gone.',
+              'No context on the locality.',
+              'Managing leads is a mess.',
+            ].map((text, i) => (
+              <motion.div
+                key={text}
+                initial={{ opacity: 0, y: 10 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: '-40px' }}
+                transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.15 * i }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '9px 16px',
+                  borderRadius: 8,
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.07)',
+                }}
+              >
+                <span style={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: 3,
+                  border: '1px solid rgba(255,255,255,0.18)',
+                  flexShrink: 0,
+                  display: 'inline-block',
+                }} />
+                <span style={{
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: 12,
+                  color: '#777',
+                  letterSpacing: '0.02em',
+                }}>
+                  {text}
+                </span>
+              </motion.div>
+            ))}
+          </div>
         </motion.div>
 
         {/* ── 2. The Transition ── */}
@@ -691,6 +750,38 @@ function UnifiedIntelligenceSection({ isDesktop }) {
           transition={{ duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.1 }}
           style={{ textAlign: 'center', marginBottom: isDesktop ? 72 : 48 }}
         >
+          {/* Section label + first of its kind tag */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
+            marginBottom: 16,
+          }}>
+            <p style={{
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 9,
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+              color: 'rgba(232,160,32,0.5)',
+              margin: 0,
+            }}>
+              The Fix
+            </p>
+            <span style={{
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 8,
+              letterSpacing: '0.12em',
+              textTransform: 'uppercase',
+              color: '#E8A020',
+              border: '1px solid rgba(232,160,32,0.3)',
+              borderRadius: 4,
+              padding: '2px 7px',
+            }}>
+              First of its kind
+            </span>
+          </div>
+
           <h2 style={{
             fontFamily: "'Playfair Display', serif",
             fontWeight: 300,
@@ -698,25 +789,58 @@ function UnifiedIntelligenceSection({ isDesktop }) {
             lineHeight: 1.2,
             letterSpacing: '-0.02em',
             color: '#E8A020',
-            marginBottom: 20,
+            marginBottom: 32,
           }}>
             One search. Every platform.
           </h2>
-          <p style={{
-            fontFamily: "'DM Sans', sans-serif",
-            fontWeight: 300,
-            fontSize: isDesktop ? 15 : 14,
-            lineHeight: 1.85,
-            color: '#777',
-            maxWidth: 520,
-            margin: '0 auto',
-            letterSpacing: '0.01em',
+
+          {/* Benefit chips */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 10,
           }}>
-            NestIQ pulls the scattered pieces into a single, intelligent lens. We
-            don't just show you a listing; we score it against the market using
-            real-time data and community sentiment from people who actually live
-            there.
-          </p>
+            {[
+              'One search across all platforms.',
+              'Every listing scored, not just sorted.',
+              'Community intelligence built in.',
+            ].map((text, i) => (
+              <motion.div
+                key={text}
+                initial={{ opacity: 0, y: 10 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: '-40px' }}
+                transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.15 * i }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '9px 16px',
+                  borderRadius: 8,
+                  background: 'rgba(232,160,32,0.04)',
+                  border: '1px solid rgba(232,160,32,0.12)',
+                }}
+              >
+                <span style={{
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: 11,
+                  color: '#E8A020',
+                  flexShrink: 0,
+                }}>
+                  ✓
+                </span>
+                <span style={{
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: 12,
+                  color: '#999',
+                  letterSpacing: '0.02em',
+                }}>
+                  {text}
+                </span>
+              </motion.div>
+            ))}
+          </div>
         </motion.div>
 
         {/* ── 3. Signal Fusion ── */}
@@ -1026,13 +1150,11 @@ function PulseSpotlightSection({ isDesktop }) {
             fontSize: isDesktop ? 15 : 14,
             lineHeight: 1.85,
             color: '#777',
-            maxWidth: 540,
+            maxWidth: 420,
             margin: '0 auto',
             letterSpacing: '0.01em',
           }}>
-            From city-wide rental trends to the specific pulse of a single street.
-            We aggregate data across Bangalore to give you a complete picture of
-            where the market is moving and what residents are saying.
+            City-wide trends meet street-level intelligence.
           </p>
         </motion.div>
 
@@ -1055,14 +1177,8 @@ function PulseSpotlightSection({ isDesktop }) {
             transition={{ duration: 0.8, delay: 0.1, ease: [0.25, 0.46, 0.45, 0.94] }}
             style={cardBase}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+            <div style={{ marginBottom: 24 }}>
               <p style={monoLabel}>Bengaluru Overview</p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span className="pulse-live-dot" style={{
-                  width: 5, height: 5, borderRadius: '50%', background: '#E8A020', display: 'inline-block',
-                }} />
-                <span style={{ ...monoLabel, color: '#E8A020', letterSpacing: '0.1em' }}>Live</span>
-              </div>
             </div>
 
             {/* Avg Rent */}
