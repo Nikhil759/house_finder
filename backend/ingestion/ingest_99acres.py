@@ -206,11 +206,37 @@ def _build_url(slug: str, page: int) -> str:
     return base if page == 1 else f"{base}?page={page}"
 
 
+def _parse_rent_action_price(price_str: str) -> int | None:
+    """
+    Parse the price string from a RentAction.priceSpecification.price field.
+    Handles formats like "65,500" (plain rupees) and "1.8 L" (lakhs).
+    """
+    if not price_str:
+        return None
+    price_str = price_str.strip()
+    # "1.8 L" or "1.8L" → lakhs
+    m = re.match(r"([\d.]+)\s*L\b", price_str, re.IGNORECASE)
+    if m:
+        return int(float(m.group(1)) * 100_000)
+    # Plain number with optional commas e.g. "65,500"
+    m = re.match(r"[\d,]+$", price_str.replace(" ", ""))
+    if m:
+        try:
+            return int(price_str.replace(",", "").replace(" ", ""))
+        except ValueError:
+            return None
+    return None
+
+
 def fetch_page(session: requests.Session, slug: str, page: int) -> list[dict]:
     """
     GET one SRP page and return all JSON-LD objects whose @type is a known
     listing type.  Returns an empty list on HTTP failure, Cloudflare block,
     or when no matching objects are found (signals end of pagination).
+
+    Each returned dict has an optional injected key ``_rent_action_price``
+    (int | None) sourced from the co-indexed RentAction JSON-LD object, which
+    is more reliable than the description-regex price.
     """
     url = _build_url(slug, page)
     try:
@@ -233,6 +259,7 @@ def fetch_page(session: requests.Session, slug: str, page: int) -> list[dict]:
 
     soup = BeautifulSoup(resp.text, "lxml")
     results: list[dict] = []
+    rent_action_prices: list[int | None] = []
 
     for tag in soup.find_all("script", type="application/ld+json"):
         raw = (tag.string or "").strip()
@@ -246,8 +273,20 @@ def fetch_page(session: requests.Session, slug: str, page: int) -> list[dict]:
         # Handle both a bare object and a JSON array of objects
         items = data if isinstance(data, list) else [data]
         for item in items:
-            if isinstance(item, dict) and item.get("@type") in _LISTING_TYPES:
+            if not isinstance(item, dict):
+                continue
+            t = item.get("@type")
+            if t in _LISTING_TYPES:
                 results.append(item)
+            elif t == "RentAction":
+                price_spec = item.get("priceSpecification") or {}
+                price_raw = price_spec.get("price") or price_spec.get("minPrice")
+                rent_action_prices.append(_parse_rent_action_price(str(price_raw)) if price_raw else None)
+
+    # Pair each listing with its co-indexed RentAction price (if available)
+    for i, listing in enumerate(results):
+        ra_price = rent_action_prices[i] if i < len(rent_action_prices) else None
+        listing["_rent_action_price"] = ra_price
 
     if not results:
         logger.debug("  No JSON-LD listing objects on %s page %d", slug, page)
@@ -415,10 +454,18 @@ def normalize(item: dict, locality_name: str) -> StandardListing | None:
     # ── Property type ──
     property_type = _property_type_map(item.get("@type", ""))
 
-    # ── Price fields (parsed from description text) ──
-    rent = _parse_price(description, _RENT_PATTERNS)
+    # ── Price fields ──
+    # Prefer the structured RentAction price (injected by fetch_page) — it is the
+    # canonical price shown on the 99acres card, not a regex over freeform text.
+    rent_action_price: int | None = item.get("_rent_action_price")
+    rent = rent_action_price or _parse_price(description, _RENT_PATTERNS)
     deposit = _parse_price(description, _DEPOSIT_PATTERNS)
     maintenance = _parse_price(description, _MAINTENANCE_PATTERNS)
+
+    # Sanity-cap deposit: reject regex misfires where deposit > 12× rent.
+    # Legitimate Bangalore deposits are typically 2–6 months; 12 is a safe ceiling.
+    if deposit and rent and deposit > rent * 12:
+        deposit = None
 
     # ── Furnishing ──
     furnishing = _parse_furnishing(description) or _parse_furnishing(name)
@@ -460,6 +507,8 @@ def normalize(item: dict, locality_name: str) -> StandardListing | None:
         area_sqft=area_sqft,
         is_broker=is_broker,
         no_brokerage=no_brokerage,
+        # 99acres JSON-LD has no date field — use scrape time so ORDER BY posted_at works
+        posted_at=datetime.now(timezone.utc),
         raw_payload=item,
     )
 
