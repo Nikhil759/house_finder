@@ -44,6 +44,7 @@ const SOURCE_LABEL_MAP = {
   nobroker:    'NoBroker',
   housing:     'Housing.com',
   'housing.com': 'Housing.com',
+  '99acres':   '99acres',
 };
 
 function normalizeSource(raw) {
@@ -56,7 +57,7 @@ function formatPriceStr(val) {
   return `₹${n.toLocaleString('en-IN')}`;
 }
 
-const KNOWN_SOURCES = new Set(['reddit', 'nobroker', 'telegram', 'housing']);
+const KNOWN_SOURCES = new Set(['reddit', 'nobroker', 'telegram', 'housing', '99acres']);
 
 function stableListingId(p) {
   const raw = (p.id || p.listing_id || '').toString();
@@ -157,6 +158,7 @@ const SOURCE_COLORS = {
   NoBroker:     '#E63946',
   'Housing.com':'#7C3AED',
   Telegram:     '#38BDF8',
+  '99acres':    '#0076BE',
 };
 
 const STAGE_STYLE = {

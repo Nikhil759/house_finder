@@ -58,9 +58,12 @@ function decodeHTML(str) {
 const PALETTE = ['#FF6060', '#5AAFFF', '#F5A623', '#7C6AF5', '#34C773', '#FF9040', '#686670']
 
 const SOURCE_STYLES = {
-  reddit: { label: 'Reddit', bg: '#281408', color: '#FF7040' },
-  news:   { label: 'News',   bg: '#141428', color: '#9090E0' },
-  nestiq: { label: 'NestIQ', bg: '#16142A', color: '#7C6AF5' },
+  reddit:    { label: 'Reddit',      bg: '#281408', color: '#FF7040' },
+  news:      { label: 'News',        bg: '#141428', color: '#9090E0' },
+  nestiq:    { label: 'NestIQ',      bg: '#16142A', color: '#7C6AF5' },
+  nobroker:  { label: 'NoBroker',    bg: '#1E0A0A', color: '#E63946' },
+  housing:   { label: 'Housing.com', bg: '#120A1E', color: '#7C3AED' },
+  '99acres': { label: '99acres',     bg: '#001A2E', color: '#0076BE' },
 }
 
 const SENTIMENT_STYLES = {

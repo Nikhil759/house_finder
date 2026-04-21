@@ -12,17 +12,19 @@ import Navbar from '../components/Navbar'
 import '../global.css'
 
 const SOURCE_COLORS = {
-  reddit:   '#ff4500',
-  telegram: '#229ed9',
-  nobroker: '#e63946',
-  housing:  '#7c3aed',
+  reddit:    '#ff4500',
+  telegram:  '#229ed9',
+  nobroker:  '#e63946',
+  housing:   '#7c3aed',
+  '99acres': '#0076be',
 }
 
 const SOURCE_ICONS = {
-  reddit:   'fa-brands fa-reddit',
-  telegram: 'fa-brands fa-telegram',
-  nobroker: 'fa-solid fa-building',
-  housing:  'fa-solid fa-house',
+  reddit:    'fa-brands fa-reddit',
+  telegram:  'fa-brands fa-telegram',
+  nobroker:  'fa-solid fa-building',
+  housing:   'fa-solid fa-house',
+  '99acres': 'fa-solid fa-landmark',
 }
 
 const STATUS_STAGES = [
@@ -70,14 +72,15 @@ function MiniCard({ post, onSave, onHide, savedStatus }) {
   const url       = post.url || (post.permalink ? `https://reddit.com${post.permalink}` : null)
   const isHousing = source === 'housing'
   const isNoBroker = source === 'nobroker'
-  const isStructured = isHousing || isNoBroker || source === 'telegram'
+  const is99Acres = source === '99acres'
+  const isStructured = isHousing || isNoBroker || is99Acres || source === 'telegram'
 
   const displayPrice    = isStructured ? (post.price_formatted || (post.price ? `₹${post.price.toLocaleString()}` : null)) : null
   const displayBhk      = post.bhk
   const displayLocality = post.locality
-  const displayArea     = (isHousing || isNoBroker) && post.area_sqft ? `${post.area_sqft} sqft` : null
-  const displayFurnishing = (isHousing || isNoBroker) ? post.furnishing : null
-  const displayDeposit  = isHousing && post.deposit ? `₹${post.deposit.toLocaleString()} dep` : null
+  const displayArea     = (isHousing || isNoBroker || is99Acres) && post.area_sqft ? `${post.area_sqft} sqft` : null
+  const displayFurnishing = (isHousing || isNoBroker || is99Acres) ? post.furnishing : null
+  const displayDeposit  = (isHousing || is99Acres) && post.deposit ? `₹${post.deposit.toLocaleString()} dep` : null
 
   const handleSave = (e) => {
     e.preventDefault()
@@ -234,13 +237,14 @@ function TrackingCard({ post, onStatusChange, onNotesChange, onUnsave }) {
   const currentStatus = post._status || 'interested'
   const isHousing   = source === 'housing'
   const isNoBroker  = source === 'nobroker'
-  const isStructured = isHousing || isNoBroker || source === 'telegram'
+  const is99Acres   = source === '99acres'
+  const isStructured = isHousing || isNoBroker || is99Acres || source === 'telegram'
   const displayPrice = isStructured
     ? (post.price_formatted || (post.price ? `₹${post.price.toLocaleString()}` : null))
     : null
-  const displayArea  = (isHousing || isNoBroker) && post.area_sqft ? `${post.area_sqft} sqft` : null
-  const displayFurnishing = (isHousing || isNoBroker) ? post.furnishing : null
-  const displayDeposit    = isHousing && post.deposit ? `₹${post.deposit.toLocaleString()} dep` : null
+  const displayArea  = (isHousing || isNoBroker || is99Acres) && post.area_sqft ? `${post.area_sqft} sqft` : null
+  const displayFurnishing = (isHousing || isNoBroker || is99Acres) ? post.furnishing : null
+  const displayDeposit    = (isHousing || is99Acres) && post.deposit ? `₹${post.deposit.toLocaleString()} dep` : null
   const sourceLabel = isHousing ? 'Housing.com' : isNoBroker ? 'NoBroker' : source
 
   const handleNotesChange = (val) => {
