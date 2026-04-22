@@ -1649,16 +1649,28 @@ export default function Search() {
   }
 
   // ── Client-side sort ────────────────────────────────────────────────────────
-  // 'Balanced': backend returns interleaved results — preserve API order.
   // 'Top Rated': pure quality score descending.
   // 'Newest': chronological descending.
-  const sorted = sort === 'Balanced'
-    ? [...listings]
-    : [...listings].sort((a, b) => {
-        if (sort === 'Top Rated') return b.score - a.score;
-        if (sort === 'Newest')    return b.rawCreated - a.rawCreated;
-        return 0;
-      });
+  // 'Balanced': quality-sort within each source, then round-robin interleave
+  //             so no single source dominates visually.
+  const sorted = (() => {
+    if (sort === 'Newest')    return [...listings].sort((a, b) => b.rawCreated - a.rawCreated);
+    if (sort === 'Top Rated') return [...listings].sort((a, b) => b.score - a.score);
+    // Balanced
+    const qualitySorted = [...listings].sort((a, b) => b.score - a.score);
+    const sourceOrder = ['nobroker', 'housing', '99acres', 'reddit', 'telegram'];
+    const buckets = Object.fromEntries(sourceOrder.map(s => [s, []]));
+    const other = [];
+    qualitySorted.forEach(p => {
+      if (buckets[p.rawSource] !== undefined) buckets[p.rawSource].push(p);
+      else other.push(p);
+    });
+    const interleaved = [];
+    while (sourceOrder.some(s => buckets[s].length > 0)) {
+      sourceOrder.forEach(s => { if (buckets[s].length > 0) interleaved.push(buckets[s].shift()); });
+    }
+    return [...interleaved, ...other];
+  })();
 
   // ── Client-side filter ──────────────────────────────────────────────────────
   const displayed = sorted.filter(listing => {
