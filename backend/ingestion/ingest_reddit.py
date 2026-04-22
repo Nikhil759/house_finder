@@ -138,34 +138,39 @@ def fetch_via_oauth(token: str, limit: int = 100) -> list[dict]:
 
 
 def fetch_via_public_json(limit: int = 100) -> list[dict]:
-    """Fetch via Reddit's public .json endpoint with browser-like session."""
-    import random
-    user_agents = [
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    ]
-    session = requests.Session()
-    headers = {
-        "User-Agent": random.choice(user_agents),
-        "Accept": "application/json", "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.reddit.com/", "DNT": "1",
-    }
-    try:
-        session.get("https://www.reddit.com/", headers=headers, timeout=10)
-        time.sleep(random.uniform(0.5, 1.5))
-    except Exception:
-        pass
+    """Fetch via Reddit's public .json endpoint using curl subprocess.
 
-    url = f"https://www.reddit.com/r/{_SUBREDDIT_STR}/search.json"
-    params = {
+    Python's requests library TLS fingerprint is flagged by Reddit's bot
+    detection; curl's native TLS stack is not, so we shell out to curl.
+    """
+    import json
+    import subprocess
+    import urllib.parse
+
+    query = urllib.parse.urlencode({
         "q": "bangalore rent OR bhk OR flat OR room OR pg OR flatmate",
-        "sort": "new", "limit": limit, "t": "month", "restrict_sr": "on",
-    }
+        "sort": "new",
+        "limit": limit,
+        "t": "month",
+        "restrict_sr": "on",
+    })
+    url = f"https://www.reddit.com/r/{_SUBREDDIT_STR}/search.json?{query}"
+    ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     try:
-        resp = session.get(url, params=params, headers=headers, timeout=15)
-        resp.raise_for_status()
-        return [item["data"] for item in resp.json().get("data", {}).get("children", [])]
+        result = subprocess.run(
+            [
+                "curl", "-s", "--max-time", "20",
+                "-H", f"User-Agent: {ua}",
+                "-H", "Accept: application/json",
+                "-H", "Accept-Language: en-US,en;q=0.9",
+                "-H", "Referer: https://www.reddit.com/",
+                url,
+            ],
+            capture_output=True, text=True, timeout=25,
+        )
+        data = json.loads(result.stdout)
+        posts = [item["data"] for item in data.get("data", {}).get("children", [])]
+        return posts
     except Exception as e:
         logger.error("Public Reddit .json fetch failed: %s", e)
         return []

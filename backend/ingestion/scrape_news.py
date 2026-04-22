@@ -64,7 +64,7 @@ CITY_QUERIES = [
 ]
 
 MAX_PER_QUERY  = 10
-LOOKBACK_HOURS = 168  # 7-day window
+LOOKBACK_HOURS = 48  # free plan has limited Indian coverage; 48h catches recent articles without duplicate flood
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

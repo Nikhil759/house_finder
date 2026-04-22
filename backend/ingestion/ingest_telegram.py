@@ -45,7 +45,6 @@ BANGALORE_TELEGRAM_GROUPS = [
     "bangalorerentals",
     "bangalorerental1",
     "rentalsbangalore",
-    "blrhousing",
     "HousingourBengaluru",
     "BangaloreHousing",
     "flatandflatmatebangalore",

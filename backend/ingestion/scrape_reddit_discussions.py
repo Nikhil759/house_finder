@@ -177,28 +177,52 @@ def _search_oauth(token: str, subreddit: str, query: str,
 
 def _search_public(subreddit: str, query: str,
                    sort: str, time_filter: str, limit: int) -> list[dict]:
-    """Fallback: search via Reddit's public .json endpoint with 429 retry."""
-    url = f"https://www.reddit.com/r/{subreddit}/search.json"
-    params = {
+    """Fallback: search via Reddit's public .json endpoint using curl subprocess.
+
+    Python's requests library TLS fingerprint is flagged by Reddit's bot
+    detection; curl's native TLS stack is not, so we shell out to curl.
+    """
+    import json
+    import subprocess
+    import urllib.parse
+
+    qs = urllib.parse.urlencode({
         "q": query, "sort": sort, "t": time_filter,
         "limit": limit, "restrict_sr": "on",
-    }
-    headers = {"User-Agent": _UA}
+    })
+    url = f"https://www.reddit.com/r/{subreddit}/search.json?{qs}"
+    ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 
     for attempt in range(1 + MAX_429_RETRIES):
         try:
-            resp = requests.get(url, headers=headers, params=params, timeout=15)
-            if resp.status_code == 429:
+            result = subprocess.run(
+                [
+                    "curl", "-s", "--max-time", "20",
+                    "-H", f"User-Agent: {ua}",
+                    "-H", "Accept: application/json",
+                    "-H", "Accept-Language: en-US,en;q=0.9",
+                    "-H", "Referer: https://www.reddit.com/",
+                    "--write-out", "\n%{http_code}",
+                    url,
+                ],
+                capture_output=True, text=True, timeout=25,
+            )
+            body, _, status_str = result.stdout.rpartition("\n")
+            status_code = int(status_str.strip()) if status_str.strip().isdigit() else 0
+
+            if status_code == 429:
                 if attempt < MAX_429_RETRIES:
                     logger.warning("  r/%s: 429 rate limited — backing off %.0fs", subreddit, SLEEP_ON_429)
                     time.sleep(SLEEP_ON_429)
                     continue
                 logger.warning("  r/%s: 429 after retry — skipping", subreddit)
                 return []
-            if resp.status_code != 200:
-                logger.warning("  r/%s: public .json %d — %s", subreddit, resp.status_code, resp.text[:200])
+            if status_code != 200:
+                logger.warning("  r/%s: public .json %d", subreddit, status_code)
                 return []
-            return [item["data"] for item in resp.json().get("data", {}).get("children", [])]
+
+            data = json.loads(body)
+            return [item["data"] for item in data.get("data", {}).get("children", [])]
         except Exception as e:
             logger.error("  r/%s: public request failed — %s", subreddit, e)
             return []
