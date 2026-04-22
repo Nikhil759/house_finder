@@ -1,4 +1,5 @@
 #!/bin/bash
-cd /Users/nikhilbansal/Downloads/reddit-housing/backend
-export PYTHONPATH="/Users/nikhilbansal/Downloads/reddit-housing/backend:$PYTHONPATH"
-/Library/Developer/CommandLineTools/usr/bin/python3 -m ingestion.ingest_reddit
+cd /Users/nikhilbansal/Developer/house_finder/backend
+export PYTHONPATH="/Users/nikhilbansal/Developer/house_finder/backend:$PYTHONPATH"
+source /Users/nikhilbansal/Developer/house_finder/backend/venv/bin/activate
+python -m ingestion.ingest_reddit

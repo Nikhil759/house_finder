@@ -28,9 +28,10 @@ GEMINI_BASE = "https://generativelanguage.googleapis.com"
 BATCH_SIZE = 50
 
 CANDIDATE_MODELS = [
-    ("v1beta", "gemini-2.0-flash-lite"),
+    ("v1beta", "gemini-2.5-flash-lite"),
     ("v1beta", "gemini-flash-lite-latest"),
-    ("v1beta", "gemini-2.0-flash"),
+    ("v1beta", "gemini-flash-latest"),
+    ("v1beta", "gemini-2.5-flash"),
 ]
 
 NOT_LISTING_PATTERNS = [
@@ -78,7 +79,7 @@ def _probe_model(api_key: str) -> tuple[str, str] | None:
     for api_version, model in CANDIDATE_MODELS:
         url = f"{GEMINI_BASE}/{api_version}/models/{model}:generateContent"
         try:
-            resp = requests.post(url, params={"key": api_key}, json=payload, timeout=10)
+            resp = requests.post(url, params={"key": api_key}, json=payload, timeout=15)
             if resp.status_code == 200:
                 logger.info("Model probe OK: %s/%s", api_version, model)
                 return api_version, model

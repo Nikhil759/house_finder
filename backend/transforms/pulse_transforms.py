@@ -36,14 +36,14 @@ logger = logging.getLogger(__name__)
 GEMINI_BASE = "https://generativelanguage.googleapis.com"
 
 CANDIDATE_MODELS_LITE = [
-    ("v1beta", "gemini-2.0-flash-lite"),
+    ("v1beta", "gemini-2.5-flash-lite"),
     ("v1beta", "gemini-flash-lite-latest"),
 ]
 
 CANDIDATE_MODELS_FLASH = [
-    ("v1beta", "gemini-2.0-flash"),
-    ("v1beta", "gemini-flash-latest"),
     ("v1beta", "gemini-2.5-flash"),
+    ("v1beta", "gemini-flash-latest"),
+    ("v1beta", "gemini-2.0-flash"),
 ]
 
 EXCLUDED_CATEGORIES = {"listing", "flatmate_search", "spam"}
@@ -373,7 +373,7 @@ def _probe_model(api_key: str, models: list[tuple[str, str]]) -> tuple[str, str]
     for api_version, model in models:
         url = f"{GEMINI_BASE}/{api_version}/models/{model}:generateContent"
         try:
-            resp = requests.post(url, params={"key": api_key}, json=payload, timeout=10)
+            resp = requests.post(url, params={"key": api_key}, json=payload, timeout=15)
             if resp.status_code == 200:
                 return api_version, model
         except Exception:
