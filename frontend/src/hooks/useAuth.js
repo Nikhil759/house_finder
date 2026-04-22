@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { identifyUser, resetPostHog } from '../lib/posthog'
+import { identifyUser, resetPostHog, posthog } from '../lib/posthog'
+
+const OWNER_EMAIL = 'bn5799@gmail.com'
+
+function applyOwnerFlag(user) {
+  if (user?.email === OWNER_EMAIL) {
+    posthog.register({ internal_user: true })
+    localStorage.setItem('posthog_internal_user', 'true')
+  }
+}
 
 export function useAuth() {
   const [user, setUser] = useState(null)
@@ -12,6 +21,7 @@ export function useAuth() {
       setLoading(false)
       if (session?.user) {
         identifyUser(session.user.id, { email: session.user.email })
+        applyOwnerFlag(session.user)
       }
     })
 
@@ -21,6 +31,7 @@ export function useAuth() {
         setLoading(false)
         if (session?.user) {
           identifyUser(session.user.id, { email: session.user.email })
+          applyOwnerFlag(session.user)
         } else if (event === 'SIGNED_OUT') {
           resetPostHog()
         }
