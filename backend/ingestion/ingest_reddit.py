@@ -172,21 +172,32 @@ def fetch_via_public_json(limit: int = 100) -> list[dict]:
 
 
 def fetch_via_pullpush(limit: int = 100) -> list[dict]:
-    """Fallback: fetch via PullPush.io (no auth required)."""
-    params = {
-        "q": "bangalore rent bhk",
-        "subreddit": ",".join(SUBREDDITS),
-        "size": min(limit, 100),
-        "sort": "desc", "sort_type": "created_utc",
-        "after": int(time.time()) - 30 * 86400,
-    }
-    try:
-        resp = requests.get(PULLPUSH_URL, headers={"User-Agent": _UA}, params=params, timeout=15)
-        resp.raise_for_status()
-        return resp.json().get("data", [])
-    except Exception as e:
-        logger.error("PullPush fetch failed: %s", e)
-        return []
+    """Fallback: fetch via PullPush.io (no auth required).
+    PullPush only accepts one subreddit per request, so we loop.
+    """
+    after = int(time.time()) - 30 * 86400
+    per_sub = max(10, min(limit // len(SUBREDDITS), 100))
+    results: list[dict] = []
+
+    for subreddit in SUBREDDITS:
+        params = {
+            "q": "bangalore rent bhk",
+            "subreddit": subreddit,
+            "size": per_sub,
+            "sort": "desc", "sort_type": "created_utc",
+            "after": after,
+        }
+        try:
+            resp = requests.get(
+                PULLPUSH_URL, headers={"User-Agent": _UA},
+                params=params, timeout=10,
+            )
+            resp.raise_for_status()
+            results.extend(resp.json().get("data", []))
+        except Exception as e:
+            logger.warning("PullPush fetch failed for r/%s: %s", subreddit, e)
+
+    return results
 
 
 # ── Parsing helpers ──

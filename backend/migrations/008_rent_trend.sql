@@ -81,7 +81,10 @@ BEGIN
   WHERE status IN ('active', 'stale')
     AND deposit IS NOT NULL
     AND rent IS NOT NULL
+    AND rent > 0
     AND deposit > 0
+    AND deposit >= rent
+    AND deposit <= rent * 12
     AND bhk IN ('1 BHK', '2 BHK', '3 BHK')
   GROUP BY bhk
   ORDER BY bhk;

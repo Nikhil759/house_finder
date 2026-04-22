@@ -11,6 +11,7 @@ import PulseLocality from "./pages/PulseLocality";
 import MyHub from "./pages/MyHub";
 import ListingDetail from "./pages/ListingDetail";
 import HealthPage from "./HealthPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
 import NewForYou from "./pages/NewForYou";
 import Profile from "./pages/Profile";
 import Stats from "./pages/Stats";
@@ -52,6 +53,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="/new" element={<MyHub />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/health" element={<AdminRoute element={<HealthPage />} />} />
+          <Route path="/analytics" element={<AdminRoute element={<AnalyticsPage />} />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/listing/:id" element={<ListingDetail />} />
           <Route path="/locality-guide" element={<Pulse />} />

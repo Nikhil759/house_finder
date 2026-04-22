@@ -191,23 +191,32 @@ export default function Profile() {
         {user.email === "bn5799@gmail.com" && (
           <section style={s.section}>
             <p style={s.sectionLabel}>Admin</p>
-            <div style={s.card}>
-              <Link
-                to="/health"
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 13,
-                  letterSpacing: '0.04em',
-                  color: 'var(--color-amber)',
-                  textDecoration: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                <span>⬡</span>
-                <span>System Health →</span>
-              </Link>
+            <div style={{ ...s.card, display: 'flex', flexDirection: 'column', gap: 0, padding: 0, overflow: 'hidden' }}>
+              {[
+                { to: '/health',    icon: '⬡', label: 'System Health' },
+                { to: '/analytics', icon: '◈', label: 'Analytics' },
+              ].map(({ to, icon, label }, i, arr) => (
+                <div key={to}>
+                  <Link
+                    to={to}
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 13,
+                      letterSpacing: '0.04em',
+                      color: 'var(--color-amber)',
+                      textDecoration: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '14px 18px',
+                    }}
+                  >
+                    <span>{icon}</span>
+                    <span>{label} →</span>
+                  </Link>
+                  {i < arr.length - 1 && <div style={s.divider} />}
+                </div>
+              ))}
             </div>
           </section>
         )}

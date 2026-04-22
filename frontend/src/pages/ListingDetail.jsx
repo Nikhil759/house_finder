@@ -4,6 +4,7 @@ import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
 import DesktopSidebar from '../components/DesktopSidebar';
 import { useDesktop } from '../hooks/useDesktop';
+import { trackListingClick } from '../lib/posthog';
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -348,6 +349,7 @@ export default function ListingDetail() {
         const data = await res.json();
         if (cancelled) return;
         setListing(data);
+        trackListingClick(id);
       } catch {
         if (!cancelled && !seedListing) setNotFound(true);
       } finally {
