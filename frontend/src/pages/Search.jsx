@@ -35,7 +35,7 @@ const SOURCE_LABELS = Object.fromEntries(
   Object.entries(SOURCE_CONFIG).map(([k, v]) => [k, v.label])
 );
 
-const SORT_OPTIONS      = ['Score', 'Newest'];
+const SORT_OPTIONS      = ['Balanced', 'Top Rated', 'Newest'];
 const BHK_OPTIONS       = ['Studio', '1', '2', '3', '4+'];
 const FURNISHED_OPTIONS = ['Any', 'Furnished', 'Unfurnished'];
 
@@ -279,7 +279,7 @@ function FilterBottomSheet({ open, onClose, initialFilters, initialSort, onApply
     ...DEFAULT_FILTERS,
     sources: { ...DEFAULT_FILTERS.sources },
   }));
-  const [draftSort, setDraftSort] = useState('Score');
+  const [draftSort, setDraftSort] = useState('Balanced');
 
   // Sync draft state whenever the sheet opens
   useEffect(() => {
@@ -305,7 +305,7 @@ function FilterBottomSheet({ open, onClose, initialFilters, initialSort, onApply
 
   function handleReset() {
     setDraft({ ...DEFAULT_FILTERS, sources: { ...DEFAULT_FILTERS.sources } });
-    setDraftSort('Score');
+    setDraftSort('Balanced');
   }
 
   function handleApply() {
@@ -469,8 +469,8 @@ function FilterBottomSheet({ open, onClose, initialFilters, initialSort, onApply
             />
           </SheetSection>
 
-          {/* Sort by */}
-          <SheetSection label="Sort By">
+          {/* View */}
+          <SheetSection label="View">
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {SORT_OPTIONS.map(opt => (
                 <PillToggle
@@ -1338,7 +1338,7 @@ export default function Search() {
   // Separate from `query` (live input) — only updates when a search is actually committed
   const [searchedLabel, setSearchedLabel] = useState(searchParams.get('q') || '');
   const [view, setView]               = useState(_saved.view  || searchParams.get('view') || 'grid');
-  const [sort, setSort]               = useState(_saved.sort  || searchParams.get('sort') || 'Score');
+  const [sort, setSort]               = useState(_saved.sort  || searchParams.get('sort') || 'Balanced');
   const [activeFilters, setActiveFilters] = useState(() => _saved.activeFilters ?? ({
     ...DEFAULT_FILTERS,
     sources: { ...DEFAULT_FILTERS.sources },
@@ -1422,7 +1422,8 @@ export default function Search() {
   useEffect(() => {
     const p = {};
     if (query) p.q = query;
-    if (sort !== 'Score') p.sort = sort;
+    if (sort === 'Top Rated') p.sort = 'score';
+    else if (sort === 'Newest') p.sort = 'newest';
     if (page > 1) p.page = String(page);
     if (view !== 'grid') p.view = view;
     setSearchParams(p, { replace: true });
@@ -1648,11 +1649,16 @@ export default function Search() {
   }
 
   // ── Client-side sort ────────────────────────────────────────────────────────
-  const sorted = [...listings].sort((a, b) => {
-    if (sort === 'Score')  return b.score - a.score;
-    if (sort === 'Newest') return b.rawCreated - a.rawCreated;
-    return 0;
-  });
+  // 'Balanced': backend returns interleaved results — preserve API order.
+  // 'Top Rated': pure quality score descending.
+  // 'Newest': chronological descending.
+  const sorted = sort === 'Balanced'
+    ? [...listings]
+    : [...listings].sort((a, b) => {
+        if (sort === 'Top Rated') return b.score - a.score;
+        if (sort === 'Newest')    return b.rawCreated - a.rawCreated;
+        return 0;
+      });
 
   // ── Client-side filter ──────────────────────────────────────────────────────
   const displayed = sorted.filter(listing => {
@@ -1987,7 +1993,7 @@ export default function Search() {
 
               {/* Sort */}
               <div style={{ marginBottom: 20 }}>
-                <p style={monoLabel}>Sort</p>
+                <p style={monoLabel}>View</p>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {SORT_OPTIONS.map(opt => (
                     <PillToggle key={opt} label={opt} active={sort === opt} onClick={() => setSort(opt)} />
@@ -2000,7 +2006,7 @@ export default function Search() {
                 onClick={() => {
                   setActiveFilters({ ...DEFAULT_FILTERS, sources: { ...DEFAULT_FILTERS.sources } });
                   setQuickFilters(new Set());
-                  setSort('Score');
+                  setSort('Balanced');
                 }}
                 style={{
                   fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
@@ -2725,7 +2731,7 @@ export default function Search() {
             whiteSpace: 'nowrap',
             flexShrink: 0,
           }}>
-            Sort by
+            View
           </span>
           {SORT_OPTIONS.map(opt => (
             <button

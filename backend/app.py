@@ -1246,8 +1246,24 @@ def search():
         all_posts.sort(key=lambda x: x.get("created", x.get("created_utc", 0)), reverse=True)
     elif sort == "upvotes":
         all_posts.sort(key=lambda x: x.get("score", 0), reverse=True)
-    else:
+    elif sort == "score":
+        # "Top Rated" — pure quality rank, no interleaving
         all_posts.sort(key=lambda x: x["quality_score"], reverse=True)
+    else:
+        # "Balanced" (default) — quality sort within each source, then round-robin
+        # interleave by source so no single source dominates visually.
+        all_posts.sort(key=lambda x: x["quality_score"], reverse=True)
+        from collections import defaultdict
+        _buckets = defaultdict(list)
+        for _post in all_posts:
+            _buckets[_post["source"]].append(_post)
+        _source_order = ["nobroker", "housing", "99acres", "reddit", "telegram"]
+        _interleaved = []
+        while any(_buckets[s] for s in _source_order):
+            for _src in _source_order:
+                if _buckets[_src]:
+                    _interleaved.append(_buckets[_src].pop(0))
+        all_posts = _interleaved
 
     locality_warning    = bool(area and not canonical_area)
     locality_suggestion = suggest_locality(area) if locality_warning else None

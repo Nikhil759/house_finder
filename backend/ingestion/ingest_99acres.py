@@ -67,7 +67,7 @@ logger = logging.getLogger("ingest_99acres")
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 SOURCE = "99acres"
-MAX_PAGES = int(os.environ.get("ACRES_MAX_PAGES", "5"))
+MAX_PAGES = int(os.environ.get("ACRES_MAX_PAGES", "1"))
 
 LOCALITY_SLUGS: dict[str, str] = {
     # ── East ──────────────────────────────────────────────────────────────────
