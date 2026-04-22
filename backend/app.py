@@ -1841,9 +1841,11 @@ def pulse_feed():
             JOIN locality_feed lf ON lf.id = fc.feed_id
             WHERE lf.category IN ('discussion', 'news')
               AND lf.relevance_score >= 0.3
+              AND lf.scraped_at >= NOW() - INTERVAL '7 days'
               {where_sql}
             ORDER BY fc.featured DESC, fc.editor_rank ASC NULLS LAST,
-                     lf.relevance_score DESC, lf.scraped_at DESC
+                     (lf.relevance_score * EXP(-0.5 * EXTRACT(EPOCH FROM NOW() - lf.scraped_at) / 86400.0)) DESC,
+                     lf.scraped_at DESC
             LIMIT %s
         """, params)
 
