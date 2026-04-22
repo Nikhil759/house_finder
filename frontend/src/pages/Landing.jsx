@@ -5,6 +5,7 @@ import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
 import DesktopSidebar from '../components/DesktopSidebar';
 import { useDesktop } from '../hooks/useDesktop';
+import { usePWAInstall } from '../hooks/usePWAInstall';
 import RadarAnimation from '../components/RadarAnimation';
 import '../global.css';
 
@@ -1862,8 +1863,156 @@ export default function Landing() {
         </Link>
       </section>
 
+      {/* ── PWA INSTALL NUDGE ── */}
+      {!isDesktop && <PWAInstallNudge />}
+
       <BottomNav />
 
     </div>
+  );
+}
+
+// ── PWA Install Nudge ──────────────────────────────────────────────────────────
+function PWAInstallNudge() {
+  const { canInstall, isIOS, triggerInstall } = usePWAInstall();
+  const [showIOSTip, setShowIOSTip] = useState(false);
+  const [installed, setInstalled] = useState(false);
+
+  if (!canInstall || installed) return null;
+
+  async function handleInstall() {
+    const result = await triggerInstall();
+    if (result === 'ios') {
+      setShowIOSTip(true);
+    } else if (result === 'accepted') {
+      setInstalled(true);
+    }
+  }
+
+  return (
+    <section style={{
+      padding: '0 16px 48px',
+    }}>
+      <div style={{
+        background: 'var(--color-bg-surface)',
+        border: '1px solid rgba(232,160,32,0.18)',
+        borderRadius: 16,
+        padding: '20px 18px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 14,
+      }}>
+        {/* Icon */}
+        <div style={{
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          background: 'rgba(232,160,32,0.08)',
+          border: '1px solid rgba(232,160,32,0.2)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E8A020" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2v13M8 11l4 4 4-4" />
+            <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+          </svg>
+        </div>
+
+        {/* Text */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: 'var(--color-text-primary)',
+            marginBottom: 2,
+          }}>
+            Add NestIQ to your home screen
+          </p>
+          <p style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            color: 'var(--color-text-muted)',
+            letterSpacing: '0.06em',
+          }}>
+            Instant access · works offline · no browser chrome
+          </p>
+        </div>
+
+        {/* Button */}
+        <button
+          onClick={handleInstall}
+          style={{
+            flexShrink: 0,
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+            background: '#E8A020',
+            color: '#1a0a00',
+            border: 'none',
+            borderRadius: 8,
+            padding: '9px 14px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {isIOS ? 'How to' : 'Install'}
+        </button>
+      </div>
+
+      {/* iOS share-sheet tip */}
+      {showIOSTip && (
+        <div style={{
+          marginTop: 10,
+          background: 'var(--color-bg-surface)',
+          border: '1px solid rgba(232,160,32,0.25)',
+          borderRadius: 14,
+          padding: '16px 18px',
+        }}>
+          <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 12 }}>
+            Add to Home Screen
+          </p>
+          {[
+            'Tap the Share button at the bottom of Safari',
+            'Scroll down and tap "Add to Home Screen"',
+            'Tap Add — done!',
+          ].map((step, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: i < 2 ? 10 : 0 }}>
+              <div style={{
+                width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                background: 'rgba(232,160,32,0.12)',
+                border: '1px solid rgba(232,160,32,0.3)',
+                color: '#E8A020',
+                fontSize: 10, fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {i + 1}
+              </div>
+              <span style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
+                {step}
+              </span>
+            </div>
+          ))}
+          <button
+            onClick={() => setShowIOSTip(false)}
+            style={{
+              marginTop: 14, width: '100%',
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 8,
+              color: 'var(--color-text-muted)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11, letterSpacing: '0.08em',
+              padding: '8px', cursor: 'pointer',
+            }}
+          >
+            Got it
+          </button>
+        </div>
+      )}
+    </section>
   );
 }
