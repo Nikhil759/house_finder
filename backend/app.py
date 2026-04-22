@@ -1535,6 +1535,15 @@ def _posthog_query(hogql: str) -> dict:
     return resp.json()
 
 
+def _safe_posthog_query(hogql: str, label: str = "") -> dict:
+    """Run a HogQL query, returning empty results instead of raising on failure."""
+    try:
+        return _posthog_query(hogql)
+    except Exception as e:
+        logger.warning("PostHog query failed [%s]: %s", label or hogql[:60], e)
+        return {"results": []}
+
+
 @app.route("/api/stats")
 def stats():
     """
@@ -1611,12 +1620,148 @@ def stats():
             for row in (daily_res.get("results") or [])
         ]
 
+        # Unique visitors last 7 days
+        visitors_7d_res = _safe_posthog_query(
+            "SELECT count(DISTINCT person_id) AS cnt "
+            "FROM events "
+            "WHERE event = 'page_view' "
+            "AND timestamp >= now() - INTERVAL 7 DAY "
+            "AND (properties.internal_user IS NULL OR properties.internal_user != true)",
+            "visitors_7d",
+        )
+        visitors_7d = visitors_7d_res.get("results", [[0]])[0][0] if visitors_7d_res.get("results") else 0
+
+        # New visitors last 30 days: seen in last 30d but not before
+        new_visitors_res = _safe_posthog_query(
+            "SELECT count(DISTINCT person_id) AS cnt "
+            "FROM events "
+            "WHERE event = 'page_view' "
+            "AND timestamp >= now() - INTERVAL 30 DAY "
+            "AND (properties.internal_user IS NULL OR properties.internal_user != true) "
+            "AND person_id NOT IN ("
+            "  SELECT DISTINCT person_id FROM events "
+            "  WHERE event = 'page_view' "
+            "  AND timestamp < now() - INTERVAL 30 DAY "
+            "  AND (properties.internal_user IS NULL OR properties.internal_user != true)"
+            ")",
+            "new_visitors",
+        )
+        new_visitors = new_visitors_res.get("results", [[0]])[0][0] if new_visitors_res.get("results") else 0
+
+        # Average session duration in seconds (30d) — uses $session_id property
+        avg_session_res = _safe_posthog_query(
+            "SELECT avg(dur) FROM ("
+            "  SELECT properties.$session_id AS sid,"
+            "    dateDiff('second', min(timestamp), max(timestamp)) AS dur"
+            "  FROM events"
+            "  WHERE timestamp >= now() - INTERVAL 30 DAY"
+            "  AND (properties.internal_user IS NULL OR properties.internal_user != true)"
+            "  AND properties.$session_id IS NOT NULL"
+            "  AND properties.$session_id != ''"
+            "  GROUP BY sid"
+            ") WHERE dur > 0",
+            "avg_session",
+        )
+        avg_session_raw = avg_session_res.get("results", [[None]])[0][0] if avg_session_res.get("results") else None
+        avg_session_seconds = round(float(avg_session_raw)) if avg_session_raw is not None else None
+
+        # Top localities (/neighbourhood-pulse/* routes)
+        localities_res = _safe_posthog_query(
+            "SELECT properties.pathname AS route, count(DISTINCT person_id) AS uniq, count() AS cnt "
+            "FROM events "
+            "WHERE event = 'page_view' "
+            "AND timestamp >= now() - INTERVAL 30 DAY "
+            "AND (properties.internal_user IS NULL OR properties.internal_user != true) "
+            "AND properties.pathname LIKE '/neighbourhood-pulse/%' "
+            "GROUP BY route "
+            "ORDER BY cnt DESC "
+            "LIMIT 10",
+            "top_localities",
+        )
+        top_localities = [
+            {
+                "locality": row[0].replace("/neighbourhood-pulse/", "").replace("-", " ").title() if row[0] else "",
+                "slug": row[0],
+                "unique_visitors": row[1],
+                "views": row[2],
+            }
+            for row in (localities_res.get("results") or [])
+        ]
+
+        # Search event count (30d)
+        search_count_res = _safe_posthog_query(
+            "SELECT count() AS cnt "
+            "FROM events "
+            "WHERE event = 'search' "
+            "AND timestamp >= now() - INTERVAL 30 DAY "
+            "AND (properties.internal_user IS NULL OR properties.internal_user != true)",
+            "search_count",
+        )
+        search_count = search_count_res.get("results", [[0]])[0][0] if search_count_res.get("results") else 0
+
+        # Top search queries (30d)
+        top_searches_res = _safe_posthog_query(
+            "SELECT properties.query AS q, count() AS cnt "
+            "FROM events "
+            "WHERE event = 'search' "
+            "AND timestamp >= now() - INTERVAL 30 DAY "
+            "AND (properties.internal_user IS NULL OR properties.internal_user != true) "
+            "AND properties.query IS NOT NULL "
+            "AND properties.query != '' "
+            "GROUP BY q "
+            "ORDER BY cnt DESC "
+            "LIMIT 10",
+            "top_searches",
+        )
+        top_searches = [
+            {"query": row[0], "count": row[1]}
+            for row in (top_searches_res.get("results") or [])
+        ]
+
+        # Listing click count (30d)
+        listing_clicks_res = _safe_posthog_query(
+            "SELECT count() AS cnt "
+            "FROM events "
+            "WHERE event = 'listing_click' "
+            "AND timestamp >= now() - INTERVAL 30 DAY "
+            "AND (properties.internal_user IS NULL OR properties.internal_user != true)",
+            "listing_clicks",
+        )
+        listing_clicks = listing_clicks_res.get("results", [[0]])[0][0] if listing_clicks_res.get("results") else 0
+
+        # Top clicked listings (30d)
+        top_listings_res = _safe_posthog_query(
+            "SELECT properties.listing_id AS lid, count() AS cnt "
+            "FROM events "
+            "WHERE event = 'listing_click' "
+            "AND timestamp >= now() - INTERVAL 30 DAY "
+            "AND (properties.internal_user IS NULL OR properties.internal_user != true) "
+            "AND properties.listing_id IS NOT NULL "
+            "GROUP BY lid "
+            "ORDER BY cnt DESC "
+            "LIMIT 10",
+            "top_listings",
+        )
+        top_listings = [
+            {"listing_id": row[0], "views": row[1]}
+            for row in (top_listings_res.get("results") or [])
+        ]
+
         return jsonify({
             "unique_visitors_30d": visitors,
+            "unique_visitors_7d": visitors_7d,
+            "new_visitors_30d": new_visitors,
+            "returning_visitors_30d": max(0, visitors - new_visitors),
             "total_views_30d": total_views,
             "views_today": views_today,
+            "avg_session_seconds": avg_session_seconds,
             "top_routes": routes,
             "daily_visitors": daily,
+            "top_localities": top_localities,
+            "search_count_30d": search_count,
+            "top_searches": top_searches,
+            "listing_clicks_30d": listing_clicks,
+            "top_listings": top_listings,
         })
 
     except Exception as e:

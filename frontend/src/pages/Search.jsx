@@ -15,6 +15,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useSavedListings } from '../hooks/useSavedListings';
 import { useSearchLogs } from '../hooks/useSearchLogs';
 import { useDesktop } from '../hooks/useDesktop';
+import { trackSearch } from '../lib/posthog';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -1444,6 +1445,7 @@ export default function Search() {
     setGeoActive(false);
     setGeoPin(null);
     setSearchedLabel(area);
+    if (area) trackSearch(area);
     doSearch(area);
   }
 
