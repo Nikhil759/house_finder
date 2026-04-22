@@ -249,28 +249,52 @@ def query_listings(
             params.append(since_utc)
 
         where = " AND ".join(conditions) if conditions else "1=1"
+
+        # Cap each source at 30 results (by quality) so no single source floods results.
+        # The outer query merges all sources and re-sorts by quality_score globally.
+        PER_SOURCE_CAP = 30
+
         sql = f"""
-            SELECT l.source, l.source_id, l.source_url, l.source_group,
-                   l.title, l.body, l.bhk, l.property_type, l.furnishing,
-                   l.rent, l.deposit, l.maintenance,
-                   l.locality, l.address, l.latitude, l.longitude, l.maps_url,
-                   l.area_sqft, l.floor_info, l.amenities, l.lease_type,
-                   l.contact_phone, l.contact_name, l.is_broker, l.no_brokerage,
-                   l.is_flatmate, l.is_sponsored, l.thumbnail_url,
-                   EXTRACT(EPOCH FROM l.posted_at)::FLOAT as posted_epoch,
-                   COALESCE(lc.quality_score, l.quality_score) AS quality_score,
-                   l.raw_payload,
-                   l.id, l.duplicate_group_id,
-                   lc.detail_score, lc.price_comp_score,
-                   lc.locality_sent_score, lc.freshness_score,
-                   lc.price_anomaly, lc.is_per_room, lc.rent_type
-            FROM listings l
-            LEFT JOIN listings_curated lc ON lc.listing_id = l.id
-            WHERE {where}
-            ORDER BY l.posted_at DESC NULLS LAST
-            LIMIT %s
+            WITH ranked AS (
+                SELECT l.source, l.source_id, l.source_url, l.source_group,
+                       l.title, l.body, l.bhk, l.property_type, l.furnishing,
+                       l.rent, l.deposit, l.maintenance,
+                       l.locality, l.address, l.latitude, l.longitude, l.maps_url,
+                       l.area_sqft, l.floor_info, l.amenities, l.lease_type,
+                       l.contact_phone, l.contact_name, l.is_broker, l.no_brokerage,
+                       l.is_flatmate, l.is_sponsored, l.thumbnail_url,
+                       EXTRACT(EPOCH FROM l.posted_at)::FLOAT AS posted_epoch,
+                       COALESCE(lc.quality_score, l.quality_score) AS quality_score,
+                       l.raw_payload,
+                       l.id, l.duplicate_group_id,
+                       lc.detail_score, lc.price_comp_score,
+                       lc.locality_sent_score, lc.freshness_score,
+                       lc.price_anomaly, lc.is_per_room, lc.rent_type,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY l.source
+                           ORDER BY COALESCE(lc.quality_score, l.quality_score) DESC NULLS LAST
+                       ) AS rn
+                FROM listings l
+                LEFT JOIN listings_curated lc ON lc.listing_id = l.id
+                WHERE {where}
+            )
+            SELECT source, source_id, source_url, source_group,
+                   title, body, bhk, property_type, furnishing,
+                   rent, deposit, maintenance,
+                   locality, address, latitude, longitude, maps_url,
+                   area_sqft, floor_info, amenities, lease_type,
+                   contact_phone, contact_name, is_broker, no_brokerage,
+                   is_flatmate, is_sponsored, thumbnail_url,
+                   posted_epoch, quality_score, raw_payload,
+                   id, duplicate_group_id,
+                   detail_score, price_comp_score,
+                   locality_sent_score, freshness_score,
+                   price_anomaly, is_per_room, rent_type
+            FROM ranked
+            WHERE rn <= %s
+            ORDER BY quality_score DESC NULLS LAST
         """
-        params.append(limit)
+        params.append(PER_SOURCE_CAP)
 
         cur = conn.cursor()
         cur.execute(sql, params)
