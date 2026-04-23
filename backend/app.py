@@ -1647,6 +1647,16 @@ def stats():
         )
         visitors_7d = visitors_7d_res.get("results", [[0]])[0][0] if visitors_7d_res.get("results") else 0
 
+        # All-time unique visitors (excluding internal)
+        visitors_all_time_res = _safe_posthog_query(
+            "SELECT count(DISTINCT person_id) AS cnt "
+            "FROM events "
+            "WHERE event = 'page_view' "
+            "AND (properties.internal_user IS NULL OR properties.internal_user != true)",
+            "visitors_all_time",
+        )
+        visitors_all_time = visitors_all_time_res.get("results", [[0]])[0][0] if visitors_all_time_res.get("results") else 0
+
         # New visitors last 30 days: seen in last 30d but not before
         new_visitors_res = _safe_posthog_query(
             "SELECT count(DISTINCT person_id) AS cnt "
@@ -1766,6 +1776,7 @@ def stats():
         return jsonify({
             "unique_visitors_30d": visitors,
             "unique_visitors_7d": visitors_7d,
+            "unique_visitors_all_time": visitors_all_time,
             "new_visitors_30d": new_visitors,
             "returning_visitors_30d": max(0, visitors - new_visitors),
             "total_views_30d": total_views,

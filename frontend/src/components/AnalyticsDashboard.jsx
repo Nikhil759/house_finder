@@ -212,11 +212,18 @@ function NewReturningBar({ newCount, returningCount }) {
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
+const VISITOR_PERIODS = [
+  { key: 'all', label: 'All time', dataKey: 'unique_visitors_all_time' },
+  { key: '30d', label: '30d', dataKey: 'unique_visitors_30d' },
+  { key: '7d', label: '7d', dataKey: 'unique_visitors_7d' },
+];
+
 export default function AnalyticsDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [lastFetched, setLastFetched] = useState(null);
+  const [visitorPeriod, setVisitorPeriod] = useState('all');
 
   const fetchStats = useCallback(async () => {
     setLoading(true);
@@ -307,12 +314,68 @@ export default function AnalyticsDashboard() {
         <>
           {/* ── Top-line stat cards ── */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
-            <StatCard
-              label="Unique visitors"
-              value={fmtNum(data.unique_visitors_30d)}
-              sub="last 30 days"
-              accent
-            />
+            {/* Unique visitors with period filter */}
+            <div style={{
+              background: 'var(--color-bg-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 12,
+              padding: '14px 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 9,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  color: 'var(--color-text-muted)',
+                }}>
+                  Unique visitors
+                </span>
+                <div style={{ display: 'flex', gap: 2 }}>
+                  {VISITOR_PERIODS.map(p => (
+                    <button
+                      key={p.key}
+                      onClick={() => setVisitorPeriod(p.key)}
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 8,
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        border: visitorPeriod === p.key ? '1px solid var(--color-amber)' : '1px solid var(--color-border)',
+                        background: visitorPeriod === p.key ? 'rgba(245,166,35,0.12)' : 'none',
+                        color: visitorPeriod === p.key ? 'var(--color-amber)' : 'var(--color-text-muted)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <span style={{
+                fontSize: 28,
+                fontWeight: 700,
+                color: 'var(--color-amber)',
+                lineHeight: 1.1,
+                letterSpacing: '-0.02em',
+              }}>
+                {fmtNum(data[VISITOR_PERIODS.find(p => p.key === visitorPeriod).dataKey])}
+              </span>
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: 'var(--color-text-muted)',
+                letterSpacing: '0.04em',
+              }}>
+                {VISITOR_PERIODS.find(p => p.key === visitorPeriod).label.toLowerCase()}
+              </span>
+            </div>
             <StatCard
               label="Views today"
               value={fmtNum(data.views_today)}
