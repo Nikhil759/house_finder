@@ -1624,15 +1624,12 @@ def stats():
             returning_visitors = None
 
         # ── Average session duration ─────────────────────────────────────────────
-        session_time_cond = (
-            f"timestamp >= now() - INTERVAL {interval}" if interval else "1=1"
-        )
         avg_session_res = _safe_posthog_query(
             f"SELECT avg(dur) FROM ("
             f"  SELECT properties.$session_id AS sid,"
             f"    dateDiff('second', min(timestamp), max(timestamp)) AS dur"
             f"  FROM events"
-            f"  WHERE {session_time_cond}"
+            f"  WHERE {time_filter('timestamp')[4:] if interval else '1=1'}"  # strip leading AND
             f"  AND {NO_INTERNAL}"
             f"  AND properties.$session_id IS NOT NULL"
             f"  AND properties.$session_id != ''"
@@ -1778,68 +1775,52 @@ def stats():
         )
         login_count = logins_res.get("results", [[0]])[0][0] if logins_res.get("results") else 0
 
-        # ── All users + emails via Supabase admin API ────────────────────────────
-        supabase_url = os.getenv("SUPABASE_URL", "")
-        service_key = os.getenv("SUPABASE_SERVICE_KEY", "")
-        login_emails = []
-        total_users = 0
-        if supabase_url and service_key:
-            try:
-                page, per_page = 1, 1000
-                while True:
-                    r = http.get(
-                        f"{supabase_url}/auth/v1/admin/users",
-                        params={"page": page, "per_page": per_page},
-                        headers={
-                            "apikey": service_key,
-                            "Authorization": f"Bearer {service_key}",
-                        },
-                        timeout=8,
-                    )
-                    if r.status_code == 200:
-                        batch = r.json().get("users", [])
-                        login_emails += [u.get("email", "") for u in batch if u.get("email")]
-                        total_users += len(batch)
-                        if len(batch) < per_page:
-                            break
-                        page += 1
-                    else:
-                        logger.warning("Supabase admin users fetch failed: %s", r.status_code)
-                        break
-            except Exception as e:
-                logger.warning("Supabase users error: %s", e)
+        # ── All users + emails via PostHog persons table ─────────────────────────
+        persons_res = _safe_posthog_query(
+            "SELECT properties.email AS email, created_at "
+            "FROM persons "
+            "WHERE properties.email IS NOT NULL AND properties.email != '' "
+            "ORDER BY created_at DESC "
+            "LIMIT 500",
+            "persons_emails",
+        )
+        login_emails = [
+            row[0] for row in (persons_res.get("results") or []) if row[0]
+        ]
+        total_users = len(login_emails)
 
         # ── Saved listings count via Supabase REST ───────────────────────────────
+        supabase_url = os.getenv("SUPABASE_URL", "")
+        service_key = os.getenv("SUPABASE_SERVICE_KEY", "")
         saved_listings_total = 0
         saved_listings_users = 0
         if supabase_url and service_key:
             try:
                 r = http.get(
                     f"{supabase_url}/rest/v1/saved_listings",
-                    params={"select": "id"},
-                    headers={
-                        "apikey": service_key,
-                        "Authorization": f"Bearer {service_key}",
-                        "Prefer": "count=exact",
-                        "Range": "0-0",
-                    },
-                    timeout=8,
-                )
-                cr = r.headers.get("Content-Range", "")
-                saved_listings_total = int(cr.split("/")[-1]) if "/" in cr else 0
-
-                r2 = http.get(
-                    f"{supabase_url}/rest/v1/saved_listings",
                     params={"select": "user_id"},
                     headers={
                         "apikey": service_key,
                         "Authorization": f"Bearer {service_key}",
+                        "Prefer": "count=exact",
+                        "Range-Unit": "items",
+                        "Range": "0-999",
                     },
                     timeout=8,
                 )
-                if r2.status_code == 200:
-                    rows = r2.json()
+                if r.status_code in (200, 206):
+                    rows = r.json() or []
+                    saved_listings_total = len(rows)
                     saved_listings_users = len({row["user_id"] for row in rows if row.get("user_id")})
+                    # If response hit the range limit, use Content-Range total
+                    cr = r.headers.get("Content-Range", "")
+                    if "/" in cr:
+                        try:
+                            saved_listings_total = int(cr.split("/")[-1])
+                        except ValueError:
+                            pass
+                else:
+                    logger.warning("Supabase saved_listings fetch failed: %s %s", r.status_code, r.text[:200])
             except Exception as e:
                 logger.warning("Supabase saved_listings error: %s", e)
 

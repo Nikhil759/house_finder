@@ -226,32 +226,47 @@ function NewReturningBar({ newCount, returningCount }) {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function AnalyticsDashboard() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  // cache holds data per period key so switching is instant after first load
+  const [cache, setCache] = useState({});
+  const [loadingPeriods, setLoadingPeriods] = useState(new Set());
+  const [errors, setErrors] = useState({});
   const [lastFetched, setLastFetched] = useState(null);
   const [period, setPeriod] = useState('30d');
   const [showEmails, setShowEmails] = useState(false);
 
-  const fetchStats = useCallback(async (p) => {
-    setLoading(true);
-    setError(null);
+  const fetchPeriod = useCallback(async (p) => {
+    if (loadingPeriods.has(p)) return;
+    setLoadingPeriods(prev => new Set([...prev, p]));
+    setErrors(prev => { const n = { ...prev }; delete n[p]; return n; });
     try {
       const res = await fetch(`${API_BASE}/api/stats?period=${p}`, {
         headers: { 'X-Stats-Token': STATS_SECRET },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      setData(json);
+      setCache(prev => ({ ...prev, [p]: json }));
       setLastFetched(new Date());
     } catch (e) {
-      setError(e.message);
+      setErrors(prev => ({ ...prev, [p]: e.message }));
     } finally {
-      setLoading(false);
+      setLoadingPeriods(prev => { const n = new Set(prev); n.delete(p); return n; });
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { fetchStats(period); }, [fetchStats, period]);
+  // Fetch all periods in parallel on mount
+  useEffect(() => {
+    PERIODS.forEach(p => fetchPeriod(p.key));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const data = cache[period] ?? null;
+  const loading = loadingPeriods.has(period);
+  const error = errors[period] ?? null;
+
+  const refreshAll = useCallback(() => {
+    setCache({});
+    setErrors({});
+    PERIODS.forEach(p => fetchPeriod(p.key));
+  }, [fetchPeriod]);
 
   const pLabel = periodLabel(period);
 
@@ -276,8 +291,8 @@ export default function AnalyticsDashboard() {
             </span>
           )}
           <button
-            onClick={() => fetchStats(period)}
-            disabled={loading}
+            onClick={refreshAll}
+            disabled={loadingPeriods.size > 0}
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: 9,
@@ -287,38 +302,43 @@ export default function AnalyticsDashboard() {
               border: '1px solid var(--color-border)',
               borderRadius: 6,
               padding: '5px 10px',
-              cursor: loading ? 'default' : 'pointer',
-              color: loading ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
+              cursor: loadingPeriods.size > 0 ? 'default' : 'pointer',
+              color: loadingPeriods.size > 0 ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
             }}
           >
-            {loading ? '···' : '↻ Refresh'}
+            {loadingPeriods.size > 0 ? `···${loadingPeriods.size < 4 ? ` (${4 - loadingPeriods.size}/4)` : ''}` : '↻ Refresh'}
           </button>
         </div>
       </div>
 
       {/* ── Period filter ── */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 14 }}>
-        {PERIODS.map(p => (
-          <button
-            key={p.key}
-            onClick={() => setPeriod(p.key)}
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 9,
-              letterSpacing: '0.1em',
-              textTransform: 'uppercase',
-              padding: '5px 10px',
-              borderRadius: 6,
-              border: period === p.key ? '1px solid var(--color-amber)' : '1px solid var(--color-border)',
-              background: period === p.key ? 'rgba(245,166,35,0.12)' : 'none',
-              color: period === p.key ? 'var(--color-amber)' : 'var(--color-text-muted)',
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-            }}
-          >
-            {p.label}
-          </button>
-        ))}
+        {PERIODS.map(p => {
+          const isActive = period === p.key;
+          const isFetching = loadingPeriods.has(p.key);
+          return (
+            <button
+              key={p.key}
+              onClick={() => setPeriod(p.key)}
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 9,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                padding: '5px 10px',
+                borderRadius: 6,
+                border: isActive ? '1px solid var(--color-amber)' : '1px solid var(--color-border)',
+                background: isActive ? 'rgba(245,166,35,0.12)' : 'none',
+                color: isActive ? 'var(--color-amber)' : isFetching ? 'var(--color-text-muted)' : 'var(--color-text-muted)',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+                opacity: isFetching && !isActive ? 0.5 : 1,
+              }}
+            >
+              {isFetching ? '···' : p.label}
+            </button>
+          );
+        })}
       </div>
 
       {error && (
