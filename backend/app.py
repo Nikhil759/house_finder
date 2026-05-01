@@ -1564,144 +1564,151 @@ def _safe_posthog_query(hogql: str, label: str = "") -> dict:
 def stats():
     """
     Return PostHog analytics stats for the internal dashboard.
-    Protected by a simple owner-email check via query param.
-    Real auth happens on the frontend via Supabase; this endpoint
-    is low-risk (read-only analytics) so a shared secret is sufficient.
+    Accepts ?period=24h|7d|30d|all (default: 30d).
+    Protected by X-Stats-Token header matching STATS_SECRET env var.
     """
-    owner_email = "bn5799@gmail.com"
     token = request.headers.get("X-Stats-Token", "")
     expected = os.getenv("STATS_SECRET", "")
     if not expected or token != expected:
         return jsonify({"error": "unauthorized"}), 401
 
-    try:
-        # Unique visitors last 30 days (excluding internal)
-        visitors_res = _posthog_query(
-            "SELECT count(DISTINCT person_id) AS cnt "
-            "FROM events "
-            "WHERE event = 'page_view' "
-            "AND timestamp >= now() - INTERVAL 30 DAY "
-            "AND (properties.internal_user IS NULL OR properties.internal_user != true)"
-        )
-        visitors = visitors_res.get("results", [[0]])[0][0] if visitors_res.get("results") else 0
+    period = request.args.get("period", "30d")
+    PERIOD_INTERVALS = {"24h": "1 DAY", "7d": "7 DAY", "30d": "30 DAY", "all": None}
+    interval = PERIOD_INTERVALS.get(period, "30 DAY")
 
-        # Total page views last 30 days (excluding internal)
+    def time_filter(col="timestamp"):
+        return f"AND {col} >= now() - INTERVAL {interval}" if interval else ""
+
+    NO_INTERNAL = "(properties.internal_user IS NULL OR properties.internal_user != true)"
+
+    try:
+        # ── Unique visitors ──────────────────────────────────────────────────────
+        visitors_res = _posthog_query(
+            f"SELECT count(DISTINCT person_id) AS cnt FROM events "
+            f"WHERE event = 'page_view' {time_filter()} AND {NO_INTERNAL}"
+        )
+        unique_visitors = visitors_res.get("results", [[0]])[0][0] if visitors_res.get("results") else 0
+
+        # ── Total page views ─────────────────────────────────────────────────────
         views_res = _posthog_query(
-            "SELECT count() AS cnt "
-            "FROM events "
-            "WHERE event = 'page_view' "
-            "AND timestamp >= now() - INTERVAL 30 DAY "
-            "AND (properties.internal_user IS NULL OR properties.internal_user != true)"
+            f"SELECT count() AS cnt FROM events "
+            f"WHERE event = 'page_view' {time_filter()} AND {NO_INTERNAL}"
         )
         total_views = views_res.get("results", [[0]])[0][0] if views_res.get("results") else 0
 
-        # Page views today
+        # ── Views today (always today, not period-dependent) ─────────────────────
         views_today_res = _posthog_query(
-            "SELECT count() AS cnt "
-            "FROM events "
-            "WHERE event = 'page_view' "
-            "AND timestamp >= toStartOfDay(now()) "
-            "AND (properties.internal_user IS NULL OR properties.internal_user != true)"
+            f"SELECT count() AS cnt FROM events "
+            f"WHERE event = 'page_view' "
+            f"AND timestamp >= toStartOfDay(now()) AND {NO_INTERNAL}"
         )
         views_today = views_today_res.get("results", [[0]])[0][0] if views_today_res.get("results") else 0
 
-        # Views per route last 30 days
-        routes_res = _posthog_query(
-            "SELECT properties.pathname AS route, count() AS cnt "
-            "FROM events "
-            "WHERE event = 'page_view' "
-            "AND timestamp >= now() - INTERVAL 30 DAY "
-            "AND (properties.internal_user IS NULL OR properties.internal_user != true) "
-            "GROUP BY route "
-            "ORDER BY cnt DESC "
-            "LIMIT 10"
-        )
-        routes = [
-            {"route": row[0] or "/", "views": row[1]}
-            for row in (routes_res.get("results") or [])
-        ]
+        # ── New visitors (first-ever visit within the window) ────────────────────
+        if interval:
+            new_visitors_res = _safe_posthog_query(
+                f"SELECT count(DISTINCT person_id) AS cnt FROM events "
+                f"WHERE event = 'page_view' {time_filter()} AND {NO_INTERNAL} "
+                f"AND person_id NOT IN ("
+                f"  SELECT DISTINCT person_id FROM events "
+                f"  WHERE event = 'page_view' "
+                f"  AND timestamp < now() - INTERVAL {interval} AND {NO_INTERNAL}"
+                f")",
+                "new_visitors",
+            )
+            new_visitors = new_visitors_res.get("results", [[0]])[0][0] if new_visitors_res.get("results") else 0
+            returning_visitors = max(0, unique_visitors - new_visitors)
+        else:
+            # All-time: everyone is "new" from some point; skip new/returning
+            new_visitors = None
+            returning_visitors = None
 
-        # Daily unique visitors last 14 days for sparkline
+        # ── Average session duration ─────────────────────────────────────────────
+        session_time_cond = (
+            f"timestamp >= now() - INTERVAL {interval}" if interval else "1=1"
+        )
+        avg_session_res = _safe_posthog_query(
+            f"SELECT avg(dur) FROM ("
+            f"  SELECT properties.$session_id AS sid,"
+            f"    dateDiff('second', min(timestamp), max(timestamp)) AS dur"
+            f"  FROM events"
+            f"  WHERE {session_time_cond}"
+            f"  AND {NO_INTERNAL}"
+            f"  AND properties.$session_id IS NOT NULL"
+            f"  AND properties.$session_id != ''"
+            f"  GROUP BY sid"
+            f") WHERE dur > 0",
+            "avg_session",
+        )
+        avg_session_raw = avg_session_res.get("results", [[None]])[0][0] if avg_session_res.get("results") else None
+        avg_session_seconds = round(float(avg_session_raw)) if avg_session_raw is not None else None
+
+        # ── Daily/hourly sparkline ───────────────────────────────────────────────
+        if period == "24h":
+            spark_filter = "AND timestamp >= now() - INTERVAL 1 DAY"
+            spark_group = "toStartOfHour(timestamp)"
+            spark_label_col = "toString(toStartOfHour(timestamp))"
+        elif period == "7d":
+            spark_filter = "AND timestamp >= now() - INTERVAL 7 DAY"
+            spark_group = "toDate(timestamp)"
+            spark_label_col = "toString(toDate(timestamp))"
+        elif period == "all":
+            spark_filter = ""
+            spark_group = "toStartOfMonth(timestamp)"
+            spark_label_col = "toString(toStartOfMonth(timestamp))"
+        else:
+            spark_filter = "AND timestamp >= now() - INTERVAL 14 DAY"
+            spark_group = "toDate(timestamp)"
+            spark_label_col = "toString(toDate(timestamp))"
+
         daily_res = _posthog_query(
-            "SELECT toDate(timestamp) AS day, count(DISTINCT person_id) AS cnt "
-            "FROM events "
-            "WHERE event = 'page_view' "
-            "AND timestamp >= now() - INTERVAL 14 DAY "
-            "AND (properties.internal_user IS NULL OR properties.internal_user != true) "
-            "GROUP BY day "
-            "ORDER BY day ASC"
+            f"SELECT {spark_label_col} AS period_label, count(DISTINCT person_id) AS cnt "
+            f"FROM events "
+            f"WHERE event = 'page_view' {spark_filter} AND {NO_INTERNAL} "
+            f"GROUP BY {spark_group} "
+            f"ORDER BY {spark_group} ASC"
         )
         daily = [
             {"date": str(row[0]), "visitors": row[1]}
             for row in (daily_res.get("results") or [])
         ]
 
-        # Unique visitors last 7 days
-        visitors_7d_res = _safe_posthog_query(
-            "SELECT count(DISTINCT person_id) AS cnt "
-            "FROM events "
-            "WHERE event = 'page_view' "
-            "AND timestamp >= now() - INTERVAL 7 DAY "
-            "AND (properties.internal_user IS NULL OR properties.internal_user != true)",
-            "visitors_7d",
+        # ── Top routes ───────────────────────────────────────────────────────────
+        routes_res = _posthog_query(
+            f"SELECT properties.pathname AS route, count() AS cnt "
+            f"FROM events "
+            f"WHERE event = 'page_view' {time_filter()} AND {NO_INTERNAL} "
+            f"GROUP BY route ORDER BY cnt DESC LIMIT 10"
         )
-        visitors_7d = visitors_7d_res.get("results", [[0]])[0][0] if visitors_7d_res.get("results") else 0
+        routes = [
+            {"route": row[0] or "/", "views": row[1]}
+            for row in (routes_res.get("results") or [])
+        ]
 
-        # All-time unique visitors (excluding internal)
-        visitors_all_time_res = _safe_posthog_query(
-            "SELECT count(DISTINCT person_id) AS cnt "
-            "FROM events "
-            "WHERE event = 'page_view' "
-            "AND (properties.internal_user IS NULL OR properties.internal_user != true)",
-            "visitors_all_time",
-        )
-        visitors_all_time = visitors_all_time_res.get("results", [[0]])[0][0] if visitors_all_time_res.get("results") else 0
+        # ── Page views by section ────────────────────────────────────────────────
+        section_pages = {
+            "pulse": "/locality-guide",
+            "listing_detail": "/listing/%",
+            "locality_guide": "/neighbourhood-pulse/%",
+        }
+        page_views = {}
+        for key, path_pattern in section_pages.items():
+            op = "LIKE" if "%" in path_pattern else "="
+            pv_res = _safe_posthog_query(
+                f"SELECT count() AS cnt FROM events "
+                f"WHERE event = 'page_view' {time_filter()} AND {NO_INTERNAL} "
+                f"AND properties.pathname {op} '{path_pattern}'",
+                f"page_views_{key}",
+            )
+            page_views[key] = pv_res.get("results", [[0]])[0][0] if pv_res.get("results") else 0
 
-        # New visitors last 30 days: seen in last 30d but not before
-        new_visitors_res = _safe_posthog_query(
-            "SELECT count(DISTINCT person_id) AS cnt "
-            "FROM events "
-            "WHERE event = 'page_view' "
-            "AND timestamp >= now() - INTERVAL 30 DAY "
-            "AND (properties.internal_user IS NULL OR properties.internal_user != true) "
-            "AND person_id NOT IN ("
-            "  SELECT DISTINCT person_id FROM events "
-            "  WHERE event = 'page_view' "
-            "  AND timestamp < now() - INTERVAL 30 DAY "
-            "  AND (properties.internal_user IS NULL OR properties.internal_user != true)"
-            ")",
-            "new_visitors",
-        )
-        new_visitors = new_visitors_res.get("results", [[0]])[0][0] if new_visitors_res.get("results") else 0
-
-        # Average session duration in seconds (30d) — uses $session_id property
-        avg_session_res = _safe_posthog_query(
-            "SELECT avg(dur) FROM ("
-            "  SELECT properties.$session_id AS sid,"
-            "    dateDiff('second', min(timestamp), max(timestamp)) AS dur"
-            "  FROM events"
-            "  WHERE timestamp >= now() - INTERVAL 30 DAY"
-            "  AND (properties.internal_user IS NULL OR properties.internal_user != true)"
-            "  AND properties.$session_id IS NOT NULL"
-            "  AND properties.$session_id != ''"
-            "  GROUP BY sid"
-            ") WHERE dur > 0",
-            "avg_session",
-        )
-        avg_session_raw = avg_session_res.get("results", [[None]])[0][0] if avg_session_res.get("results") else None
-        avg_session_seconds = round(float(avg_session_raw)) if avg_session_raw is not None else None
-
-        # Top localities (/neighbourhood-pulse/* routes)
+        # ── Top locality guide pages ─────────────────────────────────────────────
         localities_res = _safe_posthog_query(
-            "SELECT properties.pathname AS route, count(DISTINCT person_id) AS uniq, count() AS cnt "
-            "FROM events "
-            "WHERE event = 'page_view' "
-            "AND timestamp >= now() - INTERVAL 30 DAY "
-            "AND (properties.internal_user IS NULL OR properties.internal_user != true) "
-            "AND properties.pathname LIKE '/neighbourhood-pulse/%' "
-            "GROUP BY route "
-            "ORDER BY cnt DESC "
-            "LIMIT 10",
+            f"SELECT properties.pathname AS route, count(DISTINCT person_id) AS uniq, count() AS cnt "
+            f"FROM events "
+            f"WHERE event = 'page_view' {time_filter()} AND {NO_INTERNAL} "
+            f"AND properties.pathname LIKE '/neighbourhood-pulse/%' "
+            f"GROUP BY route ORDER BY cnt DESC LIMIT 10",
             "top_localities",
         )
         top_localities = [
@@ -1714,29 +1721,20 @@ def stats():
             for row in (localities_res.get("results") or [])
         ]
 
-        # Search event count (30d)
+        # ── Search count + top areas ─────────────────────────────────────────────
         search_count_res = _safe_posthog_query(
-            "SELECT count() AS cnt "
-            "FROM events "
-            "WHERE event = 'search' "
-            "AND timestamp >= now() - INTERVAL 30 DAY "
-            "AND (properties.internal_user IS NULL OR properties.internal_user != true)",
+            f"SELECT count() AS cnt FROM events "
+            f"WHERE event = 'search' {time_filter()} AND {NO_INTERNAL}",
             "search_count",
         )
         search_count = search_count_res.get("results", [[0]])[0][0] if search_count_res.get("results") else 0
 
-        # Top search queries (30d)
         top_searches_res = _safe_posthog_query(
-            "SELECT properties.query AS q, count() AS cnt "
-            "FROM events "
-            "WHERE event = 'search' "
-            "AND timestamp >= now() - INTERVAL 30 DAY "
-            "AND (properties.internal_user IS NULL OR properties.internal_user != true) "
-            "AND properties.query IS NOT NULL "
-            "AND properties.query != '' "
-            "GROUP BY q "
-            "ORDER BY cnt DESC "
-            "LIMIT 10",
+            f"SELECT properties.query AS q, count() AS cnt "
+            f"FROM events "
+            f"WHERE event = 'search' {time_filter()} AND {NO_INTERNAL} "
+            f"AND properties.query IS NOT NULL AND properties.query != '' "
+            f"GROUP BY q ORDER BY cnt DESC LIMIT 10",
             "top_searches",
         )
         top_searches = [
@@ -1744,28 +1742,20 @@ def stats():
             for row in (top_searches_res.get("results") or [])
         ]
 
-        # Listing click count (30d)
+        # ── Listing clicks ───────────────────────────────────────────────────────
         listing_clicks_res = _safe_posthog_query(
-            "SELECT count() AS cnt "
-            "FROM events "
-            "WHERE event = 'listing_click' "
-            "AND timestamp >= now() - INTERVAL 30 DAY "
-            "AND (properties.internal_user IS NULL OR properties.internal_user != true)",
+            f"SELECT count() AS cnt FROM events "
+            f"WHERE event = 'listing_click' {time_filter()} AND {NO_INTERNAL}",
             "listing_clicks",
         )
         listing_clicks = listing_clicks_res.get("results", [[0]])[0][0] if listing_clicks_res.get("results") else 0
 
-        # Top clicked listings (30d)
         top_listings_res = _safe_posthog_query(
-            "SELECT properties.listing_id AS lid, count() AS cnt "
-            "FROM events "
-            "WHERE event = 'listing_click' "
-            "AND timestamp >= now() - INTERVAL 30 DAY "
-            "AND (properties.internal_user IS NULL OR properties.internal_user != true) "
-            "AND properties.listing_id IS NOT NULL "
-            "GROUP BY lid "
-            "ORDER BY cnt DESC "
-            "LIMIT 10",
+            f"SELECT properties.listing_id AS lid, count() AS cnt "
+            f"FROM events "
+            f"WHERE event = 'listing_click' {time_filter()} AND {NO_INTERNAL} "
+            f"AND properties.listing_id IS NOT NULL "
+            f"GROUP BY lid ORDER BY cnt DESC LIMIT 10",
             "top_listings",
         )
         top_listings = [
@@ -1773,22 +1763,110 @@ def stats():
             for row in (top_listings_res.get("results") or [])
         ]
 
+        # ── App installs (PostHog event fired on PWA install) ────────────────────
+        installs_res = _safe_posthog_query(
+            "SELECT count() AS cnt FROM events WHERE event = 'app_installed'",
+            "app_installs",
+        )
+        app_installs = installs_res.get("results", [[0]])[0][0] if installs_res.get("results") else 0
+
+        # ── Login count (PostHog user_login events) ──────────────────────────────
+        logins_res = _safe_posthog_query(
+            f"SELECT count() AS cnt FROM events "
+            f"WHERE event = 'user_login' {time_filter()} AND {NO_INTERNAL}",
+            "login_count",
+        )
+        login_count = logins_res.get("results", [[0]])[0][0] if logins_res.get("results") else 0
+
+        # ── All users + emails via Supabase admin API ────────────────────────────
+        supabase_url = os.getenv("SUPABASE_URL", "")
+        service_key = os.getenv("SUPABASE_SERVICE_KEY", "")
+        login_emails = []
+        total_users = 0
+        if supabase_url and service_key:
+            try:
+                page, per_page = 1, 1000
+                while True:
+                    r = http.get(
+                        f"{supabase_url}/auth/v1/admin/users",
+                        params={"page": page, "per_page": per_page},
+                        headers={
+                            "apikey": service_key,
+                            "Authorization": f"Bearer {service_key}",
+                        },
+                        timeout=8,
+                    )
+                    if r.status_code == 200:
+                        batch = r.json().get("users", [])
+                        login_emails += [u.get("email", "") for u in batch if u.get("email")]
+                        total_users += len(batch)
+                        if len(batch) < per_page:
+                            break
+                        page += 1
+                    else:
+                        logger.warning("Supabase admin users fetch failed: %s", r.status_code)
+                        break
+            except Exception as e:
+                logger.warning("Supabase users error: %s", e)
+
+        # ── Saved listings count via Supabase REST ───────────────────────────────
+        saved_listings_total = 0
+        saved_listings_users = 0
+        if supabase_url and service_key:
+            try:
+                r = http.get(
+                    f"{supabase_url}/rest/v1/saved_listings",
+                    params={"select": "id"},
+                    headers={
+                        "apikey": service_key,
+                        "Authorization": f"Bearer {service_key}",
+                        "Prefer": "count=exact",
+                        "Range": "0-0",
+                    },
+                    timeout=8,
+                )
+                cr = r.headers.get("Content-Range", "")
+                saved_listings_total = int(cr.split("/")[-1]) if "/" in cr else 0
+
+                r2 = http.get(
+                    f"{supabase_url}/rest/v1/saved_listings",
+                    params={"select": "user_id"},
+                    headers={
+                        "apikey": service_key,
+                        "Authorization": f"Bearer {service_key}",
+                    },
+                    timeout=8,
+                )
+                if r2.status_code == 200:
+                    rows = r2.json()
+                    saved_listings_users = len({row["user_id"] for row in rows if row.get("user_id")})
+            except Exception as e:
+                logger.warning("Supabase saved_listings error: %s", e)
+
         return jsonify({
-            "unique_visitors_30d": visitors,
-            "unique_visitors_7d": visitors_7d,
-            "unique_visitors_all_time": visitors_all_time,
-            "new_visitors_30d": new_visitors,
-            "returning_visitors_30d": max(0, visitors - new_visitors),
-            "total_views_30d": total_views,
+            "period": period,
+            "unique_visitors": unique_visitors,
+            "total_views": total_views,
             "views_today": views_today,
+            "new_visitors": new_visitors,
+            "returning_visitors": returning_visitors,
             "avg_session_seconds": avg_session_seconds,
-            "top_routes": routes,
             "daily_visitors": daily,
+            "top_routes": routes,
+            "page_views_pulse": page_views.get("pulse", 0),
+            "page_views_listing_detail": page_views.get("listing_detail", 0),
+            "page_views_locality_guide": page_views.get("locality_guide", 0),
             "top_localities": top_localities,
-            "search_count_30d": search_count,
+            "search_count": search_count,
             "top_searches": top_searches,
-            "listing_clicks_30d": listing_clicks,
+            "listing_clicks": listing_clicks,
             "top_listings": top_listings,
+            "app_installs": app_installs,
+            "login_count": login_count,
+            "login_emails": sorted(login_emails),
+            "total_users": total_users,
+            "saved_listings_total": saved_listings_total,
+            "saved_listings_users": saved_listings_users,
         })
 
     except Exception as e:

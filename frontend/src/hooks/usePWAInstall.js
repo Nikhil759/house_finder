@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { posthog } from "../lib/posthog";
 
 /**
  * Shared hook for PWA install logic.
@@ -33,6 +34,7 @@ export function usePWAInstall() {
     const onInstalled = () => {
       setIsInstalled(true);
       setInstallPrompt(null);
+      try { posthog.capture("app_installed", { platform: ios ? "android" : "unknown" }); } catch (_) {}
     };
 
     window.addEventListener("beforeinstallprompt", onPrompt);

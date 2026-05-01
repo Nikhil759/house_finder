@@ -32,6 +32,9 @@ export function useAuth() {
         if (session?.user) {
           identifyUser(session.user.id, { email: session.user.email })
           applyOwnerFlag(session.user)
+          if (event === 'SIGNED_IN') {
+            posthog.capture('user_login', { email: session.user.email })
+          }
         } else if (event === 'SIGNED_OUT') {
           resetPostHog()
         }

@@ -3,6 +3,13 @@ import { useState, useEffect, useCallback } from 'react';
 const API_BASE = import.meta.env.VITE_API_URL || '';
 const STATS_SECRET = import.meta.env.VITE_STATS_SECRET || 'nestiq-stats-2026';
 
+const PERIODS = [
+  { key: '24h', label: '24h' },
+  { key: '7d',  label: '7 days' },
+  { key: '30d', label: '30 days' },
+  { key: 'all', label: 'All time' },
+];
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function fmtDuration(seconds) {
   if (seconds == null) return '—';
@@ -14,8 +21,13 @@ function fmtDuration(seconds) {
 
 function fmtNum(n) {
   if (n == null) return '—';
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);
+}
+
+function periodLabel(key) {
+  return PERIODS.find(p => p.key === key)?.label ?? key;
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
@@ -115,9 +127,7 @@ function Sparkline({ data }) {
         {vals.map((v, i) => {
           const x = (i / (vals.length - 1)) * w;
           const y = h - (v / max) * (h - 4);
-          return (
-            <circle key={i} cx={x} cy={y} r="3" fill="var(--color-amber)" />
-          );
+          return <circle key={i} cx={x} cy={y} r="3" fill="var(--color-amber)" />;
         })}
       </svg>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
@@ -183,6 +193,9 @@ function NewReturningBar({ newCount, returningCount }) {
   const newPct = Math.round((newCount / total) * 100);
   return (
     <div>
+      <p style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-muted)', marginBottom: 10, letterSpacing: '0.04em' }}>
+        New = first visit ever in this window · Returning = visited before this window
+      </p>
       <div style={{ height: 8, borderRadius: 4, overflow: 'hidden', background: 'var(--color-border)', display: 'flex' }}>
         <div style={{ width: `${newPct}%`, background: 'var(--color-amber)', transition: 'width 0.4s ease' }} />
         <div style={{ flex: 1, background: 'rgba(245,166,35,0.25)' }} />
@@ -212,24 +225,19 @@ function NewReturningBar({ newCount, returningCount }) {
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
-const VISITOR_PERIODS = [
-  { key: 'all', label: 'All time', dataKey: 'unique_visitors_all_time' },
-  { key: '30d', label: '30d', dataKey: 'unique_visitors_30d' },
-  { key: '7d', label: '7d', dataKey: 'unique_visitors_7d' },
-];
-
 export default function AnalyticsDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [lastFetched, setLastFetched] = useState(null);
-  const [visitorPeriod, setVisitorPeriod] = useState('all');
+  const [period, setPeriod] = useState('30d');
+  const [showEmails, setShowEmails] = useState(false);
 
-  const fetchStats = useCallback(async () => {
+  const fetchStats = useCallback(async (p) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/stats`, {
+      const res = await fetch(`${API_BASE}/api/stats?period=${p}`, {
         headers: { 'X-Stats-Token': STATS_SECRET },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -243,12 +251,14 @@ export default function AnalyticsDashboard() {
     }
   }, []);
 
-  useEffect(() => { fetchStats(); }, [fetchStats]);
+  useEffect(() => { fetchStats(period); }, [fetchStats, period]);
+
+  const pLabel = periodLabel(period);
 
   return (
     <div>
-      {/* Header row */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+      {/* ── Header ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <p style={{
           fontFamily: 'var(--font-mono)',
           fontSize: 9,
@@ -266,7 +276,7 @@ export default function AnalyticsDashboard() {
             </span>
           )}
           <button
-            onClick={fetchStats}
+            onClick={() => fetchStats(period)}
             disabled={loading}
             style={{
               fontFamily: 'var(--font-mono)',
@@ -279,12 +289,36 @@ export default function AnalyticsDashboard() {
               padding: '5px 10px',
               cursor: loading ? 'default' : 'pointer',
               color: loading ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
-              transition: 'border-color 0.2s',
             }}
           >
             {loading ? '···' : '↻ Refresh'}
           </button>
         </div>
+      </div>
+
+      {/* ── Period filter ── */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 14 }}>
+        {PERIODS.map(p => (
+          <button
+            key={p.key}
+            onClick={() => setPeriod(p.key)}
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 9,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              padding: '5px 10px',
+              borderRadius: 6,
+              border: period === p.key ? '1px solid var(--color-amber)' : '1px solid var(--color-border)',
+              background: period === p.key ? 'rgba(245,166,35,0.12)' : 'none',
+              color: period === p.key ? 'var(--color-amber)' : 'var(--color-text-muted)',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+            }}
+          >
+            {p.label}
+          </button>
+        ))}
       </div>
 
       {error && (
@@ -313,69 +347,13 @@ export default function AnalyticsDashboard() {
       {data && (
         <>
           {/* ── Top-line stat cards ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
-            {/* Unique visitors with period filter */}
-            <div style={{
-              background: 'var(--color-bg-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 12,
-              padding: '14px 16px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 2,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                <span style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 9,
-                  letterSpacing: '0.12em',
-                  textTransform: 'uppercase',
-                  color: 'var(--color-text-muted)',
-                }}>
-                  Unique visitors
-                </span>
-                <div style={{ display: 'flex', gap: 2 }}>
-                  {VISITOR_PERIODS.map(p => (
-                    <button
-                      key={p.key}
-                      onClick={() => setVisitorPeriod(p.key)}
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 8,
-                        letterSpacing: '0.08em',
-                        textTransform: 'uppercase',
-                        padding: '2px 6px',
-                        borderRadius: 4,
-                        border: visitorPeriod === p.key ? '1px solid var(--color-amber)' : '1px solid var(--color-border)',
-                        background: visitorPeriod === p.key ? 'rgba(245,166,35,0.12)' : 'none',
-                        color: visitorPeriod === p.key ? 'var(--color-amber)' : 'var(--color-text-muted)',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s',
-                      }}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <span style={{
-                fontSize: 28,
-                fontWeight: 700,
-                color: 'var(--color-amber)',
-                lineHeight: 1.1,
-                letterSpacing: '-0.02em',
-              }}>
-                {fmtNum(data[VISITOR_PERIODS.find(p => p.key === visitorPeriod).dataKey])}
-              </span>
-              <span style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10,
-                color: 'var(--color-text-muted)',
-                letterSpacing: '0.04em',
-              }}>
-                {VISITOR_PERIODS.find(p => p.key === visitorPeriod).label.toLowerCase()}
-              </span>
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <StatCard
+              label="Unique visitors"
+              value={fmtNum(data.unique_visitors)}
+              sub={pLabel}
+              accent
+            />
             <StatCard
               label="Views today"
               value={fmtNum(data.views_today)}
@@ -383,49 +361,53 @@ export default function AnalyticsDashboard() {
             />
             <StatCard
               label="Total views"
-              value={fmtNum(data.total_views_30d)}
-              sub="last 30 days"
+              value={fmtNum(data.total_views)}
+              sub={pLabel}
             />
             <StatCard
               label="Avg session"
               value={fmtDuration(data.avg_session_seconds)}
-              sub="time on site"
-            />
-            <StatCard
-              label="Visitors (7d)"
-              value={fmtNum(data.unique_visitors_7d)}
-              sub="last 7 days"
+              sub={pLabel}
             />
             <StatCard
               label="Searches"
-              value={fmtNum(data.search_count_30d)}
-              sub="last 30 days"
+              value={fmtNum(data.search_count)}
+              sub={pLabel}
+            />
+            <StatCard
+              label="Listing opens"
+              value={fmtNum(data.listing_clicks)}
+              sub={pLabel}
             />
           </div>
 
-          {/* ── Listing clicks ── */}
-          {data.listing_clicks_30d > 0 && (
-            <div style={{
-              background: 'var(--color-bg-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 12,
-              padding: '14px 16px',
-              marginTop: 8,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)', letterSpacing: '0.06em' }}>
-                Listing opens (30d)
-              </span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)' }}>
-                {fmtNum(data.listing_clicks_30d)}
-              </span>
-            </div>
-          )}
+          {/* ── Page views by section ── */}
+          <SectionLabel>Page views by section — {pLabel}</SectionLabel>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+            <StatCard
+              label="Locality Guide"
+              value={fmtNum(data.page_views_pulse)}
+              sub="visits"
+            />
+            <StatCard
+              label="Listing Detail"
+              value={fmtNum(data.page_views_listing_detail)}
+              sub="visits"
+            />
+            <StatCard
+              label="Neighbourhood"
+              value={fmtNum(data.page_views_locality_guide)}
+              sub="guide visits"
+            />
+          </div>
 
-          {/* ── Daily visitors sparkline ── */}
-          <SectionLabel>Daily visitors — last 14 days</SectionLabel>
+          {/* ── Visitors chart ── */}
+          <SectionLabel>
+            {period === '24h' ? 'Hourly visitors — last 24h' :
+             period === '7d'  ? 'Daily visitors — last 7 days' :
+             period === 'all' ? 'Monthly visitors — all time' :
+                                'Daily visitors — last 14 days'}
+          </SectionLabel>
           <div style={{
             background: 'var(--color-bg-surface)',
             border: '1px solid var(--color-border)',
@@ -436,9 +418,9 @@ export default function AnalyticsDashboard() {
           </div>
 
           {/* ── New vs Returning ── */}
-          {(data.new_visitors_30d > 0 || data.returning_visitors_30d > 0) && (
+          {data.new_visitors != null && (data.new_visitors > 0 || data.returning_visitors > 0) && (
             <>
-              <SectionLabel>New vs Returning — 30 days</SectionLabel>
+              <SectionLabel>New vs Returning — {pLabel}</SectionLabel>
               <div style={{
                 background: 'var(--color-bg-surface)',
                 border: '1px solid var(--color-border)',
@@ -446,57 +428,17 @@ export default function AnalyticsDashboard() {
                 padding: '14px 16px',
               }}>
                 <NewReturningBar
-                  newCount={data.new_visitors_30d}
-                  returningCount={data.returning_visitors_30d}
+                  newCount={data.new_visitors}
+                  returningCount={data.returning_visitors}
                 />
               </div>
             </>
           )}
 
-          {/* ── Top routes ── */}
-          {data.top_routes?.length > 0 && (
-            <>
-              <SectionLabel>Top pages — 30 days</SectionLabel>
-              <div style={{
-                background: 'var(--color-bg-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 12,
-                padding: '14px 16px',
-              }}>
-                <BarList
-                  rows={data.top_routes}
-                  keyLabel="route"
-                  valueLabel="views"
-                  maxVal={data.top_routes[0]?.views}
-                />
-              </div>
-            </>
-          )}
-
-          {/* ── Top localities ── */}
-          {data.top_localities?.length > 0 && (
-            <>
-              <SectionLabel>Top localities — 30 days</SectionLabel>
-              <div style={{
-                background: 'var(--color-bg-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 12,
-                padding: '14px 16px',
-              }}>
-                <BarList
-                  rows={data.top_localities}
-                  keyLabel="locality"
-                  valueLabel="views"
-                  maxVal={data.top_localities[0]?.views}
-                />
-              </div>
-            </>
-          )}
-
-          {/* ── Top searches ── */}
+          {/* ── Top searches (areas) ── */}
           {data.top_searches?.length > 0 && (
             <>
-              <SectionLabel>Top searches — 30 days</SectionLabel>
+              <SectionLabel>Top searched areas — {pLabel}</SectionLabel>
               <div style={{
                 background: 'var(--color-bg-surface)',
                 border: '1px solid var(--color-border)',
@@ -513,10 +455,50 @@ export default function AnalyticsDashboard() {
             </>
           )}
 
+          {/* ── Top locality guide pages ── */}
+          {data.top_localities?.length > 0 && (
+            <>
+              <SectionLabel>Top neighbourhood pages — {pLabel}</SectionLabel>
+              <div style={{
+                background: 'var(--color-bg-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 12,
+                padding: '14px 16px',
+              }}>
+                <BarList
+                  rows={data.top_localities}
+                  keyLabel="locality"
+                  valueLabel="views"
+                  maxVal={data.top_localities[0]?.views}
+                />
+              </div>
+            </>
+          )}
+
+          {/* ── Top pages ── */}
+          {data.top_routes?.length > 0 && (
+            <>
+              <SectionLabel>Top pages — {pLabel}</SectionLabel>
+              <div style={{
+                background: 'var(--color-bg-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 12,
+                padding: '14px 16px',
+              }}>
+                <BarList
+                  rows={data.top_routes}
+                  keyLabel="route"
+                  valueLabel="views"
+                  maxVal={data.top_routes[0]?.views}
+                />
+              </div>
+            </>
+          )}
+
           {/* ── Top listings ── */}
           {data.top_listings?.length > 0 && (
             <>
-              <SectionLabel>Most viewed listings — 30 days</SectionLabel>
+              <SectionLabel>Most opened listings — {pLabel}</SectionLabel>
               <div style={{
                 background: 'var(--color-bg-surface)',
                 border: '1px solid var(--color-border)',
@@ -531,6 +513,102 @@ export default function AnalyticsDashboard() {
                 />
               </div>
             </>
+          )}
+
+          {/* ── Saved properties ── */}
+          <SectionLabel>Saved properties</SectionLabel>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <StatCard
+              label="Total saves"
+              value={fmtNum(data.saved_listings_total)}
+              sub="across all users"
+            />
+            <StatCard
+              label="Users who saved"
+              value={fmtNum(data.saved_listings_users)}
+              sub="unique users"
+            />
+          </div>
+
+          {/* ── App installs ── */}
+          <SectionLabel>App installs</SectionLabel>
+          <div style={{
+            background: 'var(--color-bg-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 12,
+            padding: '14px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)', letterSpacing: '0.06em' }}>
+              PWA installs tracked
+            </span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+              {fmtNum(data.app_installs)}
+            </span>
+          </div>
+
+          {/* ── Registered users + login list ── */}
+          <SectionLabel>Registered users</SectionLabel>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+            <StatCard
+              label="Total accounts"
+              value={fmtNum(data.total_users)}
+              sub="signed up"
+              accent
+            />
+            <StatCard
+              label="Logins"
+              value={fmtNum(data.login_count)}
+              sub={pLabel}
+            />
+          </div>
+          {data.login_emails?.length > 0 && (
+            <div style={{
+              background: 'var(--color-bg-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 12,
+              padding: '14px 16px',
+            }}>
+              <button
+                onClick={() => setShowEmails(v => !v)}
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 9,
+                  letterSpacing: '0.1em',
+                  textTransform: 'uppercase',
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  cursor: 'pointer',
+                  color: 'var(--color-amber)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  width: '100%',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <span>Email list ({data.login_emails.length})</span>
+                <span>{showEmails ? '▲ hide' : '▼ show'}</span>
+              </button>
+              {showEmails && (
+                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {data.login_emails.map((email, i) => (
+                    <span key={i} style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11,
+                      color: 'var(--color-text-primary)',
+                      borderBottom: '1px solid var(--color-border)',
+                      paddingBottom: 6,
+                    }}>
+                      {email}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </>
       )}
