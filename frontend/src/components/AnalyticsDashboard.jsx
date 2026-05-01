@@ -561,9 +561,14 @@ export default function AnalyticsDashboard() {
             alignItems: 'center',
             justifyContent: 'space-between',
           }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)', letterSpacing: '0.06em' }}>
-              PWA installs tracked
-            </span>
+            <div>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-muted)', letterSpacing: '0.06em', display: 'block' }}>
+                PWA installs
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-muted)', opacity: 0.6, marginTop: 2, display: 'block' }}>
+                tracked from May 2026 onwards
+              </span>
+            </div>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)' }}>
               {fmtNum(data.app_installs)}
             </span>
@@ -571,17 +576,12 @@ export default function AnalyticsDashboard() {
 
           {/* ── Registered users + login list ── */}
           <SectionLabel>Registered users</SectionLabel>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+          <div style={{ marginBottom: 8 }}>
             <StatCard
               label="Total accounts"
               value={fmtNum(data.total_users)}
-              sub="signed up"
+              sub="identified via PostHog"
               accent
-            />
-            <StatCard
-              label="Logins"
-              value={fmtNum(data.login_count)}
-              sub={pLabel}
             />
           </div>
           {data.login_emails?.length > 0 && (
