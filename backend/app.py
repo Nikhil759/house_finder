@@ -1926,7 +1926,11 @@ def pulse_feed():
                 if hasattr(v, "isoformat"):
                     r[k] = v.isoformat()
 
-        # City-wide sentiment (all posts, last 7 days)
+        # City-wide sentiment (all posts, last 7 days).
+        # Intentionally a shorter window than per-locality / scoring (30d): the
+        # city pulse is meant to feel "live" and respond to current chatter,
+        # while the per-locality and listing scores favour a more stable
+        # 30-day baseline. The "(7d)" label on the UI signposts this clearly.
         cur.execute("""
             SELECT AVG(sentiment_score), COUNT(*), MAX(scraped_at)
             FROM locality_feed
@@ -1937,16 +1941,40 @@ def pulse_feed():
         """)
         avg_sent, sent_count, last_scraped = cur.fetchone()
 
-        # Per-locality sentiment (last 7 days)
+        # Per-locality sentiment (last 30 days)
+        # Posts are credited both to their direct `locality` AND to any locality
+        # mentioned in `detected_localities`, so a Reddit thread about HSR that
+        # references Whitefield contributes to BOTH localities. Using UNION on
+        # post id deduplicates so a post tagged AND mentioning the same place
+        # only counts once. This mirrors /api/pulse/locality/<locality>.
         cur.execute("""
+            WITH expanded AS (
+                SELECT id, locality, sentiment_score
+                FROM locality_feed
+                WHERE category IN ('discussion', 'news')
+                  AND locality IS NOT NULL
+                  AND sentiment_score IS NOT NULL
+                  AND relevance_score >= 0.3
+                  AND scraped_at >= NOW() - INTERVAL '30 days'
+                UNION
+                SELECT id, unnest(detected_localities) AS locality, sentiment_score
+                FROM locality_feed
+                WHERE category IN ('discussion', 'news')
+                  AND detected_localities IS NOT NULL
+                  AND array_length(detected_localities, 1) > 0
+                  AND sentiment_score IS NOT NULL
+                  AND relevance_score >= 0.3
+                  AND scraped_at >= NOW() - INTERVAL '30 days'
+            )
             SELECT locality, AVG(sentiment_score) AS avg_sent, COUNT(*) AS cnt
-            FROM locality_feed
-            WHERE category IN ('discussion', 'news')
-              AND locality IS NOT NULL
-              AND sentiment_score IS NOT NULL
-              AND scraped_at >= NOW() - INTERVAL '30 days'
+            FROM expanded
+            -- "Bengaluru General" is a catch-all bucket the locality tagger
+            -- assigns to posts about the city in general; exclude it from the
+            -- per-locality breakdown since it isn't an actual neighbourhood.
+            WHERE locality NOT ILIKE 'bengaluru general'
+              AND locality NOT ILIKE 'bangalore general'
             GROUP BY locality
-            ORDER BY COUNT(*) DESC
+            ORDER BY cnt DESC
             LIMIT 20
         """)
         locality_sentiments = [
@@ -2051,23 +2079,30 @@ def pulse_trending():
 @app.route("/api/pulse/locality/<locality>")
 def pulse_locality(locality):
     """
-    Locality-specific sentiment summary: 7-day avg sentiment,
+    Locality-specific sentiment summary: 30-day avg sentiment,
     top topics by post count, recent high-relevance posts.
+
+    The 30-day window + discussion/news filter mirrors what /api/pulse/feed
+    uses for the city-overview locality breakdown, so the same locality always
+    shows the same sentiment score regardless of which page the user is on.
     """
     conn = None
     try:
         conn = _get_pg_conn()
         cur = conn.cursor()
 
-        # 7-day avg sentiment for this locality
+        # 30-day avg sentiment for this locality (kept in sync with /api/pulse/feed
+        # and slow_path._load_locality_sentiment so all three places agree).
         cur.execute("""
             SELECT AVG(sentiment_score), COUNT(*)
             FROM locality_feed
             WHERE (locality ILIKE %s OR %s = ANY(detected_localities))
+              AND category IN ('discussion', 'news')
               AND sentiment_score IS NOT NULL
-              AND scraped_at >= NOW() - INTERVAL '7 days'
+              AND relevance_score >= 0.3
+              AND scraped_at >= NOW() - INTERVAL '30 days'
         """, (locality, locality))
-        avg_sent, post_count_7d = cur.fetchone()
+        avg_sent, post_count_30d = cur.fetchone()
 
         # Top topics (last 30 days)
         cur.execute("""
@@ -2108,8 +2143,12 @@ def pulse_locality(locality):
 
         return jsonify({
             "locality": locality,
+            "avg_sentiment_30d": round(float(avg_sent), 3) if avg_sent else None,
+            "post_count_30d": post_count_30d or 0,
+            # Backward-compat aliases — older clients still read the *_7d names.
+            # The data is now actually a 30-day rolling window.
             "avg_sentiment_7d": round(float(avg_sent), 3) if avg_sent else None,
-            "post_count_7d": post_count_7d or 0,
+            "post_count_7d": post_count_30d or 0,
             "topics": topics,
             "recent_posts": posts,
         })

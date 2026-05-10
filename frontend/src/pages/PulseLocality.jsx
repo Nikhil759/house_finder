@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
+import DesktopSidebar from '../components/DesktopSidebar';
+import { useDesktop } from '../hooks/useDesktop';
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 const FEED_TABS = ['All', 'Reddit', 'Telegram', 'News'];
+const FEED_PAGE_SIZE = 5;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function slugToLocality(slug) {
@@ -147,7 +150,11 @@ function FeedItem({ item }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function PulseLocality() {
   const { locality: slug } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isDesktop = useDesktop();
   const [feedTab, setFeedTab] = useState('All');
+  const [feedPage, setFeedPage] = useState(1);
 
   // Derived locality name from slug
   const locality = slugToLocality(slug);
@@ -229,7 +236,10 @@ export default function PulseLocality() {
     : null;
   const depositRow2bhk = depositRows.find(r => r.bhk === '2 BHK');
 
-  const sentimentScore = sentimentData?.avg_sentiment_7d;
+  // Backend now returns `avg_sentiment_30d` (30-day rolling window). The older
+  // `avg_sentiment_7d` key is kept as a backward-compat alias so existing /
+  // cached responses still work — but we prefer the new key when available.
+  const sentimentScore = sentimentData?.avg_sentiment_30d ?? sentimentData?.avg_sentiment_7d;
   const sentimentLabel = sentimentScore == null ? '—'
     : sentimentScore >= 0.3  ? 'Bullish'
     : sentimentScore >= 0.1  ? 'Optimistic'
@@ -251,7 +261,9 @@ export default function PulseLocality() {
     { label: 'Total Listings', value: totalListings > 0 ? String(totalListings) : '—' },
     { label: 'Deposit Mult.',  value: depositRow2bhk ? `${Number(depositRow2bhk.avg_multiplier).toFixed(1)}×` : '—' },
     { label: 'Sentiment',      value: sentimentLabel, color: sentimentColor,
-      sub: sentimentScore != null ? `${sentimentScore >= 0 ? '+' : ''}${sentimentScore.toFixed(2)} · ${sentimentData.post_count_7d} posts` : null },
+      sub: sentimentScore != null
+        ? `${sentimentScore >= 0 ? '+' : ''}${sentimentScore.toFixed(2)} · ${sentimentData.post_count_30d ?? sentimentData.post_count_7d ?? 0} posts (30d)`
+        : null },
   ];
 
   // ── Derived market depth ───────────────────────────────────────────────────
@@ -300,35 +312,105 @@ export default function PulseLocality() {
     }));
   }, [feedPosts, feedTab]);
 
+  // Reset to page 1 whenever the tab changes (or the underlying post list shrinks
+  // below the current page) so users never end up on an empty page.
+  useEffect(() => {
+    setFeedPage(1);
+  }, [feedTab]);
+
+  const totalFeedPages = Math.max(1, Math.ceil(visibleFeed.length / FEED_PAGE_SIZE));
+  const pagedFeed      = visibleFeed.slice((feedPage - 1) * FEED_PAGE_SIZE, feedPage * FEED_PAGE_SIZE);
+
   // ── Graceful fallback for unknown slugs ────────────────────────────────────
   if (notFound && !loading) {
     return (
-      <div style={{ ...s.page, padding: '80px 24px', textAlign: 'center' }}>
+      <div style={{ ...s.page, marginLeft: isDesktop ? 240 : 0, padding: '80px 24px', textAlign: 'center' }}>
+        <DesktopSidebar />
         <p style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--color-text-muted)' }}>
           Locality not found.
         </p>
         <Link to="/locality-guide" style={{ color: 'var(--color-amber)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
           ← Back to Pulse
         </Link>
-        <BottomNav />
+        {!isDesktop && <BottomNav />}
       </div>
     );
   }
 
   return (
-    <div style={s.page}>
+    <div style={{ ...s.page, marginLeft: isDesktop ? 240 : 0 }}>
 
+      <DesktopSidebar />
       <AppHeader backTo />
 
-      {/* ── HERO IMAGE ── */}
+      {/* ── DESKTOP BACK BAR ──
+         AppHeader is hidden on desktop, so we expose a sticky back button
+         here for users to return to the previous page (Pulse / locality list). */}
+      {isDesktop && (
+        <div style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 90,
+          display: 'flex',
+          alignItems: 'center',
+          padding: '12px 24px',
+          background: 'rgba(10,10,10,0.92)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          borderBottom: '1px solid var(--color-border)',
+        }}>
+          <button
+            onClick={() => {
+              if (location.key && location.key !== 'default') {
+                navigate(-1);
+              } else {
+                navigate('/locality-guide');
+              }
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'none',
+              border: '1px solid var(--color-border)',
+              cursor: 'pointer',
+              color: 'var(--color-text-muted)',
+              padding: '6px 14px',
+              borderRadius: 6,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+              letterSpacing: '0.05em',
+              transition: 'color 0.2s, border-color 0.2s, background 0.2s',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.color = 'var(--color-text-primary)';
+              e.currentTarget.style.borderColor = 'var(--color-text-primary)';
+              e.currentTarget.style.background = 'var(--color-bg-surface)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.color = 'var(--color-text-muted)';
+              e.currentTarget.style.borderColor = 'var(--color-border)';
+              e.currentTarget.style.background = 'none';
+            }}
+          >
+            ← Back to Pulse
+          </button>
+        </div>
+      )}
+
+      {/* ── HERO IMAGE ──
+         On desktop the container is much wider than on mobile (~1000px vs ~400px),
+         so with a fixed 220px height the aspect ratio gets very wide and
+         `background-size: cover` crops out most of the image vertically. We give
+         desktop a taller hero so a bigger slice of the photo stays visible. */}
       {localityImage ? (
         <div style={{
           position: 'relative',
           width: '100%',
-          height: 220,
+          height: isDesktop ? 380 : 220,
           backgroundImage: `url(${localityImage.image_url})`,
           backgroundSize: 'cover',
-          backgroundPosition: 'center',
+          backgroundPosition: 'center 35%',
           overflow: 'hidden',
         }}>
           {/* Dark gradient overlay */}
@@ -443,9 +525,20 @@ export default function PulseLocality() {
           </div>
         </section>
 
-        {/* ── INSIGHT FREQUENCY ── */}
+        {/* ── TRENDING TOPICS ── */}
         <section style={{ marginBottom: 32 }}>
-          <h2 style={s.h2}>Insight Frequency</h2>
+          <h2 style={s.h2}>Trending Topics</h2>
+          <p style={{
+            ...s.monoSmall,
+            marginTop: -4,
+            marginBottom: 14,
+            opacity: 0.7,
+            lineHeight: 1.5,
+            maxWidth: 640,
+          }}>
+            What people are talking about in this area — counted from community posts
+            (Reddit, Telegram &amp; local news) over the last 30 days. Longer bar = more mentions.
+          </p>
           <div style={{ ...s.card }}>
             {feedLoading ? (
               <p style={{ ...s.monoSmall, opacity: 0.5 }}>Loading…</p>
@@ -516,9 +609,62 @@ export default function PulseLocality() {
                 No signals for this source yet.
               </p>
             ) : (
-              visibleFeed.map(item => <FeedItem key={item.id} item={item} />)
+              pagedFeed.map(item => <FeedItem key={item.id} item={item} />)
             )}
           </div>
+
+          {/* Feed pagination — only shown when there's more than one page */}
+          {!feedLoading && totalFeedPages > 1 && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              marginTop: 14,
+              paddingTop: 14,
+              borderTop: '1px solid var(--color-border)',
+            }}>
+              <button
+                onClick={() => setFeedPage(p => Math.max(1, p - 1))}
+                disabled={feedPage === 1}
+                style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.05em',
+                  background: 'var(--color-bg-surface)',
+                  color: feedPage === 1 ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 6, padding: '7px 14px',
+                  cursor: feedPage === 1 ? 'not-allowed' : 'pointer',
+                  opacity: feedPage === 1 ? 0.4 : 1,
+                  transition: 'border-color 0.15s, color 0.15s',
+                }}
+              >
+                ← Previous
+              </button>
+              <span style={{
+                fontFamily: 'var(--font-mono)', fontSize: 11,
+                color: 'var(--color-text-muted)', letterSpacing: '0.05em',
+              }}>
+                Page {feedPage} of {totalFeedPages}
+              </span>
+              <button
+                onClick={() => setFeedPage(p => Math.min(totalFeedPages, p + 1))}
+                disabled={feedPage === totalFeedPages}
+                style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.05em',
+                  background: feedPage === totalFeedPages ? 'var(--color-bg-surface)' : 'var(--color-amber)',
+                  color: feedPage === totalFeedPages ? 'var(--color-text-muted)' : '#1a0a00',
+                  border: feedPage === totalFeedPages ? '1px solid var(--color-border)' : 'none',
+                  borderRadius: 6, padding: '7px 14px',
+                  cursor: feedPage === totalFeedPages ? 'not-allowed' : 'pointer',
+                  opacity: feedPage === totalFeedPages ? 0.4 : 1,
+                  transition: 'background 0.15s, color 0.15s',
+                  fontWeight: 500,
+                }}
+              >
+                Next →
+              </button>
+            </div>
+          )}
         </section>
 
       </div>

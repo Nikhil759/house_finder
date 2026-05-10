@@ -141,34 +141,40 @@ function ScoreRing({ score, size = 100 }) {
 }
 
 // ── Image Gallery ─────────────────────────────────────────────────────────────
-function TypeBadge({ imageType }) {
+function TypeBadge({ imageType, locality, societyName }) {
   if (imageType === 'society_exterior') {
     return (
       <span style={{
-        fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em',
-        textTransform: 'uppercase', color: '#1a0a00',
-        background: '#E8A020', borderRadius: 3, padding: '2px 6px',
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.08em',
+        textTransform: 'uppercase', color: '#1a0a00', fontWeight: 500,
+        background: '#E8A020', borderRadius: 4, padding: '4px 10px',
       }}>
-        Society
+        <i className="fa-solid fa-building" style={{ fontSize: 10 }} />
+        Society{societyName ? `: ${societyName}` : ''}
       </span>
     );
   }
   if (imageType === 'locality_hero') {
     return (
       <span style={{
-        fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.1em',
-        textTransform: 'uppercase', color: '#999',
-        background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)',
-        borderRadius: 3, padding: '2px 6px',
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.08em',
+        textTransform: 'uppercase', color: '#fff', fontWeight: 500,
+        background: 'rgba(0,0,0,0.7)',
+        border: '1px solid rgba(255,255,255,0.25)',
+        backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+        borderRadius: 4, padding: '4px 10px',
       }}>
-        Area
+        <i className="fa-solid fa-location-dot" style={{ fontSize: 10, color: 'var(--color-amber)' }} />
+        Area{locality ? `: ${locality}` : ''}
       </span>
     );
   }
   return null;
 }
 
-function ImageGallery({ images, locality, heroHeight }) {
+function ImageGallery({ images, locality, societyName, heroHeight }) {
   const [activeIdx, setActiveIdx] = useState(0);
   const imgs = (images && images.length > 0) ? images.slice(0, 10) : [];
   const active = imgs[activeIdx] || null;
@@ -211,10 +217,15 @@ function ImageGallery({ images, locality, heroHeight }) {
           alt=""
           style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
         />
-        {/* Type badge — bottom-left */}
+        {/* Type badge — bottom-left. Shows the locality / society name so users
+            don't mistake an area or society photo for the actual property. */}
         {active.image_type && active.image_type !== 'listing_interior' && (
           <div style={{ position: 'absolute', bottom: 10, left: 10 }}>
-            <TypeBadge imageType={active.image_type} />
+            <TypeBadge
+              imageType={active.image_type}
+              locality={locality}
+              societyName={societyName}
+            />
           </div>
         )}
         {/* Attribution — bottom-right, only for Google images */}
@@ -511,6 +522,64 @@ export default function ListingDetail() {
 
       <AppHeader backTo />
 
+      {/* ── DESKTOP BACK BAR ──
+         AppHeader is hidden on desktop (sidebar handles nav), so we provide
+         a sticky back button here so users always have an obvious return path. */}
+      {isDesktop && (
+        <div style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 90,
+          display: 'flex',
+          alignItems: 'center',
+          padding: '12px 24px',
+          background: 'rgba(10,10,10,0.92)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          borderBottom: '1px solid var(--color-border)',
+        }}>
+          <button
+            onClick={() => {
+              // location.key is 'default' on the very first navigation entry
+              // (e.g., when the listing URL was opened directly). Otherwise
+              // we have an in-app history stack we can step back through.
+              if (location.key && location.key !== 'default') {
+                navigate(-1);
+              } else {
+                navigate('/app');
+              }
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'none',
+              border: '1px solid var(--color-border)',
+              cursor: 'pointer',
+              color: 'var(--color-text-muted)',
+              padding: '6px 14px',
+              borderRadius: 6,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+              letterSpacing: '0.05em',
+              transition: 'color 0.2s, border-color 0.2s, background 0.2s',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.color = 'var(--color-text-primary)';
+              e.currentTarget.style.borderColor = 'var(--color-text-primary)';
+              e.currentTarget.style.background = 'var(--color-bg-surface)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.color = 'var(--color-text-muted)';
+              e.currentTarget.style.borderColor = 'var(--color-border)';
+              e.currentTarget.style.background = 'none';
+            }}
+          >
+            ← Back to Search
+          </button>
+        </div>
+      )}
+
       {/* ── VERIFIED STRIP ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
@@ -534,7 +603,7 @@ export default function ListingDetail() {
 
       {/* ── DESKTOP TWO-COLUMN / MOBILE SINGLE COLUMN ── */}
       <div style={isDesktop ? {
-        display: 'flex', alignItems: 'flex-start', gap: 0,
+        display: 'flex', alignItems: 'flex-start', gap: 24,
         maxWidth: 1440, margin: '0 auto',
       } : {}}>
 
@@ -545,6 +614,7 @@ export default function ListingDetail() {
       <ImageGallery
         images={listing.image_list}
         locality={listing.locality}
+        societyName={listing.society_name}
         heroHeight={isDesktop ? 320 : 240}
       />
 

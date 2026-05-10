@@ -277,19 +277,45 @@ def _load_locality_stats(conn) -> dict:
 
 
 def _load_locality_sentiment(conn) -> dict:
-    """Load 30-day rolling avg sentiment per locality from locality_feed."""
+    """Load 30-day rolling avg sentiment per locality from locality_feed.
+
+    The query mirrors what /api/pulse/feed and /api/pulse/locality/<loc> use,
+    so the sentiment value displayed on the Pulse pages is the same one that
+    feeds locality_sent_score on every listing. Filters:
+
+      * 30-day rolling window
+      * category IN ('discussion', 'news') — ignore classifieds / spam
+      * relevance_score >= 0.3 — ignore passing mentions
+      * post counts both via the direct `locality` column AND any locality
+        listed in `detected_localities`, deduplicated by post id
+      * 'Bengaluru General' / 'Bangalore General' are catch-all buckets the
+        tagger uses for city-wide posts; not real neighbourhoods, so excluded.
+    """
     cur = conn.cursor()
     cur.execute("""
-        SELECT
-            loc AS locality,
-            AVG(sentiment_score) AS avg_sentiment
-        FROM locality_feed,
-            unnest(detected_localities) AS loc
-        WHERE scraped_at > NOW() - INTERVAL '30 days'
-          AND sentiment_score IS NOT NULL
-          AND relevance_score IS NOT NULL
-          AND relevance_score > 0.3
-        GROUP BY loc
+        WITH expanded AS (
+            SELECT id, locality, sentiment_score
+            FROM locality_feed
+            WHERE category IN ('discussion', 'news')
+              AND locality IS NOT NULL
+              AND sentiment_score IS NOT NULL
+              AND relevance_score >= 0.3
+              AND scraped_at >= NOW() - INTERVAL '30 days'
+            UNION
+            SELECT id, unnest(detected_localities) AS locality, sentiment_score
+            FROM locality_feed
+            WHERE category IN ('discussion', 'news')
+              AND detected_localities IS NOT NULL
+              AND array_length(detected_localities, 1) > 0
+              AND sentiment_score IS NOT NULL
+              AND relevance_score >= 0.3
+              AND scraped_at >= NOW() - INTERVAL '30 days'
+        )
+        SELECT locality, AVG(sentiment_score) AS avg_sent
+        FROM expanded
+        WHERE locality NOT ILIKE 'bengaluru general'
+          AND locality NOT ILIKE 'bangalore general'
+        GROUP BY locality
     """)
     result = {}
     for locality, avg_sent in cur.fetchall():

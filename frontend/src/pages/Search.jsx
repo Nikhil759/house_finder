@@ -71,6 +71,7 @@ const QUICK_FILTERS = [
   { key: 'u50k',       label: '< ₹50k',             category: 'price'     },
   { key: 'community',  label: 'Community listings',  category: 'source'    },
   { key: 'high_score', label: 'High score 70+',      category: 'quality'   },
+  { key: 'has_photos', label: 'Has Photos',          category: 'media'     },
 ];
 
 const DEFAULT_FILTERS = {
@@ -141,6 +142,8 @@ function normalizePost(p) {
     longitude:   p.longitude ?? null,
     url:         p.url || p.source_url || null,
     rawCreated:  p.created || p.created_utc || 0,
+    thumbnail:   p.thumbnail_url || null,
+    imageCount:  Number(p.image_count) || 0,
     _raw:        p,
   };
 }
@@ -657,7 +660,81 @@ function NearbyDropdown({ localities }) {
 }
 
 // ── Card components ───────────────────────────────────────────────────────────
-function ListingCard({ listing, saved, onToggleSave }) {
+// Small pill that signals a listing has photos. Used inside the spec pill row.
+// Variants:
+//   default  — full pill (BHK/sqft-style)
+//   compact  — same look, slightly smaller
+//   tiny     — borderless inline indicator (used in tight spots like the
+//              bottom of the mobile grid card)
+function PhotoBadge({ count, compact = false, tiny = false }) {
+  if (tiny) {
+    return (
+      <span style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 3,
+        fontFamily: 'var(--font-mono)',
+        fontSize: 9,
+        letterSpacing: '0.04em',
+        color: 'var(--color-amber)',
+        opacity: 0.85,
+      }}>
+        <i className="fa-solid fa-camera" style={{ fontSize: 9 }} />
+        {count > 0 ? count : ''}
+      </span>
+    );
+  }
+  return (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 4,
+      fontFamily: 'var(--font-mono)',
+      fontSize: compact ? 10 : 11,
+      letterSpacing: '0.05em',
+      color: 'var(--color-amber)',
+      background: 'rgba(232,160,32,0.08)',
+      border: '1px solid rgba(232,160,32,0.25)',
+      borderRadius: 4,
+      padding: compact ? '2px 6px' : '3px 8px',
+    }}>
+      <i className="fa-solid fa-camera" style={{ fontSize: compact ? 9 : 10 }} />
+      {count > 0 ? count : 'Photos'}
+    </span>
+  );
+}
+
+// Renders the listing thumbnail inside a fixed-size box. `onError` hides
+// the box if the remote image 404s, so we never leave a broken-image icon.
+function Thumbnail({ src, alt, width, height, radius = 8 }) {
+  const [errored, setErrored] = useState(false);
+  if (!src || errored) return null;
+  return (
+    <div style={{
+      width,
+      height,
+      flexShrink: 0,
+      borderRadius: radius,
+      overflow: 'hidden',
+      background: 'var(--color-bg-card)',
+    }}>
+      <img
+        src={src}
+        alt={alt || ''}
+        loading="lazy"
+        onError={() => setErrored(true)}
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          display: 'block',
+        }}
+      />
+    </div>
+  );
+}
+
+function ListingCard({ listing, saved, onToggleSave, view = 'list', isDesktop = true }) {
   const [popped, setPopped] = useState(false);
 
   function handleSaveClick(e) {
@@ -669,6 +746,179 @@ function ListingCard({ listing, saved, onToggleSave }) {
       setTimeout(() => setPopped(false), 350);
     }
   }
+
+  // Thumbnail sizing depends on layout context:
+  //   - desktop grid: top strip across full card width
+  //   - desktop list: side thumbnail ~140×110
+  //   - mobile  list: side thumbnail ~96×80
+  const hasThumb        = Boolean(listing.thumbnail);
+  const isGridLayout    = view === 'grid';
+  const sideThumbWidth  = isDesktop ? 140 : 96;
+  const sideThumbHeight = isDesktop ? 110 : 80;
+
+  // Inner content (header/title/specs/location/actions) — shared between
+  // grid (rendered below the top thumbnail) and list (rendered next to the side thumbnail).
+  const innerContent = (
+    <>
+      {/* Header row: source + time + score */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
+          <SourceBadge source={listing.source} color={listing.sourceColor} icon={listing.sourceIcon} />
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            color: 'var(--color-text-muted)',
+            letterSpacing: '0.03em',
+          }}>
+            {listing.timeAgo}
+          </span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            color: 'var(--color-text-muted)',
+          }}>
+            Score
+          </span>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 22,
+            fontWeight: 500,
+            color: scoreColor(listing.score),
+            letterSpacing: '-0.03em',
+            lineHeight: 1,
+          }}>
+            {listing.score}
+          </span>
+        </div>
+      </div>
+
+      {/* Title */}
+      <h3 style={{
+        fontWeight: 300,
+        fontSize: 16,
+        lineHeight: 1.4,
+        letterSpacing: '-0.01em',
+        marginBottom: 12,
+      }}>
+        {listing.title}
+      </h3>
+
+      {/* Spec row */}
+      <div style={{
+        display: 'flex',
+        gap: 6,
+        flexWrap: 'wrap',
+        marginBottom: 10,
+        alignItems: 'center',
+      }}>
+        {[listing.bhk, listing.sqft && `${listing.sqft} sqft`, listing.furnished]
+          .filter(Boolean)
+          .map(spec => (
+            <span key={spec} style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              letterSpacing: '0.05em',
+              color: 'var(--color-text-muted)',
+              background: 'var(--color-bg-card)',
+              borderRadius: 4,
+              padding: '3px 8px',
+            }}>
+              {spec}
+            </span>
+          ))}
+        {hasThumb && <PhotoBadge count={listing.imageCount} />}
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 13,
+          fontWeight: listing.price ? 500 : 400,
+          color: listing.price ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+          marginLeft: 'auto',
+          letterSpacing: '-0.01em',
+          fontStyle: listing.price ? 'normal' : 'italic',
+        }}>
+          {listing.price || 'Price on request'}
+        </span>
+      </div>
+
+      {/* Location */}
+      {listing.location && (
+        <p style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          color: 'var(--color-text-muted)',
+          letterSpacing: '0.04em',
+          marginBottom: 14,
+        }}>
+          <i className="fa-solid fa-location-dot" style={{ marginRight: 5, color: 'var(--color-text-muted)' }} />
+          {listing.location}
+        </p>
+      )}
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button
+          onClick={handleSaveClick}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.06em',
+            background: 'none',
+            border: `1px solid ${saved ? '#E8394D' : 'var(--color-border)'}`,
+            color: saved ? '#E8394D' : 'var(--color-text-muted)',
+            borderRadius: 6,
+            padding: '7px 14px',
+            height: 32,
+            cursor: 'pointer',
+            transition: 'border-color 0.2s, color 0.2s',
+          }}
+        >
+          <i
+            className={saved ? 'fa-solid fa-heart' : 'fa-regular fa-heart'}
+            style={{ animation: popped ? 'heartPop 0.35s ease' : 'none' }}
+          />
+          {saved ? 'Saved' : 'Save'}
+        </button>
+        {listing.url && (
+          <a
+            href={listing.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            style={{
+              marginLeft: 'auto',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              fontWeight: 500,
+              letterSpacing: '0.06em',
+              color: 'var(--color-amber)',
+              border: '1px solid rgba(232,160,32,0.3)',
+              background: 'rgba(232,160,32,0.05)',
+              borderRadius: 6,
+              padding: '0 14px',
+              height: 34,
+              textDecoration: 'none',
+              transition: 'border-color 0.2s, color 0.2s, background 0.2s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-amber)'; e.currentTarget.style.background = 'rgba(232,160,32,0.12)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(232,160,32,0.3)'; e.currentTarget.style.background = 'rgba(232,160,32,0.05)'; }}
+          >
+            <i className="fa-solid fa-arrow-up-right-from-square" style={{ fontSize: 12 }} />
+            Source
+          </a>
+        )}
+      </div>
+    </>
+  );
 
   return (
     <Link
@@ -682,172 +932,37 @@ function ListingCard({ listing, saved, onToggleSave }) {
         padding: '18px 20px',
         cursor: 'pointer',
         transition: 'background 0.15s',
+        overflow: 'hidden',
       }}
         onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-bg-card)'; }}
         onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-bg-surface)'; }}
       >
-        {/* Header row: source + time + score */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <SourceBadge source={listing.source} color={listing.sourceColor} icon={listing.sourceIcon} />
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              color: 'var(--color-text-muted)',
-              letterSpacing: '0.03em',
-            }}>
-              {listing.timeAgo}
-            </span>
+        {isGridLayout ? (
+          // Grid view skips the actual thumbnail to keep card heights uniform —
+          // the PhotoBadge in the spec row still signals "has photos".
+          innerContent
+        ) : (
+          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {innerContent}
+            </div>
+            {hasThumb && (
+              <Thumbnail
+                src={listing.thumbnail}
+                alt={listing.title}
+                width={sideThumbWidth}
+                height={sideThumbHeight}
+              />
+            )}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 9,
-              letterSpacing: '0.14em',
-              textTransform: 'uppercase',
-              color: 'var(--color-text-muted)',
-            }}>
-              Score
-            </span>
-            <span style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 22,
-              fontWeight: 500,
-              color: scoreColor(listing.score),
-              letterSpacing: '-0.03em',
-              lineHeight: 1,
-            }}>
-              {listing.score}
-            </span>
-          </div>
-        </div>
-
-        {/* Title */}
-        <h3 style={{
-          fontWeight: 300,
-          fontSize: 16,
-          lineHeight: 1.4,
-          letterSpacing: '-0.01em',
-          marginBottom: 12,
-        }}>
-          {listing.title}
-        </h3>
-
-        {/* Spec row */}
-        <div style={{
-          display: 'flex',
-          gap: 6,
-          flexWrap: 'wrap',
-          marginBottom: 10,
-          alignItems: 'center',
-        }}>
-          {[listing.bhk, listing.sqft && `${listing.sqft} sqft`, listing.furnished]
-            .filter(Boolean)
-            .map(spec => (
-              <span key={spec} style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-                letterSpacing: '0.05em',
-                color: 'var(--color-text-muted)',
-                background: 'var(--color-bg-card)',
-                borderRadius: 4,
-                padding: '3px 8px',
-              }}>
-                {spec}
-              </span>
-            ))}
-          <span style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 13,
-            fontWeight: listing.price ? 500 : 400,
-            color: listing.price ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
-            marginLeft: 'auto',
-            letterSpacing: '-0.01em',
-            fontStyle: listing.price ? 'normal' : 'italic',
-          }}>
-            {listing.price || 'Price on request'}
-          </span>
-        </div>
-
-        {/* Location */}
-        {listing.location && (
-          <p style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            color: 'var(--color-text-muted)',
-            letterSpacing: '0.04em',
-            marginBottom: 14,
-          }}>
-            <i className="fa-solid fa-location-dot" style={{ marginRight: 5, color: 'var(--color-text-muted)' }} />
-            {listing.location}
-          </p>
         )}
-
-        {/* Actions */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button
-            onClick={handleSaveClick}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              letterSpacing: '0.06em',
-              background: 'none',
-              border: `1px solid ${saved ? '#E8394D' : 'var(--color-border)'}`,
-              color: saved ? '#E8394D' : 'var(--color-text-muted)',
-              borderRadius: 6,
-              padding: '7px 14px',
-              height: 32,
-              cursor: 'pointer',
-              transition: 'border-color 0.2s, color 0.2s',
-            }}
-          >
-            <i
-              className={saved ? 'fa-solid fa-heart' : 'fa-regular fa-heart'}
-              style={{ animation: popped ? 'heartPop 0.35s ease' : 'none' }}
-            />
-            {saved ? 'Saved' : 'Save'}
-          </button>
-          {listing.url && (
-            <a
-              href={listing.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={e => e.stopPropagation()}
-              style={{
-                marginLeft: 'auto',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-                fontWeight: 500,
-                letterSpacing: '0.06em',
-                background: 'none',
-                color: 'var(--color-amber)',
-                border: '1px solid rgba(232,160,32,0.3)',
-                background: 'rgba(232,160,32,0.05)',
-                borderRadius: 6,
-                padding: '0 14px',
-                height: 34,
-                textDecoration: 'none',
-                transition: 'border-color 0.2s, color 0.2s, background 0.2s',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-amber)'; e.currentTarget.style.background = 'rgba(232,160,32,0.12)'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(232,160,32,0.3)'; e.currentTarget.style.background = 'rgba(232,160,32,0.05)'; }}
-            >
-              <i className="fa-solid fa-arrow-up-right-from-square" style={{ fontSize: 12 }} />
-              Source
-            </a>
-          )}
-        </div>
       </article>
     </Link>
   );
 }
 
+// Mobile-only grid view card. Compact layout — no actual image; just a small
+// "has photos" indicator (+ count when available) so users can tell at a glance.
 function GridCard({ listing, saved, onToggleSave }) {
   const [popped, setPopped] = useState(false);
 
@@ -860,6 +975,8 @@ function GridCard({ listing, saved, onToggleSave }) {
       setTimeout(() => setPopped(false), 350);
     }
   }
+
+  const hasThumb = Boolean(listing.thumbnail);
 
   return (
     <Link
@@ -880,7 +997,7 @@ function GridCard({ listing, saved, onToggleSave }) {
         onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-bg-card)'; }}
         onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-bg-surface)'; }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
           <SourceBadge source={listing.source} color={listing.sourceColor} icon={listing.sourceIcon} />
           <span style={{
             fontFamily: 'var(--font-mono)',
@@ -923,24 +1040,27 @@ function GridCard({ listing, saved, onToggleSave }) {
           }}>
             {listing.price || 'Price on request'}
           </span>
-          <button
-            onClick={handleSaveClick}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: saved ? '#E8394D' : 'var(--color-text-muted)',
-              fontSize: 16,
-              padding: 0,
-              transition: 'color 0.2s',
-            }}
-            aria-label={saved ? 'Unsave listing' : 'Save listing'}
-          >
-            <i
-              className={saved ? 'fa-solid fa-heart' : 'fa-regular fa-heart'}
-              style={{ animation: popped ? 'heartPop 0.35s ease' : 'none' }}
-            />
-          </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {hasThumb && <PhotoBadge count={listing.imageCount} tiny />}
+            <button
+              onClick={handleSaveClick}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: saved ? '#E8394D' : 'var(--color-text-muted)',
+                fontSize: 16,
+                padding: 0,
+                transition: 'color 0.2s',
+              }}
+              aria-label={saved ? 'Unsave listing' : 'Save listing'}
+            >
+              <i
+                className={saved ? 'fa-solid fa-heart' : 'fa-regular fa-heart'}
+                style={{ animation: popped ? 'heartPop 0.35s ease' : 'none' }}
+              />
+            </button>
+          </div>
         </div>
       </article>
     </Link>
@@ -1384,7 +1504,11 @@ export default function Search() {
   useEffect(() => { runTriggerRef.current = runTriggerChecks; }, [runTriggerChecks]);
 
   // ── Fetch ───────────────────────────────────────────────────────────────────
-  const doSearch = useCallback(async (area) => {
+  // `preservePage` keeps the user on the same paginated page when they navigate
+  // back to the search results from a listing detail page. Defaults to false so
+  // that user-initiated searches (locality click, clear, new query) still reset
+  // to page 1 as expected.
+  const doSearch = useCallback(async (area, { preservePage = false } = {}) => {
     setLoading(true);
     const isDefaultLoad = !area;
     const params = new URLSearchParams({
@@ -1401,7 +1525,7 @@ export default function Search() {
       setListings(posts);
       setTotal(data.total ?? posts.length);
       setIsTopPicks(isDefaultLoad);
-      setPage(1);
+      if (!preservePage) setPage(1);
       // Source counts are now derived from `displayed` (after all client-side filters)
       // so we no longer compute them here from the raw API response.
       // Log the search and check auto-save triggers
@@ -1415,7 +1539,10 @@ export default function Search() {
   }, []);
 
   useEffect(() => {
-    doSearch(searchParams.get('q') || '');
+    // On initial mount (including back-navigation from a listing detail page),
+    // preserve the page that was encoded in the URL. Without this, doSearch
+    // would reset to page 1 even though `?page=3` is present in the URL.
+    doSearch(searchParams.get('q') || '', { preservePage: true });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Sync navigational state to URL so Back restores it ──────────────────────
@@ -1717,6 +1844,7 @@ export default function Search() {
         if (key === 'u50k')      return qRent == null || qRent < 50000;
         if (key === 'community') return listing.rawSource === 'reddit' || listing.rawSource === 'telegram';
         if (key === 'high_score')return listing.score >= 70;
+        if (key === 'has_photos')return Boolean(listing.thumbnail);
         return true;
       };
 
@@ -2119,6 +2247,8 @@ export default function Search() {
                       listing={listing}
                       saved={isSaved(listing.id) || savedIds.has(listing.id)}
                       onToggleSave={() => toggleSave(listing)}
+                      view={view === 'list' ? 'list' : 'grid'}
+                      isDesktop
                     />
                   ))}
                 </div>
@@ -2784,6 +2914,8 @@ export default function Search() {
                   listing={listing}
                   saved={isSaved(listing.id) || savedIds.has(listing.id)}
                   onToggleSave={() => toggleSave(listing)}
+                  view="list"
+                  isDesktop={false}
                 />
               ))}
             </div>

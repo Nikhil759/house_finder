@@ -270,6 +270,11 @@ def query_listings(
                        lc.detail_score, lc.price_comp_score,
                        lc.locality_sent_score, lc.freshness_score,
                        lc.price_anomaly, lc.is_per_room, lc.rent_type,
+                       (COALESCE(array_length(l.image_urls, 1), 0)
+                          + COALESCE(
+                              CASE WHEN jsonb_typeof(l.images) = 'array'
+                                   THEN jsonb_array_length(l.images)
+                              END, 0)) AS image_count,
                        ROW_NUMBER() OVER (
                            PARTITION BY l.source
                            ORDER BY COALESCE(lc.quality_score, l.quality_score) DESC NULLS LAST
@@ -289,7 +294,8 @@ def query_listings(
                    id, duplicate_group_id,
                    detail_score, price_comp_score,
                    locality_sent_score, freshness_score,
-                   price_anomaly, is_per_room, rent_type
+                   price_anomaly, is_per_room, rent_type,
+                   image_count
             FROM ranked
             WHERE rn <= %s
             ORDER BY quality_score DESC NULLS LAST
@@ -381,6 +387,7 @@ def query_listings(
                 "price_anomaly": row[37] or False,
                 "is_per_room": row[38] or False,
                 "rent_type": row[39] or "unknown",
+                "image_count": row[40] or 0,
             })
             results.append(base)
         return results

@@ -472,7 +472,9 @@ export default function Pulse() {
         timeAgo: timeAgoShort(p.posted_at || p.scraped_at),
       })));
 
-      // City sentiment (server-computed from all 7-day posts)
+      // City sentiment (server-computed from all 7-day posts).
+      // Kept on a shorter window than per-locality (30d) so the city pulse
+      // feels live; locality / listing scoring use the more stable 30d baseline.
       setCitySentimentData({
         score: feedRes.city_sentiment || 0,
         count: feedRes.city_sentiment_count || 0,
