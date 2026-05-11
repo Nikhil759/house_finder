@@ -11,11 +11,21 @@ import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
 import DesktopSidebar from '../components/DesktopSidebar';
 import Toast from '../components/Toast';
+import FlagModal from '../components/FlagModal';
 import { useAuth } from '../hooks/useAuth';
 import { useSavedListings } from '../hooks/useSavedListings';
 import { useSearchLogs } from '../hooks/useSearchLogs';
 import { useDesktop } from '../hooks/useDesktop';
-import { trackSearch } from '../lib/posthog';
+import {
+  useListingFlags,
+  categoryShortLabel,
+} from '../hooks/useListingFlags';
+import {
+  trackSearch,
+  trackFlagButtonClicked,
+  trackFlagModalOpened,
+  trackFlagSubmitted,
+} from '../lib/posthog';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -144,6 +154,10 @@ function normalizePost(p) {
     rawCreated:  p.created || p.created_utc || 0,
     thumbnail:   p.thumbnail_url || null,
     imageCount:  Number(p.image_count) || 0,
+    // Flag summary embedded in /api/search response (single batch query upstream
+    // — never an N+1 fetch from the card).
+    flagCount:       Number(p.flag_count) || 0,
+    flagTopCategory: p.flag_top_category || null,
     _raw:        p,
   };
 }
@@ -734,7 +748,106 @@ function Thumbnail({ src, alt, width, height, radius = 8 }) {
   );
 }
 
-function ListingCard({ listing, saved, onToggleSave, view = 'list', isDesktop = true }) {
+// (Note: a separate FlagIndicator chip used to render under the locality row,
+// but the count now lives inline on the flag button itself — see CardFlagButton
+// + FlagButtonChip below — so the standalone chip was removed.)
+
+// Small inline icon-button used on cards to open the FlagModal. Sits next to
+// the heart so anyone can report a listing in one tap, no sign-in required.
+// Bordered version of the inline flag button used in the list-view actions
+// row (next to "Save"). Same shape as the surrounding pills so it doesn't
+// look out of place. Count + top-category surface as a hover tooltip.
+function FlagButtonChip({ onClick, count = 0, topCategory = null }) {
+  const hasReports = count > 0;
+  const tip = hasReports
+    ? `${count} ${count === 1 ? 'report' : 'reports'}${topCategory ? ` · ${topCategory}` : ''}`
+    : 'Flag this listing';
+  return (
+    <button
+      onClick={onClick}
+      aria-label="Flag this listing"
+      title={tip}
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        gap: 5,
+        background: 'none',
+        border: `1px solid ${hasReports ? 'rgba(232,160,32,0.35)' : 'var(--color-border)'}`,
+        color: hasReports ? '#E8A020' : 'var(--color-text-muted)',
+        borderRadius: 6,
+        padding: hasReports ? '0 10px' : 0,
+        width: hasReports ? 'auto' : 32,
+        height: 32,
+        cursor: 'pointer',
+        transition: 'border-color 0.2s, color 0.2s',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.color = '#E8A020'; e.currentTarget.style.borderColor = 'rgba(232,160,32,0.5)'; }}
+      onMouseLeave={e => {
+        e.currentTarget.style.color = hasReports ? '#E8A020' : 'var(--color-text-muted)';
+        e.currentTarget.style.borderColor = hasReports ? 'rgba(232,160,32,0.35)' : 'var(--color-border)';
+      }}
+    >
+      <i className="fa-solid fa-triangle-exclamation" style={{ fontSize: 12 }} />
+      {hasReports && (
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          fontWeight: 500,
+          lineHeight: 1,
+        }}>
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+// Inline flag affordance: warning icon + count next to it when reports exist.
+// Sits beside the heart on cards. The count hint replaces the old chip below
+// the locality row so the card stays compact.
+function CardFlagButton({ onClick, hasOwnFlag, compact = false, count = 0, topCategory = null }) {
+  const hasReports = count > 0;
+  // Active when this device has its own flag OR there are reports to surface.
+  const active = hasOwnFlag || hasReports;
+  const tip = hasReports
+    ? `${count} ${count === 1 ? 'report' : 'reports'}${topCategory ? ` · ${topCategory}` : ''}`
+    : (hasOwnFlag ? 'Edit your report' : 'Flag this listing');
+  return (
+    <button
+      onClick={onClick}
+      aria-label={hasOwnFlag ? 'Edit your report' : 'Flag this listing'}
+      title={tip}
+      style={{
+        background: 'none',
+        border: 'none',
+        cursor: 'pointer',
+        color: active ? '#E8A020' : 'var(--color-text-muted)',
+        fontSize: compact ? 14 : 16,
+        padding: 0,
+        lineHeight: 1,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: hasReports ? 4 : 0,
+        transition: 'color 0.15s',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.color = '#E8A020'; }}
+      onMouseLeave={e => { e.currentTarget.style.color = active ? '#E8A020' : 'var(--color-text-muted)'; }}
+    >
+      <i className="fa-solid fa-triangle-exclamation" />
+      {hasReports && (
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: compact ? 10 : 11,
+          fontWeight: 500,
+          lineHeight: 1,
+        }}>
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function ListingCard({ listing, saved, onToggleSave, onFlagClick, view = 'list', isDesktop = true }) {
   const [popped, setPopped] = useState(false);
 
   function handleSaveClick(e) {
@@ -885,6 +998,14 @@ function ListingCard({ listing, saved, onToggleSave, view = 'list', isDesktop = 
           />
           {saved ? 'Saved' : 'Save'}
         </button>
+
+        {/* Flag — sits next to the heart, opens the modal directly (no auth wall).
+            Renders the report count inline when ≥1 flag exists. */}
+        <FlagButtonChip
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onFlagClick?.(); }}
+          count={listing.flagCount}
+          topCategory={listing.flagTopCategory}
+        />
         {listing.url && (
           <a
             href={listing.url}
@@ -963,7 +1084,7 @@ function ListingCard({ listing, saved, onToggleSave, view = 'list', isDesktop = 
 
 // Mobile-only grid view card. Compact layout — no actual image; just a small
 // "has photos" indicator (+ count when available) so users can tell at a glance.
-function GridCard({ listing, saved, onToggleSave }) {
+function GridCard({ listing, saved, onToggleSave, onFlagClick }) {
   const [popped, setPopped] = useState(false);
 
   function handleSaveClick(e) {
@@ -1040,8 +1161,18 @@ function GridCard({ listing, saved, onToggleSave }) {
           }}>
             {listing.price || 'Price on request'}
           </span>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             {hasThumb && <PhotoBadge count={listing.imageCount} tiny />}
+            <CardFlagButton
+              compact
+              hasOwnFlag={false}
+              count={listing.flagCount}
+              topCategory={listing.flagTopCategory}
+              onClick={(e) => {
+                e.preventDefault(); e.stopPropagation();
+                onFlagClick?.();
+              }}
+            />
             <button
               onClick={handleSaveClick}
               style={{
@@ -1489,6 +1620,13 @@ export default function Search() {
   // savedIds kept for optimistic UI before useSavedListings hydrates
   const [savedIds, setSavedIds]       = useState(new Set());
 
+  // Flag-modal state: which listing is being flagged (null = closed).
+  // Local flag count overrides bump the indicator immediately on submit so the
+  // user sees feedback before the next search refresh.
+  const [flagTarget, setFlagTarget]   = useState(null);
+  const [flagOverrides, setFlagOverrides] = useState({}); // { listingId: { count, top_category } }
+  const [flagToast, setFlagToast]     = useState(null);
+
   // ── Auth + search logging ───────────────────────────────────────────────────
   const { user, signInWithGoogle }    = useAuth();
   const { isSaved, saveListing }      = useSavedListings(user);
@@ -1715,6 +1853,28 @@ export default function Search() {
     }
   }
 
+  // ── Open the flag modal for a listing (no auth wall) ───────────────────────
+  function openFlagModal(listing) {
+    trackFlagButtonClicked({
+      listingId: listing.id,
+      variant:   'card',
+      signedIn:  !!user,
+    });
+    setFlagTarget(listing);
+    trackFlagModalOpened({
+      listingId: listing.id,
+      variant:   'card',
+      signedIn:  !!user,
+    });
+  }
+
+  // Auto-dismiss the flag toast after 2.5s.
+  useEffect(() => {
+    if (!flagToast) return;
+    const t = setTimeout(() => setFlagToast(null), 2500);
+    return () => clearTimeout(t);
+  }, [flagToast]);
+
   // ── Derive display pills from activeFilters ─────────────────────────────────
   const activePills = [];
   activeFilters.bhk.forEach(b => activePills.push(b === 'Studio' ? 'Studio' : `${b} BHK`));
@@ -1870,7 +2030,19 @@ export default function Search() {
   });
 
   const pageCount  = Math.ceil(displayed.length / PAGE_SIZE);
-  const paginated  = displayed.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const paginated  = displayed
+    .slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+    // Apply optimistic flag-summary overrides so the indicator updates instantly
+    // after a submit, without waiting for a full search refetch.
+    .map(l => {
+      const ovr = flagOverrides[l.id];
+      if (!ovr) return l;
+      return {
+        ...l,
+        flagCount:       ovr.count,
+        flagTopCategory: ovr.top_category,
+      };
+    });
 
   // Source counts from all results (before source filter) — so pills persist when a source is deselected
   const allSourceCounts = sorted.reduce((acc, l) => {
@@ -2247,6 +2419,7 @@ export default function Search() {
                       listing={listing}
                       saved={isSaved(listing.id) || savedIds.has(listing.id)}
                       onToggleSave={() => toggleSave(listing)}
+                      onFlagClick={() => openFlagModal(listing)}
                       view={view === 'list' ? 'list' : 'grid'}
                       isDesktop
                     />
@@ -2914,6 +3087,7 @@ export default function Search() {
                   listing={listing}
                   saved={isSaved(listing.id) || savedIds.has(listing.id)}
                   onToggleSave={() => toggleSave(listing)}
+                  onFlagClick={() => openFlagModal(listing)}
                   view="list"
                   isDesktop={false}
                 />
@@ -2930,6 +3104,7 @@ export default function Search() {
                   listing={listing}
                   saved={isSaved(listing.id) || savedIds.has(listing.id)}
                   onToggleSave={() => toggleSave(listing)}
+                  onFlagClick={() => openFlagModal(listing)}
                 />
               ))}
             </div>
@@ -2961,6 +3136,72 @@ export default function Search() {
         onDismiss={dismissToast}
         onSignIn={signInWithGoogle}
       />
+
+      {/* ── FLAG MODAL ── */}
+      {flagTarget && (
+        <CardFlagModalHost
+          listing={flagTarget}
+          user={user}
+          onClose={() => setFlagTarget(null)}
+          onSummaryChange={(summary) => {
+            setFlagOverrides(prev => ({
+              ...prev,
+              [flagTarget.id]: summary,
+            }));
+          }}
+          onSubmitted={() => setFlagToast({ message: 'Thanks — your report has been recorded' })}
+        />
+      )}
+
+      {/* Confirmation toast after submit (separate from search-log toast above) */}
+      {flagToast && (
+        <Toast
+          toast={flagToast}
+          onDismiss={() => setFlagToast(null)}
+        />
+      )}
     </div>
+  );
+}
+
+// Modal host that subscribes to flag state via the hook so submit/retract
+// flow through one place. Lives at the page level (not the card level) so
+// closing the modal can update parent state without a parent re-render
+// re-mounting the hook for every card.
+function CardFlagModalHost({ listing, user, onClose, onSummaryChange, onSubmitted }) {
+  const seedSummary = {
+    count:        listing.flagCount || 0,
+    top_category: listing.flagTopCategory || null,
+  };
+  const flagsApi = useListingFlags(listing.id, user, { seedSummary });
+
+  async function handleSubmit({ category, note }) {
+    const result = await flagsApi.submit({ category, note });
+    if (result?.ok) {
+      trackFlagSubmitted({
+        listingId: listing.id,
+        category,
+        hasNote:   !!(note && note.trim()),
+        signedIn:  !!user,
+      });
+      onSummaryChange?.(result.summary || flagsApi.summary);
+      onSubmitted?.();
+    }
+    return result;
+  }
+
+  return (
+    <FlagModal
+      open
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      submitting={flagsApi.submitting}
+      existingFlag={flagsApi.ownFlag}
+      onRetract={async () => {
+        if (!flagsApi.ownFlag) return;
+        await flagsApi.retract(flagsApi.ownFlag.id);
+        onSummaryChange?.(flagsApi.summary);
+      }}
+    />
   );
 }

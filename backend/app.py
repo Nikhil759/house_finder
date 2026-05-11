@@ -44,6 +44,17 @@ from listing_store import (
     purge_old_listings,
     total_listing_count,
 )
+from flag_store import (
+    ALLOWED_CATEGORIES,
+    NOTE_MAX_CHARS,
+    check_rate_limits,
+    get_existing_flag,
+    get_flag_summaries,
+    get_flag_summary,
+    list_flags_for_listing,
+    retract_flag as retract_flag_record,
+    submit_flag,
+)
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
@@ -1268,6 +1279,9 @@ def search():
     locality_warning    = bool(area and not canonical_area)
     locality_suggestion = suggest_locality(area) if locality_warning else None
 
+    # ── Embed flag summaries (one batch query, never N+1) ─────────────────────
+    _attach_flag_summaries(all_posts)
+
     return jsonify({
         "posts":               all_posts,
         "total":               len(all_posts),
@@ -1288,7 +1302,143 @@ def get_listing(listing_id):
     if not listing:
         return jsonify({"error": "Listing not found"}), 404
     listing["quality_score"] = score_post(listing)
+    summary = get_flag_summary(listing.get("id") or listing_id)
+    listing["flag_count"]        = summary.get("count", 0)
+    listing["flag_top_category"] = summary.get("top_category")
     return jsonify(listing)
+
+
+# ─────────────────────────────────────────────
+# Listing flags (renter reports)
+#
+# Flags are a SOFT signal — visibility/ranking is NEVER affected. These
+# endpoints back the FlagModal + Renter Reports UI.
+# ─────────────────────────────────────────────
+
+def _attach_flag_summaries(posts: list) -> None:
+    """
+    Populate `flag_count` and `flag_top_category` on each post in-place using a
+    SINGLE batch query. This is the contract that prevents N+1 fetching from
+    the listing card.
+    """
+    if not posts:
+        return
+    listing_ids = [p["id"] for p in posts if p.get("id")]
+    summaries = get_flag_summaries(listing_ids)
+    for post in posts:
+        s = summaries.get(post.get("id"))
+        post["flag_count"]        = s["count"] if s else 0
+        post["flag_top_category"] = s["top_category"] if s else None
+
+
+def _client_ip():
+    """Best-effort client IP extraction (honours X-Forwarded-For for Railway/Vercel)."""
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        # Left-most entry is the original client.
+        return forwarded.split(",")[0].strip() or None
+    return request.remote_addr or None
+
+
+@app.route("/api/flags", methods=["POST"])
+def create_flag():
+    """
+    Submit a flag for a listing. Anonymous-friendly — no auth required.
+
+    Body: { listing_id, category, device_id, note?, user_id? }
+    """
+    body = request.get_json(silent=True) or {}
+    listing_id = (body.get("listing_id") or "").strip()
+    category   = (body.get("category") or "").strip()
+    device_id  = (body.get("device_id") or "").strip()
+    note       = body.get("note")
+    user_id    = body.get("user_id")
+    if user_id:
+        user_id = str(user_id).strip() or None
+
+    if not listing_id:
+        return jsonify({"error": "listing_id required"}), 400
+    if category not in ALLOWED_CATEGORIES:
+        return jsonify({
+            "error": "Invalid category",
+            "allowed": list(ALLOWED_CATEGORIES),
+        }), 400
+
+    if note and len(note) > NOTE_MAX_CHARS:
+        note = note[:NOTE_MAX_CHARS]
+
+    ip_address = _client_ip()
+
+    # Anti-abuse — device + IP fallback rate limits.
+    allowed, limit_err = check_rate_limits(device_id, ip_address)
+    if not allowed:
+        return jsonify({"error": "rate_limited", "code": limit_err}), 429
+
+    flag, err = submit_flag(
+        listing_id=listing_id,
+        category=category,
+        device_id=device_id,
+        note=note,
+        user_id=user_id,
+        ip_address=ip_address,
+    )
+    if err == "duplicate":
+        existing = get_existing_flag(listing_id, device_id)
+        return jsonify({
+            "error":    "duplicate",
+            "message":  "You've already flagged this listing.",
+            "existing": existing,
+        }), 409
+    if err == "invalid_device":
+        return jsonify({"error": "invalid_device"}), 400
+    if err == "invalid_category":
+        return jsonify({"error": "invalid_category"}), 400
+    if err or not flag:
+        return jsonify({"error": err or "unknown"}), 500
+
+    summary = get_flag_summary(listing_id)
+    return jsonify({"flag": flag, "summary": summary}), 201
+
+
+@app.route("/api/flags/<flag_id>", methods=["DELETE"])
+def remove_flag(flag_id):
+    """
+    Retract a flag. Caller must supply the originating device_id either as a
+    header (X-Device-Id) or as ?device_id= so we can verify ownership.
+    """
+    device_id = (
+        request.headers.get("X-Device-Id", "").strip()
+        or request.args.get("device_id", "").strip()
+    )
+    if not device_id:
+        return jsonify({"error": "device_id required"}), 400
+
+    ok, err = retract_flag_record(flag_id, device_id)
+    if err == "not_found":
+        return jsonify({"error": "not_found"}), 404
+    if err == "forbidden":
+        return jsonify({"error": "forbidden"}), 403
+    if not ok:
+        return jsonify({"error": err or "unknown"}), 500
+
+    return jsonify({"success": True})
+
+
+@app.route("/api/flags/<path:listing_id>", methods=["GET"])
+def list_flags(listing_id):
+    """Return active flags for a listing (anonymous — no author info exposed)."""
+    flags = list_flags_for_listing(listing_id, limit=100)
+    summary = get_flag_summary(listing_id)
+    by_category = {}
+    for f in flags:
+        by_category[f["category"]] = by_category.get(f["category"], 0) + 1
+    return jsonify({
+        "listing_id":  listing_id,
+        "count":       summary.get("count", 0),
+        "top_category": summary.get("top_category"),
+        "by_category": by_category,
+        "flags":       flags,
+    })
 
 
 @app.route("/api/search/new")
@@ -1360,6 +1510,8 @@ def search_new():
 
     all_posts = [p for p in all_posts if p["quality_score"] >= 20]
     all_posts.sort(key=lambda x: x["quality_score"], reverse=True)
+
+    _attach_flag_summaries(all_posts)
 
     return jsonify({"listings": all_posts, "count": len(all_posts)})
 

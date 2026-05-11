@@ -93,6 +93,46 @@ export function trackListingClick(listingId) {
   })
 }
 
+// ── Listing flag analytics ───────────────────────────────────────────────────
+// All flag events include `signed_in` so we can later split engagement by auth
+// status without changing UI behaviour. Variant is 'card' or 'detail'.
+
+export function trackFlagButtonClicked({ listingId, variant, signedIn }) {
+  if (!clientReady) return
+  posthog.capture('listing_flag_button_clicked', {
+    listing_id: listingId,
+    variant,
+    signed_in: !!signedIn,
+  })
+}
+
+export function trackFlagModalOpened({ listingId, variant, signedIn }) {
+  if (!clientReady) return
+  posthog.capture('listing_flag_modal_opened', {
+    listing_id: listingId,
+    variant,
+    signed_in: !!signedIn,
+  })
+}
+
+export function trackFlagSubmitted({ listingId, category, hasNote, signedIn }) {
+  if (!clientReady) return
+  posthog.capture('listing_flag_submitted', {
+    listing_id: listingId,
+    category,
+    has_note: !!hasNote,
+    signed_in: !!signedIn,
+  })
+}
+
+export function trackFlagRetracted({ listingId, signedIn }) {
+  if (!clientReady) return
+  posthog.capture('listing_flag_retracted', {
+    listing_id: listingId,
+    signed_in: !!signedIn,
+  })
+}
+
 /**
  * After auth when you have a stable user id (e.g. Supabase user.id).
  * @example identifyUser(session.user.id, { email: session.user.email })

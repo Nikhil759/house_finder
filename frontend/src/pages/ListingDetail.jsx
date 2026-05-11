@@ -3,8 +3,19 @@ import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
 import DesktopSidebar from '../components/DesktopSidebar';
+import FlagModal from '../components/FlagModal';
+import RenterReports from '../components/RenterReports';
+import Toast from '../components/Toast';
 import { useDesktop } from '../hooks/useDesktop';
-import { trackListingClick } from '../lib/posthog';
+import { useAuth } from '../hooks/useAuth';
+import { useListingFlags } from '../hooks/useListingFlags';
+import {
+  trackListingClick,
+  trackFlagButtonClicked,
+  trackFlagModalOpened,
+  trackFlagSubmitted,
+  trackFlagRetracted,
+} from '../lib/posthog';
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -342,6 +353,53 @@ export default function ListingDetail() {
   const [descExpanded,   setDescExpanded]   = useState(false);
   const [copiedScript,   setCopiedScript]   = useState(false);
   const [sentimentData,  setSentimentData]  = useState(null);
+
+  // ── Listing flags (renter reports) ─────────────────────────────────────────
+  const { user } = useAuth();
+  const seedSummary = useMemo(() => ({
+    count:        listing?.flag_count || 0,
+    top_category: listing?.flag_top_category || null,
+  }), [listing?.flag_count, listing?.flag_top_category]);
+  const flagsApi = useListingFlags(id, user, { seedSummary });
+  const [flagModalOpen, setFlagModalOpen] = useState(false);
+  const [flagToast, setFlagToast]         = useState(null);
+
+  // Auto-dismiss the flag confirmation toast.
+  useEffect(() => {
+    if (!flagToast) return;
+    const t = setTimeout(() => setFlagToast(null), 2500);
+    return () => clearTimeout(t);
+  }, [flagToast]);
+
+  function openFlagModal() {
+    if (!id) return;
+    trackFlagButtonClicked({ listingId: id, variant: 'detail', signedIn: !!user });
+    setFlagModalOpen(true);
+    trackFlagModalOpened({ listingId: id, variant: 'detail', signedIn: !!user });
+  }
+
+  async function handleFlagSubmit({ category, note }) {
+    const result = await flagsApi.submit({ category, note });
+    if (result?.ok) {
+      trackFlagSubmitted({
+        listingId: id,
+        category,
+        hasNote:   !!(note && note.trim()),
+        signedIn:  !!user,
+      });
+      setFlagToast({ message: 'Thanks — your report has been recorded' });
+    }
+    return result;
+  }
+
+  async function handleFlagRetract() {
+    if (!flagsApi.ownFlag) return;
+    const result = await flagsApi.retract(flagsApi.ownFlag.id);
+    if (result?.ok) {
+      trackFlagRetracted({ listingId: id, signedIn: !!user });
+      setFlagToast({ message: 'Your report has been retracted' });
+    }
+  }
 
   // Always fetch the full listing from the API.
   // When seedListing is present we skip the loading spinner but still hydrate
@@ -861,7 +919,35 @@ export default function ListingDetail() {
               </a>
             )}
           </div>
+
+          {/* Flag CTA — sits near the primary contact actions; opens the modal
+              directly with no sign-in interrupt (per the anonymous-friendly spec). */}
+          <button
+            onClick={openFlagModal}
+            style={{
+              marginTop: 12,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              width: '100%',
+              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              background: 'none',
+              border: `1px solid ${flagsApi.ownFlag ? 'rgba(232,160,32,0.45)' : 'var(--color-border)'}`,
+              borderRadius: 8, padding: '10px 14px',
+              color: flagsApi.ownFlag ? '#E8A020' : 'var(--color-text-muted)',
+              cursor: 'pointer', transition: 'all 0.2s',
+            }}
+          >
+            <i className="fa-solid fa-triangle-exclamation" />
+            {flagsApi.ownFlag ? 'Edit your report' : 'Flag this listing'}
+          </button>
         </section>
+
+        {/* ── RENTER REPORTS (mobile) ── */}
+        <RenterReports
+          flagsApi={flagsApi}
+          onRetract={handleFlagRetract}
+          onOpenModal={openFlagModal}
+        />
 
         {/* ── LOCALITY INTEL ── */}
         <section style={{ marginBottom: 16 }}>
@@ -1060,7 +1146,33 @@ export default function ListingDetail() {
                 {copiedScript ? '✓ Copied' : '⎘ Copy Outreach Script'}
               </button>
             )}
+
+            {/* Flag CTA in the desktop contact panel — anonymous-friendly. */}
+            <button
+              onClick={openFlagModal}
+              style={{
+                width: '100%', marginTop: 8,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                background: 'none',
+                border: `1px solid ${flagsApi.ownFlag ? 'rgba(232,160,32,0.45)' : 'var(--color-border)'}`,
+                borderRadius: 8, padding: '10px 14px',
+                color: flagsApi.ownFlag ? '#E8A020' : 'var(--color-text-muted)',
+                cursor: 'pointer', transition: 'all 0.2s',
+              }}
+            >
+              <i className="fa-solid fa-triangle-exclamation" />
+              {flagsApi.ownFlag ? 'Edit your report' : 'Flag this listing'}
+            </button>
           </div>
+
+          {/* Renter reports (desktop) */}
+          <RenterReports
+            flagsApi={flagsApi}
+            onRetract={handleFlagRetract}
+            onOpenModal={openFlagModal}
+          />
 
           {/* Locality intel */}
           {listing.locality && (
@@ -1188,6 +1300,20 @@ export default function ListingDetail() {
         ) : null}
       </div>}{/* end sticky bottom CTA */}
 
+      {/* ── FLAG MODAL ── */}
+      <FlagModal
+        open={flagModalOpen}
+        onClose={() => setFlagModalOpen(false)}
+        onSubmit={handleFlagSubmit}
+        submitting={flagsApi.submitting}
+        existingFlag={flagsApi.ownFlag}
+        onRetract={handleFlagRetract}
+      />
+
+      {/* Confirmation toast */}
+      {flagToast && (
+        <Toast toast={flagToast} onDismiss={() => setFlagToast(null)} />
+      )}
     </div>
   );
 }
