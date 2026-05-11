@@ -631,6 +631,8 @@ export default function Pulse() {
                   border: '1px solid var(--color-border)',
                   borderRadius: 'var(--radius-pill)',
                   padding: '4px 14px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
                 }}>
                   <span className="type-data" style={{ color, fontSize: 13 }}>
                     {symbol} {hasData ? `${Math.abs(pct).toFixed(1)}%` : '—'}
@@ -641,9 +643,10 @@ export default function Pulse() {
                 </div>
                 <p className="type-eyebrow" style={{
                   color: 'var(--color-text-muted)',
-                  fontSize: 10,
+                  fontSize: 8,
                   margin: 0,
                   opacity: 0.6,
+                  whiteSpace: 'nowrap',
                 }}>
                   Active listings vs 30 days ago
                 </p>
