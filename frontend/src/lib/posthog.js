@@ -133,6 +133,20 @@ export function trackFlagRetracted({ listingId, signedIn }) {
   })
 }
 
+// ── Listing view tracking ────────────────────────────────────────────────────
+// Fired AFTER the server confirms the view was logged. `deduped: true` means
+// the server skipped the insert because this device viewed the same listing
+// in the last 24h (the 'true' count lives in our DB, not PostHog — see
+// backend/view_store.py).
+
+export function trackListingViewLogged({ listingId, deduped }) {
+  if (!clientReady) return
+  posthog.capture('listing_view_logged', {
+    listing_id: listingId,
+    deduped: !!deduped,
+  })
+}
+
 /**
  * After auth when you have a stable user id (e.g. Supabase user.id).
  * @example identifyUser(session.user.id, { email: session.user.email })

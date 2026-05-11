@@ -9,6 +9,7 @@ import Toast from '../components/Toast';
 import { useDesktop } from '../hooks/useDesktop';
 import { useAuth } from '../hooks/useAuth';
 import { useListingFlags } from '../hooks/useListingFlags';
+import { useLogListingView } from '../hooks/useLogListingView';
 import {
   trackListingClick,
   trackFlagButtonClicked,
@@ -361,6 +362,11 @@ export default function ListingDetail() {
     top_category: listing?.flag_top_category || null,
   }), [listing?.flag_count, listing?.flag_top_category]);
   const flagsApi = useListingFlags(id, user, { seedSummary });
+
+  // ── View tracking ──────────────────────────────────────────────────────────
+  // Logs one server-side view per device per 24h; PostHog event fires on
+  // success with the deduped flag the server returned.
+  useLogListingView(id, user);
   const [flagModalOpen, setFlagModalOpen] = useState(false);
   const [flagToast, setFlagToast]         = useState(null);
 
@@ -656,6 +662,16 @@ export default function ListingDetail() {
         </span>
         {postedAgo && (
           <span style={{ ...s.monoSmall, fontSize: 10 }}>{postedAgo}</span>
+        )}
+        {Number(listing.view_count) >= 5 && (
+          <span style={{
+            ...s.monoSmall, fontSize: 10,
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            marginLeft: 'auto',
+          }}>
+            <i className="fa-regular fa-eye" style={{ fontSize: 10 }} />
+            {Number(listing.view_count).toLocaleString('en-IN')} views
+          </span>
         )}
       </div>
 

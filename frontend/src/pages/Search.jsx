@@ -154,10 +154,11 @@ function normalizePost(p) {
     rawCreated:  p.created || p.created_utc || 0,
     thumbnail:   p.thumbnail_url || null,
     imageCount:  Number(p.image_count) || 0,
-    // Flag summary embedded in /api/search response (single batch query upstream
-    // — never an N+1 fetch from the card).
+    // Flag + view summaries embedded in /api/search response (single batch query
+    // each, upstream — never an N+1 fetch from the card).
     flagCount:       Number(p.flag_count) || 0,
     flagTopCategory: p.flag_top_category || null,
+    viewCount:       Number(p.view_count) || 0,
     _raw:        p,
   };
 }
@@ -748,6 +749,16 @@ function Thumbnail({ src, alt, width, height, radius = 8 }) {
   );
 }
 
+// View count is rendered as a tiny muted stat below the score number in the
+// top-right score column of ListingCard — same column, third line after
+// "Score" label and the score value. This keeps it visually anchored to an
+// existing landmark users look at, without adding any new row or competing
+// with action affordances in the bottom row.
+//
+// View count is hidden below 5 to avoid noisy "1 view" / "2 views" signals
+// on new listings — see the `viewCount >= 5` checks in ListingCard and
+// GridCard's score columns.
+
 // (Note: a separate FlagIndicator chip used to render under the locality row,
 // but the count now lives inline on the flag button itself — see CardFlagButton
 // + FlagButtonChip below — so the standalone chip was removed.)
@@ -906,6 +917,22 @@ function ListingCard({ listing, saved, onToggleSave, onFlagClick, view = 'list',
           }}>
             {listing.score}
           </span>
+          {listing.viewCount >= 5 && (
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 9,
+              letterSpacing: '0.04em',
+              color: 'var(--color-text-muted)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 3,
+              lineHeight: 1,
+              marginTop: 1,
+            }}>
+              <i className="fa-regular fa-eye" style={{ fontSize: 8 }} />
+              {listing.viewCount.toLocaleString('en-IN')}
+            </span>
+          )}
         </div>
       </div>
 
@@ -1120,16 +1147,33 @@ function GridCard({ listing, saved, onToggleSave, onFlagClick }) {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
           <SourceBadge source={listing.source} color={listing.sourceColor} icon={listing.sourceIcon} />
-          <span style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 20,
-            fontWeight: 500,
-            color: scoreColor(listing.score),
-            letterSpacing: '-0.03em',
-            lineHeight: 1,
-          }}>
-            {listing.score}
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 20,
+              fontWeight: 500,
+              color: scoreColor(listing.score),
+              letterSpacing: '-0.03em',
+              lineHeight: 1,
+            }}>
+              {listing.score}
+            </span>
+            {listing.viewCount >= 5 && (
+              <span style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 9,
+                letterSpacing: '0.04em',
+                color: 'var(--color-text-muted)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 3,
+                lineHeight: 1,
+              }}>
+                <i className="fa-regular fa-eye" style={{ fontSize: 8 }} />
+                {listing.viewCount.toLocaleString('en-IN')}
+              </span>
+            )}
+          </div>
         </div>
 
         <h3 style={{

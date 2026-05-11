@@ -55,6 +55,12 @@ from flag_store import (
     retract_flag as retract_flag_record,
     submit_flag,
 )
+from view_store import (
+    get_view_summaries,
+    get_view_summary,
+    is_valid_uuid as is_valid_view_uuid,
+    log_view,
+)
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
@@ -1279,8 +1285,9 @@ def search():
     locality_warning    = bool(area and not canonical_area)
     locality_suggestion = suggest_locality(area) if locality_warning else None
 
-    # ── Embed flag summaries (one batch query, never N+1) ─────────────────────
+    # ── Embed flag + view summaries (each one batch query, never N+1) ─────────
     _attach_flag_summaries(all_posts)
+    _attach_view_summaries(all_posts)
 
     return jsonify({
         "posts":               all_posts,
@@ -1302,9 +1309,11 @@ def get_listing(listing_id):
     if not listing:
         return jsonify({"error": "Listing not found"}), 404
     listing["quality_score"] = score_post(listing)
-    summary = get_flag_summary(listing.get("id") or listing_id)
+    canonical_id = listing.get("id") or listing_id
+    summary = get_flag_summary(canonical_id)
     listing["flag_count"]        = summary.get("count", 0)
     listing["flag_top_category"] = summary.get("top_category")
+    listing["view_count"]        = get_view_summary(canonical_id)
     return jsonify(listing)
 
 
@@ -1329,6 +1338,20 @@ def _attach_flag_summaries(posts: list) -> None:
         s = summaries.get(post.get("id"))
         post["flag_count"]        = s["count"] if s else 0
         post["flag_top_category"] = s["top_category"] if s else None
+
+
+def _attach_view_summaries(posts: list) -> None:
+    """
+    Populate `view_count` on each post in-place using a SINGLE batch query
+    against the `listing_view_stats` precomputed cache. Same N+1-avoidance
+    contract as _attach_flag_summaries.
+    """
+    if not posts:
+        return
+    listing_ids = [p["id"] for p in posts if p.get("id")]
+    summaries = get_view_summaries(listing_ids)
+    for post in posts:
+        post["view_count"] = summaries.get(post.get("id"), 0)
 
 
 def _client_ip():
@@ -1441,6 +1464,50 @@ def list_flags(listing_id):
     })
 
 
+# ─────────────────────────────────────────────
+# Listing views (renter view tracking)
+#
+# A view = a load of the listing detail page. Server-side dedupe per
+# (listing_id, device_id) within a 24h window keeps refresh inflation out
+# of the count. Views are an INFORMATIONAL signal — they never affect
+# ranking, scoring, or visibility.
+# ─────────────────────────────────────────────
+@app.route("/api/listing-views", methods=["POST"])
+def log_listing_view():
+    """
+    Record a listing-detail-page view.
+
+    Body: { listing_id, device_id, user_id? }
+
+    Response: { ok: bool, deduped: bool }
+      * ok=true,  deduped=false → a new view was counted
+      * ok=true,  deduped=true  → within the 24h window; not re-counted
+      * ok=false                → invalid payload or DB error
+    """
+    body = request.get_json(silent=True) or {}
+    listing_id = (body.get("listing_id") or "").strip()
+    device_id  = (body.get("device_id")  or "").strip()
+    user_id    = body.get("user_id")
+    if user_id:
+        user_id = str(user_id).strip() or None
+
+    if not listing_id:
+        return jsonify({"error": "listing_id required"}), 400
+    if not is_valid_view_uuid(device_id):
+        return jsonify({"error": "invalid_device"}), 400
+
+    ok, deduped = log_view(
+        listing_id,
+        device_id,
+        user_id=user_id,
+        ip_address=_client_ip(),
+    )
+    if not ok:
+        return jsonify({"ok": False, "deduped": False, "error": "log_failed"}), 500
+
+    return jsonify({"ok": True, "deduped": deduped})
+
+
 @app.route("/api/search/new")
 def search_new():
     """Return listings newer than 'since' (ISO8601) matching saved-search params."""
@@ -1512,6 +1579,7 @@ def search_new():
     all_posts.sort(key=lambda x: x["quality_score"], reverse=True)
 
     _attach_flag_summaries(all_posts)
+    _attach_view_summaries(all_posts)
 
     return jsonify({"listings": all_posts, "count": len(all_posts)})
 
