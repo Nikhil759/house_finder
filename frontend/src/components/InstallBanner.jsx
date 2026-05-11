@@ -98,17 +98,27 @@ export default function InstallBanner() {
         }
         .install-banner-btn:hover { background: #e09400; }
         .install-banner-dismiss {
-          background: none;
-          border: none;
-          color: rgba(255,255,255,0.35);
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: rgba(255,255,255,0.06);
+          border: 1px solid rgba(255,255,255,0.12);
+          color: rgba(255,255,255,0.78);
           cursor: pointer;
-          padding: 6px;
-          font-size: 18px;
+          padding: 0;
+          font-size: 13px;
           line-height: 1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
           flex-shrink: 0;
-          transition: color 0.15s;
+          transition: background 0.15s, color 0.15s, border-color 0.15s;
         }
-        .install-banner-dismiss:hover { color: rgba(255,255,255,0.7); }
+        .install-banner-dismiss:hover {
+          background: rgba(255,255,255,0.12);
+          border-color: rgba(255,255,255,0.20);
+          color: #fff;
+        }
 
         /* iOS share-sheet tooltip */
         .install-ios-tip {
@@ -205,7 +215,9 @@ export default function InstallBanner() {
           <button className="install-banner-btn" onClick={handleInstall}>
             {isIOS ? "How to install" : "Install"}
           </button>
-          <button className="install-banner-dismiss" onClick={dismiss} aria-label="Dismiss">×</button>
+          <button className="install-banner-dismiss" onClick={dismiss} aria-label="Dismiss">
+            <i className="fa-solid fa-xmark" />
+          </button>
         </div>
       </div>
     </>
