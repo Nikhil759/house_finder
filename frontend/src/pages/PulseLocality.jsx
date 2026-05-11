@@ -251,13 +251,21 @@ export default function PulseLocality() {
     : sentimentScore <= -0.1 ? '#F87171'
     : 'var(--color-amber)';
 
+  const rentTrend2bhk = bhk2?.rent_trend_pct != null ? Number(bhk2.rent_trend_pct) : null;
+  const rentTrendSub = rentTrend2bhk != null
+    ? `${rentTrend2bhk > 0 ? '▲' : '▼'} ${Math.abs(rentTrend2bhk).toFixed(1)}% vs 30d ago`
+    : null;
+  const rentTrendColor = rentTrend2bhk == null ? undefined
+    : rentTrend2bhk > 0 ? '#34D399' : '#F87171';
+
   const stats = loading ? [
     { label: 'Avg 2BHK Rent',  value: '—' },
     { label: 'Total Listings', value: '—' },
     { label: 'Deposit Mult.',  value: '—' },
     { label: 'Sentiment',      value: '—' },
   ] : [
-    { label: 'Avg 2BHK Rent',  value: formatRentShort(bhk2?.median_rent) },
+    { label: 'Avg 2BHK Rent',  value: formatRentShort(bhk2?.median_rent),
+      sub: rentTrendSub, subColor: rentTrendColor },
     { label: 'Total Listings', value: totalListings > 0 ? String(totalListings) : '—' },
     { label: 'Deposit Mult.',  value: depositRow2bhk ? `${Number(depositRow2bhk.avg_multiplier).toFixed(1)}×` : '—' },
     { label: 'Sentiment',      value: sentimentLabel, color: sentimentColor,
@@ -479,7 +487,9 @@ export default function PulseLocality() {
                 {stat.value}
               </p>
               {stat.sub && (
-                <p style={{ ...s.monoSmall, fontSize: 9, marginTop: 2 }}>{stat.sub}</p>
+                <p style={{ ...s.monoSmall, fontSize: 9, marginTop: 2, color: stat.subColor || 'var(--color-text-muted)' }}>
+                  {stat.sub}
+                </p>
               )}
             </div>
           ))}

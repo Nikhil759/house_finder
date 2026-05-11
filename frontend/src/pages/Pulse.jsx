@@ -340,7 +340,7 @@ function LocalityActivityCard({ localities, rentData, navigate }) {
         <span className="type-eyebrow" style={{ color: 'var(--color-text-muted)', fontSize: '10px', flex: 1 }}>
           Locality
         </span>
-        <span className="type-eyebrow" style={{ color: 'var(--color-text-muted)', fontSize: '10px', width: 70, textAlign: 'right' }}>
+        <span className="type-eyebrow" style={{ color: 'var(--color-text-muted)', fontSize: '10px', width: 80, textAlign: 'right' }}>
           Avg Rent
         </span>
         <span className="type-eyebrow" style={{ color: 'var(--color-text-muted)', fontSize: '10px', width: 80, textAlign: 'right' }}>
@@ -380,14 +380,24 @@ function LocalityActivityCard({ localities, rentData, navigate }) {
               }}>
                 {loc.locality}
               </span>
-              <span className="type-data" style={{
-                fontSize: 'var(--text-xs)',
-                color: 'var(--color-text-primary)',
-                width: 70,
-                textAlign: 'right',
-              }}>
-                {formatRent(rentInfo?.median)}
-              </span>
+              <div style={{ width: 80, textAlign: 'right' }}>
+                <span className="type-data" style={{
+                  fontSize: 'var(--text-xs)',
+                  color: 'var(--color-text-primary)',
+                  display: 'block',
+                }}>
+                  {formatRent(rentInfo?.median)}
+                </span>
+                {rentInfo?.trend != null && (
+                  <span className="type-data" style={{
+                    fontSize: 9,
+                    color: rentInfo.trend > 0 ? '#34D399' : '#F87171',
+                    opacity: 0.85,
+                  }}>
+                    {rentInfo.trend > 0 ? '▲' : '▼'} {Math.abs(rentInfo.trend).toFixed(1)}%
+                  </span>
+                )}
+              </div>
               <div style={{
                 width: 80,
                 display: 'flex',
@@ -446,6 +456,7 @@ export default function Pulse() {
   const [localityStats, setLocalityStats] = useState([]);
   const [rentData, setRentData] = useState([]);
   const [citySentimentData, setCitySentimentData] = useState(null);
+  const [bangaloreRentTrend, setBangaloreRentTrend] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // ── Data fetching via Flask API ─────────────────────────────────────────────
@@ -491,6 +502,11 @@ export default function Pulse() {
         const rentDataRes = await fetch(`${API_BASE}/api/pulse/rent-overview`).then(r => r.json());
         setRentData(rentDataRes.rent_data || []);
       } catch { setRentData([]); }
+
+      try {
+        const blrTrendRes = await fetch(`${API_BASE}/api/pulse/bangalore-rent-trend`).then(r => r.json());
+        setBangaloreRentTrend(blrTrendRes.bhk_trends || []);
+      } catch { setBangaloreRentTrend([]); }
 
       setLoading(false);
     }
@@ -563,7 +579,7 @@ export default function Pulse() {
           </h1>
 
           {/* Sentiment score + label row */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
             <span className="type-data" style={{
               fontSize: 'var(--text-lg)',
               color: 'var(--color-amber)',
@@ -597,6 +613,43 @@ export default function Pulse() {
               )}
             </div>
           </div>
+
+          {/* Bangalore rent trend (30d rolling) — show 2 BHK as city benchmark */}
+          {(() => {
+            const row = bangaloreRentTrend.find(r => r.bhk === '2 BHK');
+            if (!row) return null;
+            const pct = row.trend_pct;
+            const hasData = pct != null;
+            const isUp = pct > 0;
+            const color = !hasData ? 'var(--color-text-muted)' : isUp ? '#34D399' : '#F87171';
+            const symbol = !hasData ? '–' : isUp ? '▲' : '▼';
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  background: 'var(--color-bg-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-pill)',
+                  padding: '4px 14px',
+                }}>
+                  <span className="type-data" style={{ color, fontSize: 13 }}>
+                    {symbol} {hasData ? `${Math.abs(pct).toFixed(1)}%` : '—'}
+                  </span>
+                  <span className="type-eyebrow" style={{ color: 'var(--color-text-muted)', fontSize: 10 }}>
+                    2BHK Rent · 30d
+                  </span>
+                </div>
+                <p className="type-eyebrow" style={{
+                  color: 'var(--color-text-muted)',
+                  fontSize: 10,
+                  margin: 0,
+                  opacity: 0.6,
+                }}>
+                  Active listings vs 30 days ago
+                </p>
+              </div>
+            );
+          })()}
         </div>
 
         {/* ── TOPIC TICKER (auto-scrolling) ── */}

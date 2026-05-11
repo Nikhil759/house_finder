@@ -2466,6 +2466,68 @@ def pulse_rent_overview():
             conn.close()
 
 
+@app.route("/api/pulse/bangalore-rent-trend")
+def bangalore_rent_trend():
+    """Rolling 30-day city-wide rent trend for Bangalore, grouped by BHK."""
+    conn = None
+    try:
+        conn = _get_pg_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            WITH current_period AS (
+                SELECT bhk,
+                       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY rent)::integer AS median_rent,
+                       COUNT(*) AS listing_count
+                FROM listings
+                WHERE status IN ('active', 'stale')
+                  AND rent IS NOT NULL
+                  AND rent BETWEEN 3000 AND 500000
+                  AND bhk IN ('1 BHK', '2 BHK', '3 BHK')
+                  AND source IN ('nobroker', 'housing')
+                GROUP BY bhk
+                HAVING COUNT(*) >= 30
+            ),
+            previous_period AS (
+                SELECT bhk,
+                       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY rent)::integer AS median_rent
+                FROM listings
+                WHERE first_seen_at < NOW() - INTERVAL '30 days'
+                  AND rent IS NOT NULL
+                  AND rent BETWEEN 3000 AND 500000
+                  AND bhk IN ('1 BHK', '2 BHK', '3 BHK')
+                  AND source IN ('nobroker', 'housing')
+                GROUP BY bhk
+                HAVING COUNT(*) >= 30
+            )
+            SELECT
+                c.bhk,
+                c.median_rent AS current_median,
+                p.median_rent AS prior_median,
+                c.listing_count,
+                CASE
+                    WHEN p.median_rent IS NOT NULL AND p.median_rent > 0
+                    THEN ROUND(((c.median_rent - p.median_rent)::numeric / p.median_rent) * 100, 1)
+                    ELSE NULL
+                END AS trend_pct
+            FROM current_period c
+            LEFT JOIN previous_period p USING (bhk)
+            ORDER BY c.bhk
+        """)
+        cols = [d[0] for d in cur.description]
+        rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+        for r in rows:
+            for k, v in r.items():
+                if isinstance(v, Decimal):
+                    r[k] = float(v)
+        return jsonify({"bhk_trends": rows})
+    except Exception as e:
+        logger.error("pulse/bangalore-rent-trend error: %s", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
 @app.route("/api/locality-stats-all")
 def locality_stats_all():
     """All locality stats + deposit benchmarks for LocalityGuide overview."""
