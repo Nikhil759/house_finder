@@ -42,11 +42,19 @@ FREQUENCY_LABELS = {
 }
 
 SOURCE_BADGES = {
-    "nobroker": ("NB", "#4A90D9", "#e8f0fe"),
-    "housing": ("HC", "#34a853", "#e6f4ea"),
-    "99acres": ("99", "#d93025", "#fce8e6"),
-    "reddit": ("Rd", "#ff4500", "#fff3e0"),
-    "telegram": ("TG", "#0088cc", "#e3f2fd"),
+    "nobroker": ("NB", "#e63946", "#1e0a0c"),
+    "housing": ("HC", "#7c3aed", "#120a1e"),
+    "99acres": ("99", "#0076be", "#0a1520"),
+    "reddit": ("Rd", "#ff4500", "#1e0e00"),
+    "telegram": ("TG", "#229ed9", "#0a1a22"),
+}
+
+SOURCE_NAMES = {
+    "nobroker": "NoBroker",
+    "housing": "Housing.com",
+    "99acres": "99acres",
+    "reddit": "Reddit",
+    "telegram": "Telegram",
 }
 
 # ── Resend send helper ───────────────────────────────────────────────────────
@@ -56,6 +64,10 @@ def _resend_send(to_email: str, subject: str, html: str) -> Tuple[bool, str]:
     api_key = os.environ.get("RESEND_API_KEY", "")
     if not api_key:
         return False, "RESEND_API_KEY not configured"
+
+    import uuid
+    unique_id = f"<{uuid.uuid4()}@nestiq.homes>"
+
     try:
         resp = http.post(
             "https://api.resend.com/emails",
@@ -69,10 +81,14 @@ def _resend_send(to_email: str, subject: str, html: str) -> Tuple[bool, str]:
                 "reply_to": REPLY_TO,
                 "subject": subject,
                 "html": html,
+                "headers": {
+                    "X-Entity-Ref-ID": unique_id,
+                },
             },
             timeout=15,
         )
         ok = resp.status_code in (200, 201)
+        log.info("Resend response [%d]: %s", resp.status_code, resp.text[:500])
         return ok, resp.text
     except Exception as exc:
         return False, str(exc)
@@ -117,6 +133,7 @@ _STYLE = {
 
 
 def _email_wrapper(body_html: str) -> str:
+    unique_id = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -124,30 +141,23 @@ def _email_wrapper(body_html: str) -> str:
 <div style="max-width:600px;margin:0 auto;padding:32px 20px;font-family:{_STYLE['sans']};">
 {body_html}
 </div>
+<div style="display:none;font-size:0;line-height:0;color:transparent;">{unique_id}</div>
 </body></html>"""
 
 
-def _footer_html(user_id: str, current_frequency: str = "daily", include_frequency_switchers: bool = True) -> str:
-    """Build the shared email footer with unsubscribe / frequency / address."""
+def _footer_html(user_id: str, current_frequency: str = "daily", include_frequency_switchers: bool = False) -> str:
+    """Build the shared email footer with unsubscribe and preferences links."""
     prefs_token = generate_token(user_id, ACTION_UNSUBSCRIBE_TYPE, "new_listings")
     prefs_url = f"{APP_URL}/preferences?token={prefs_token}"
     unsub_type_url = f"{API_URL}/api/email/action?token={generate_token(user_id, ACTION_UNSUBSCRIBE_TYPE, 'new_listings')}"
     unsub_all_url = f"{API_URL}/api/email/action?token={generate_token(user_id, ACTION_UNSUBSCRIBE_ALL)}"
 
-    links = []
+    links = [
+        f'<a href="{prefs_url}" style="color:{_STYLE["amber"]};text-decoration:underline;">Manage email preferences</a>',
+        f'<a href="{unsub_type_url}" style="color:{_STYLE["muted"]};text-decoration:underline;">Unsubscribe from new listing emails</a>',
+        f'<a href="{unsub_all_url}" style="color:{_STYLE["muted"]};text-decoration:underline;">Unsubscribe from all NestIQ emails</a>',
+    ]
 
-    if include_frequency_switchers:
-        for freq, label in FREQUENCY_LABELS.items():
-            if freq != current_frequency:
-                tok = generate_token(user_id, ACTION_CHANGE_FREQUENCY, freq)
-                url = f"{API_URL}/api/email/action?token={tok}"
-                links.append(f'<a href="{url}" style="color:{_STYLE["muted"]};text-decoration:underline;">Get this {label.lower()} instead</a>')
-
-    links.append(f'<a href="{unsub_type_url}" style="color:{_STYLE["muted"]};text-decoration:underline;">Unsubscribe from new listing emails</a>')
-    links.append(f'<a href="{prefs_url}" style="color:{_STYLE["amber"]};text-decoration:underline;">Manage all email preferences</a>')
-    links.append(f'<a href="{unsub_all_url}" style="color:{_STYLE["muted"]};text-decoration:underline;">Unsubscribe from all NestIQ emails</a>')
-
-    separator = f'&nbsp;&nbsp;·&nbsp;&nbsp;'
     links_html = f'<br style="line-height:24px;">'.join(links)
 
     return f"""
@@ -245,15 +255,16 @@ def _listing_row_html(listing: dict) -> str:
     price = _format_price(listing.get("rent"))
     iq = listing.get("quality_score")
     source = listing.get("source") or ""
+    source_url = listing.get("source_url") or ""
 
     detail_parts = [p for p in [bhk, f"{sqft} sqft" if sqft else "", locality] if p]
     detail_line = " · ".join(detail_parts)
 
     utm = "utm_source=email&utm_medium=digest&utm_campaign=new_listings"
-    url = f"{APP_URL}/listing/{lid}?{utm}&utm_content=listing_{lid}"
+    nestiq_url = f"{APP_URL}/listing/{lid}?{utm}&utm_content=listing_{lid}"
 
     iq_html = ""
-    if iq is not None:
+    if iq:
         iq_html = (
             f'<span style="display:inline-block;background:#1a2a1a;color:{_STYLE["amber"]};'
             f'font-size:10px;font-family:{_STYLE["mono"]};font-weight:700;'
@@ -268,17 +279,39 @@ def _listing_row_html(listing: dict) -> str:
             f'{price}</span>'
         )
 
+    btn_style = (
+        f'display:inline-block;font-family:{_STYLE["mono"]};font-size:11px;'
+        f'font-weight:600;text-decoration:none;padding:6px 12px;border-radius:4px;'
+        f'white-space:nowrap;'
+    )
+
+    source_btn_html = ""
+    if source_url:
+        source_label = SOURCE_NAMES.get(source, source.capitalize())
+        _, src_fg, _ = SOURCE_BADGES.get(source, ("?", "#888", "#333"))
+        source_btn_html = (
+            f'<td style="padding-left:10px;">'
+            f'<a href="{source_url}" style="{btn_style}'
+            f'background:{src_fg};color:#fff;">'
+            f'View on {source_label}</a></td>'
+        )
+
     return f"""<tr>
   <td style="padding:14px 16px;border-bottom:1px solid {_STYLE['border']};">
-    <a href="{url}" style="color:{_STYLE['amber']};text-decoration:none;font-size:14px;line-height:1.4;display:block;margin-bottom:6px;">
-      {_source_badge_html(source)}{title}
-    </a>
+    <div style="margin-bottom:6px;">
+      {_source_badge_html(source)}
+      <span style="color:{_STYLE['text']};font-size:14px;line-height:1.4;">{title}</span>
+    </div>
     <div style="font-size:12px;color:{_STYLE['muted']};font-family:{_STYLE['mono']};margin-bottom:4px;">
       {detail_line}
     </div>
-    <div>
+    <div style="margin-bottom:10px;">
       {price_html}{iq_html}
     </div>
+    <table cellpadding="0" cellspacing="0" border="0"><tr>
+      <td><a href="{nestiq_url}" style="{btn_style}background:{_STYLE['amber']};color:#1a0a00;">View on NestIQ</a></td>
+      {source_btn_html}
+    </tr></table>
   </td>
 </tr>"""
 
@@ -344,7 +377,7 @@ def build_digest_html(
 
 {overflow_html}
 
-{_footer_html(user_id, current_frequency=current_frequency, include_frequency_switchers=True)}"""
+{_footer_html(user_id, current_frequency=current_frequency)}"""
 
     return _email_wrapper(body)
 

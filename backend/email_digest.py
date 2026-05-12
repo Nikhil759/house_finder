@@ -35,7 +35,7 @@ logging.basicConfig(
 log = logging.getLogger("email_digest")
 
 MIN_LISTINGS = 3
-MAX_LISTINGS_PER_EMAIL = 15
+MAX_LISTINGS_PER_EMAIL = 5
 
 FREQUENCY_HOURS = {
     "daily": 24,
@@ -106,7 +106,7 @@ def _get_new_listings(conn, localities: list[str], since: datetime, limit: int) 
             SELECT l.id, l.source, l.source_id, l.title, l.bhk,
                    l.locality, l.rent, l.area_sqft,
                    COALESCE(lc.quality_score, l.quality_score) AS quality_score,
-                   l.posted_at
+                   l.posted_at, l.source_url
             FROM listings l
             LEFT JOIN listings_curated lc ON lc.listing_id = l.id
             WHERE l.status = 'active'
