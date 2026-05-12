@@ -1130,7 +1130,7 @@ function GridCard({ listing, saved, onToggleSave, onFlagClick }) {
     <Link
       to={`/listing/${listing.id}`}
       state={{ listing: listing._raw }}
-      style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+      style={{ textDecoration: 'none', color: 'inherit', display: 'block', minWidth: 0 }}
     >
       <article style={{
         background: 'var(--color-bg-surface)',
@@ -1141,6 +1141,8 @@ function GridCard({ listing, saved, onToggleSave, onFlagClick }) {
         gap: 8,
         cursor: 'pointer',
         transition: 'background 0.15s',
+        overflow: 'hidden',
+        minWidth: 0,
       }}
         onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-bg-card)'; }}
         onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-bg-surface)'; }}
@@ -3141,7 +3143,7 @@ export default function Search() {
           </>
         ) : view === 'grid' ? (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
               {paginated.map(listing => (
                 <GridCard
                   key={listing.id}
