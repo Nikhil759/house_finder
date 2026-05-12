@@ -25,6 +25,10 @@ import {
   trackFlagButtonClicked,
   trackFlagModalOpened,
   trackFlagSubmitted,
+  trackSaveListing,
+  trackUnsaveListing,
+  trackFirstSaveToastShown,
+  trackSigninNudgeShown,
 } from '../lib/posthog';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -1663,8 +1667,6 @@ export default function Search() {
   const [isTopPicks, setIsTopPicks]   = useState(false);
   const [page, setPage]               = useState(Number(searchParams.get('page')) || 1);
   const PAGE_SIZE = isDesktop ? 12 : 10;
-  // savedIds kept for optimistic UI before useSavedListings hydrates
-  const [savedIds, setSavedIds]       = useState(new Set());
 
   // Flag-modal state: which listing is being flagged (null = closed).
   // Local flag count overrides bump the indicator immediately on submit so the
@@ -1672,10 +1674,12 @@ export default function Search() {
   const [flagTarget, setFlagTarget]   = useState(null);
   const [flagOverrides, setFlagOverrides] = useState({}); // { listingId: { count, top_category } }
   const [flagToast, setFlagToast]     = useState(null);
+  const [firstSaveToast, setFirstSaveToast] = useState(null);
+  const [showThreeSaveNag, setShowThreeSaveNag] = useState(null);
 
   // ── Auth + search logging ───────────────────────────────────────────────────
   const { user, signInWithGoogle }    = useAuth();
-  const { isSaved, saveListing }      = useSavedListings(user);
+  const { isSaved, saveListing, savedCount } = useSavedListings(user);
   const {
     logSearch, runTriggerChecks, onListingSaved,
     toast, dismissToast,
@@ -1870,14 +1874,9 @@ export default function Search() {
   }, [loading]);
 
   function toggleSave(listing) {
-    // Optimistic local state
-    setSavedIds(prev => {
-      const next = new Set(prev);
-      next.has(listing.id) ? next.delete(listing.id) : next.add(listing.id);
-      return next;
-    });
+    const alreadySaved = isSaved(listing.id);
 
-    // Persist to Supabase (or localStorage if anonymous)
+    // Persist to Supabase (or localStorage if anonymous) — hook handles optimistic UI
     saveListing({
       id:            listing.id,
       title:         listing.title,
@@ -1893,9 +1892,27 @@ export default function Search() {
       created:       listing.rawCreated,
     });
 
-    // Trigger 1 — auto-save the current search when user saves a listing
-    if (!isSaved(listing.id)) {
+    if (alreadySaved) {
+      trackUnsaveListing({ listingId: listing.id, signedIn: !!user });
+    } else {
+      trackSaveListing({ listingId: listing.id, signedIn: !!user });
+      // Trigger 1 — auto-save the current search when user saves a listing
       onListingSaved(query);
+
+      // First-save toast (once per device, anonymous only)
+      if (!user && !localStorage.getItem('nestiq_first_save_shown')) {
+        localStorage.setItem('nestiq_first_save_shown', '1');
+        setFirstSaveToast({ type: 'first_save' });
+        trackFirstSaveToastShown();
+      }
+
+      // 3-save nag toast (once per device, anonymous only)
+      const newCount = savedCount + 1;
+      if (!user && newCount >= 3 && !localStorage.getItem('nestiq_3save_nag_shown')) {
+        localStorage.setItem('nestiq_3save_nag_shown', '1');
+        setShowThreeSaveNag({ type: 'three_save_nag' });
+        trackSigninNudgeShown({ source: 'three_save_nag' });
+      }
     }
   }
 
@@ -1920,6 +1937,20 @@ export default function Search() {
     const t = setTimeout(() => setFlagToast(null), 2500);
     return () => clearTimeout(t);
   }, [flagToast]);
+
+  // Auto-dismiss the first-save toast after 4s.
+  useEffect(() => {
+    if (!firstSaveToast) return;
+    const t = setTimeout(() => setFirstSaveToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [firstSaveToast]);
+
+  // Auto-dismiss the 3-save nag toast after 8s.
+  useEffect(() => {
+    if (!showThreeSaveNag) return;
+    const t = setTimeout(() => setShowThreeSaveNag(null), 8000);
+    return () => clearTimeout(t);
+  }, [showThreeSaveNag]);
 
   // ── Derive display pills from activeFilters ─────────────────────────────────
   const activePills = [];
@@ -2463,7 +2494,7 @@ export default function Search() {
                     <ListingCard
                       key={listing.id}
                       listing={listing}
-                      saved={isSaved(listing.id) || savedIds.has(listing.id)}
+                      saved={isSaved(listing.id)}
                       onToggleSave={() => toggleSave(listing)}
                       onFlagClick={() => openFlagModal(listing)}
                       view={view === 'list' ? 'list' : 'grid'}
@@ -3131,7 +3162,7 @@ export default function Search() {
                 <ListingCard
                   key={listing.id}
                   listing={listing}
-                  saved={isSaved(listing.id) || savedIds.has(listing.id)}
+                  saved={isSaved(listing.id)}
                   onToggleSave={() => toggleSave(listing)}
                   onFlagClick={() => openFlagModal(listing)}
                   view="list"
@@ -3148,7 +3179,7 @@ export default function Search() {
                 <GridCard
                   key={listing.id}
                   listing={listing}
-                  saved={isSaved(listing.id) || savedIds.has(listing.id)}
+                  saved={isSaved(listing.id)}
                   onToggleSave={() => toggleSave(listing)}
                   onFlagClick={() => openFlagModal(listing)}
                 />
@@ -3204,6 +3235,26 @@ export default function Search() {
         <Toast
           toast={flagToast}
           onDismiss={() => setFlagToast(null)}
+        />
+      )}
+
+      {/* First-save toast */}
+      {firstSaveToast && (
+        <Toast
+          toast={firstSaveToast}
+          onDismiss={() => setFirstSaveToast(null)}
+        />
+      )}
+
+      {/* 3-save nag toast */}
+      {showThreeSaveNag && (
+        <Toast
+          toast={showThreeSaveNag}
+          onDismiss={() => setShowThreeSaveNag(null)}
+          onSignIn={() => {
+            localStorage.setItem('nestiq_signin_source', 'three_save_nag');
+            signInWithGoogle();
+          }}
         />
       )}
     </div>

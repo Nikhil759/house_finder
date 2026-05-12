@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { identifyUser, resetPostHog, posthog } from '../lib/posthog'
+import { identifyUser, resetPostHog, trackSigninCompleted, posthog } from '../lib/posthog'
 
 const OWNER_EMAIL = 'bn5799@gmail.com'
 
@@ -34,9 +34,16 @@ export function useAuth() {
           applyOwnerFlag(session.user)
           if (event === 'SIGNED_IN') {
             posthog.capture('user_login', { email: session.user.email })
+            const signinSource = localStorage.getItem('nestiq_signin_source')
+            if (signinSource) {
+              trackSigninCompleted({ source: signinSource })
+              localStorage.removeItem('nestiq_signin_source')
+            }
           }
         } else if (event === 'SIGNED_OUT') {
           resetPostHog()
+          localStorage.removeItem('nestiq_saved_listings_v2')
+          localStorage.removeItem('savedListings')
         }
       }
     )

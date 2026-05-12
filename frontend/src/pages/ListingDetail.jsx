@@ -8,6 +8,7 @@ import RenterReports from '../components/RenterReports';
 import Toast from '../components/Toast';
 import { useDesktop } from '../hooks/useDesktop';
 import { useAuth } from '../hooks/useAuth';
+import { useSavedListings } from '../hooks/useSavedListings';
 import { useListingFlags } from '../hooks/useListingFlags';
 import { useLogListingView } from '../hooks/useLogListingView';
 import {
@@ -16,6 +17,8 @@ import {
   trackFlagModalOpened,
   trackFlagSubmitted,
   trackFlagRetracted,
+  trackSaveListing,
+  trackUnsaveListing,
 } from '../lib/posthog';
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -350,13 +353,38 @@ export default function ListingDetail() {
   const [notFound,       setNotFound]       = useState(false);
   const [localityStats,  setLocalityStats]  = useState(null);
 
-  const [saved,          setSaved]          = useState(false);
   const [descExpanded,   setDescExpanded]   = useState(false);
   const [copiedScript,   setCopiedScript]   = useState(false);
   const [sentimentData,  setSentimentData]  = useState(null);
 
   // ── Listing flags (renter reports) ─────────────────────────────────────────
   const { user } = useAuth();
+  const { isSaved, saveListing } = useSavedListings(user);
+  const saved = listing ? isSaved(listing.id || id) : false;
+
+  function handleToggleSave() {
+    if (!listing) return;
+    const listingData = {
+      id: listing.id || id,
+      title: listing.title,
+      source: listing.source,
+      url: listing.url || listing.source_url,
+      price: listing.price ?? listing.rent,
+      rent: listing.rent ?? listing.price,
+      locality: listing.locality,
+      bhk: listing.bhk,
+      area_sqft: listing.area_sqft,
+      furnishing: listing.furnishing,
+      quality_score: listing.quality_score,
+      created: listing.created || listing.created_utc,
+    };
+    if (saved) {
+      trackUnsaveListing({ listingId: listingData.id, signedIn: !!user });
+    } else {
+      trackSaveListing({ listingId: listingData.id, signedIn: !!user });
+    }
+    saveListing(listingData);
+  }
   const seedSummary = useMemo(() => ({
     count:        listing?.flag_count || 0,
     top_category: listing?.flag_top_category || null,
@@ -1067,7 +1095,7 @@ export default function ListingDetail() {
 
             <div style={{ display: 'flex', gap: 8 }}>
               <button
-                onClick={() => setSaved(v => !v)}
+                onClick={handleToggleSave}
                 style={{
                   background: 'none',
                   border: `1px solid ${saved ? '#E8394D' : 'var(--color-border)'}`,
@@ -1262,7 +1290,7 @@ export default function ListingDetail() {
 
         {/* Save toggle */}
         <button
-          onClick={() => setSaved(v => !v)}
+          onClick={handleToggleSave}
           style={{
             background: 'none',
             border: `1px solid ${saved ? '#E8394D' : 'var(--color-border)'}`,

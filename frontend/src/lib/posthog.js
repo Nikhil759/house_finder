@@ -147,6 +147,48 @@ export function trackListingViewLogged({ listingId, deduped }) {
   })
 }
 
+// ── Save / sign-in flow analytics ─────────────────────────────────────────────
+
+export function trackSaveListing({ listingId, signedIn }) {
+  if (!clientReady) return
+  posthog.capture('save_listing', { listing_id: listingId, signed_in: !!signedIn })
+}
+
+export function trackUnsaveListing({ listingId, signedIn }) {
+  if (!clientReady) return
+  posthog.capture('unsave_listing', { listing_id: listingId, signed_in: !!signedIn })
+}
+
+export function trackFirstSaveToastShown() {
+  if (!clientReady) return
+  posthog.capture('first_save_toast_shown')
+}
+
+export function trackFirstSaveToastHubClicked() {
+  if (!clientReady) return
+  posthog.capture('first_save_toast_myhub_clicked')
+}
+
+export function trackSigninNudgeShown({ source }) {
+  if (!clientReady) return
+  posthog.capture('signin_nudge_shown', { source })
+}
+
+export function trackSigninNudgeDismissed({ source }) {
+  if (!clientReady) return
+  posthog.capture('signin_nudge_dismissed', { source })
+}
+
+export function trackSigninCompleted({ source }) {
+  if (!clientReady) return
+  posthog.capture('signin_completed', { source })
+}
+
+export function trackLocalStorageSavesMerged({ count }) {
+  if (!clientReady) return
+  posthog.capture('localstorage_saves_merged', { count })
+}
+
 /**
  * After auth when you have a stable user id (e.g. Supabase user.id).
  * @example identifyUser(session.user.id, { email: session.user.email })

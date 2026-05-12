@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
 import DesktopSidebar from '../components/DesktopSidebar';
+import SignInModal from '../components/SignInModal';
 import { useAuth } from '../hooks/useAuth';
 import { useSavedListings } from '../hooks/useSavedListings';
 import { useSavedSearches } from '../hooks/useSavedSearches';
@@ -12,7 +13,7 @@ import { useDesktop } from '../hooks/useDesktop';
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 // ── Static data ───────────────────────────────────────────────────────────────
-const PIPELINE_STAGES = ['Saved', 'Interested', 'Contacted', 'Visited'];
+const PIPELINE_STAGES = ['Saved', 'Contacted', 'Visited'];
 
 
 const TIME_FILTERS = ['Last 24h', 'Last 3 days', 'Last 7 days'];
@@ -71,7 +72,7 @@ function stableListingId(p) {
 
 // Map a saved_listings row (with _status, _notes spread in) → card props
 function normalizeRow(row) {
-  const STAGE_MAP = { saved: 'Saved', interested: 'Interested', contacted: 'Contacted', visited: 'Visited' };
+  const STAGE_MAP = { saved: 'Saved', contacted: 'Contacted', visited: 'Visited' };
   return {
     id:        stableListingId(row),
     source:    normalizeSource(row.source),
@@ -163,13 +164,11 @@ const SOURCE_COLORS = {
 
 const STAGE_STYLE = {
   Saved:            { bg: 'rgba(100,100,100,0.12)', color: '#888888', border: 'rgba(100,100,100,0.25)' },
-  Interested:       { bg: 'rgba(232,160,32,0.12)',  color: '#E8A020', border: 'rgba(232,160,32,0.3)'  },
   Contacted:        { bg: 'rgba(34,197,94,0.12)',   color: '#22C55E', border: 'rgba(34,197,94,0.3)'   },
   Visited:          { bg: 'rgba(59,130,246,0.12)',  color: '#3B82F6', border: 'rgba(59,130,246,0.3)'  },
-
 };
 
-const STAGE_OPTIONS = ['Saved', 'Interested', 'Contacted', 'Visited', 'Not interested'];
+const STAGE_OPTIONS = ['Saved', 'Contacted', 'Visited'];
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 function SourceBadge({ source }) {
@@ -186,38 +185,40 @@ function SourceBadge({ source }) {
   );
 }
 
-function PipelineTracker({ listings, activeStage }) {
-  const stages    = ['Saved', 'Interested', 'Contacted', 'Visited'];
-  const activeIdx = stages.indexOf(activeStage); // -1 when 'All'
+function PipelineTracker({ listings, activeStage, totalCount }) {
+  const stages = ['Saved', 'Contacted', 'Visited'];
+  const activeIdx = stages.indexOf(activeStage);
+
+  // Cumulative counts: Saved >= Contacted >= Visited
+  const visitedCount   = listings.filter(l => l.stage === 'Visited').length;
+  const contactedCount = listings.filter(l => l.stage === 'Contacted' || l.stage === 'Visited').length;
+  const savedCount     = totalCount;
+  const counts = { Saved: savedCount, Contacted: contactedCount, Visited: visitedCount };
 
   function dotStyle(i) {
-    if (activeIdx < 0)   return { bg: '#252525', border: '#333' };
     if (i < activeIdx)   return { bg: 'rgba(34,197,94,0.35)', border: 'rgba(34,197,94,0.65)' };
     if (i === activeIdx) return { bg: 'var(--color-amber)', border: 'var(--color-amber)' };
     return { bg: '#111', border: '#2A2A2A' };
   }
 
   function textColor(i) {
-    if (activeIdx < 0)   return '#3A3A3A';
     if (i < activeIdx)   return 'rgba(34,197,94,0.65)';
     if (i === activeIdx) return 'var(--color-amber)';
-    return '#333';
+    return '#555';
   }
 
   return (
     <div style={{ marginBottom: 20 }}>
       {/* Dots + connecting line */}
       <div style={{ position: 'relative', display: 'flex', marginBottom: 7 }}>
-        {/* Base line spans between first and last dot centers */}
         <div style={{
-          position: 'absolute', left: '12.5%', right: '12.5%',
+          position: 'absolute', left: '16.67%', right: '16.67%',
           height: 1, background: '#222', top: 5, zIndex: 0,
         }} />
-        {/* Completed portion — width = activeIdx * 25% */}
         {activeIdx > 0 && (
           <div style={{
-            position: 'absolute', left: '12.5%',
-            width: `${activeIdx * 25}%`,
+            position: 'absolute', left: '16.67%',
+            width: `${activeIdx * 33.33}%`,
             height: 1, background: 'rgba(34,197,94,0.45)', top: 5, zIndex: 1,
           }} />
         )}
@@ -237,7 +238,6 @@ function PipelineTracker({ listings, activeStage }) {
       {/* Labels + counts */}
       <div style={{ display: 'flex' }}>
         {stages.map((st, i) => {
-          const count = listings.filter(l => l.stage === st).length;
           const tc = textColor(i);
           return (
             <div key={st} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
@@ -248,7 +248,7 @@ function PipelineTracker({ listings, activeStage }) {
                 {st}
               </span>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500, color: tc }}>
-                {count}
+                {counts[st]}
               </span>
             </div>
           );
@@ -267,9 +267,7 @@ const ghostIconBtn = {
   transition: 'border-color 0.15s, color 0.15s',
 };
 
-// Status pills shown in ROW 1 — 'Not interested' lives in the ··· overflow menu
 const STATUS_PILLS = [
-  { key: 'Interested', activeBg: '#E8A020', activeText: '#1A0A00' },
   { key: 'Contacted',  activeBg: '#22C55E', activeText: '#051A0A' },
   { key: 'Visited',    activeBg: '#3B82F6', activeText: '#020D1A' },
 ];
@@ -669,6 +667,131 @@ function NewLeadCard({ listing, onSave, onHide, isSavedFn }) {
 }
 
 
+// ── Locked New Leads state (anonymous users) ─────────────────────────────────
+function LockedNewLeadsState({ savedListings, onSignIn }) {
+  const [previewData, setPreviewData] = useState(null);
+  const [previewLoaded, setPreviewLoaded] = useState(false);
+  const hasSaves = savedListings && savedListings.length > 0;
+
+  useEffect(() => {
+    if (!hasSaves) {
+      setPreviewLoaded(true);
+      return;
+    }
+
+    const localityCounts = {};
+    savedListings.forEach(l => {
+      const loc = l.locality || l.location;
+      if (loc) localityCounts[loc] = (localityCounts[loc] || 0) + 1;
+    });
+
+    const topLocalities = Object.entries(localityCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .map(([name]) => name);
+
+    if (topLocalities.length === 0) {
+      setPreviewLoaded(true);
+      return;
+    }
+
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const params = new URLSearchParams({ location: topLocalities[0], since, limit: '20' });
+
+    fetch(`${API_BASE}/api/search/new?${params}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.listings?.length) {
+          setPreviewData({ locality: topLocalities[0], count: data.listings.length });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setPreviewLoaded(true));
+  }, [savedListings]);
+
+  const showFallback = previewLoaded && !previewData;
+
+  return (
+    <div style={{
+      textAlign: 'center',
+      padding: '48px 24px',
+      background: 'var(--color-bg-surface)',
+      borderRadius: 'var(--radius-card)',
+    }}>
+      <div style={{
+        width: 48, height: 48, borderRadius: '50%',
+        background: 'rgba(232,160,32,0.12)',
+        border: '1px solid rgba(232,160,32,0.28)',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        marginBottom: 20,
+      }}>
+        <i className="fa-solid fa-bolt" style={{ color: 'var(--color-amber)', fontSize: 20 }} />
+      </div>
+
+      <h2 style={{
+        fontFamily: 'var(--font-sans)',
+        fontWeight: 400,
+        fontSize: 18,
+        letterSpacing: '-0.02em',
+        color: 'var(--color-text-primary)',
+        marginBottom: 10,
+      }}>
+        Get new listings in your interest areas, auto-curated as a feed
+      </h2>
+
+      {previewData && (
+        <p style={{
+          fontFamily: 'var(--font-sans)',
+          fontSize: 14,
+          color: 'var(--color-text-muted)',
+          lineHeight: 1.5,
+          marginBottom: 24,
+        }}>
+          Sign in to see new listings in{' '}
+          <span style={{ color: 'var(--color-amber)', fontWeight: 500 }}>{previewData.locality}</span>
+          {' — '}
+          <span style={{ fontWeight: 500 }}>{previewData.count} new</span> in the last 24h
+        </p>
+      )}
+
+      {showFallback && !hasSaves && (
+        <p style={{
+          fontFamily: 'var(--font-sans)',
+          fontSize: 14,
+          color: 'var(--color-text-muted)',
+          lineHeight: 1.5,
+          marginBottom: 24,
+          maxWidth: 300,
+          margin: '0 auto 24px',
+        }}>
+          Save listings from areas you like, then sign in to get a daily auto-curated feed of new listings matching your interests.
+        </p>
+      )}
+
+      {!previewData && !showFallback && (
+        <div style={{ height: 20, marginBottom: 24 }} />
+      )}
+
+      <button
+        onClick={onSignIn}
+        style={{
+          fontFamily: 'var(--font-sans)',
+          fontSize: 14,
+          fontWeight: 500,
+          background: 'var(--color-amber)',
+          color: '#1a0a00',
+          border: 'none',
+          borderRadius: 10,
+          padding: '12px 24px',
+          cursor: 'pointer',
+        }}
+      >
+        Sign in to unlock
+      </button>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function MyHub() {
   const { user, loading: authLoading, signInWithGoogle } = useAuth();
@@ -687,10 +810,11 @@ export default function MyHub() {
   const { savedSearches } = useSavedSearches(user);
 
   const [mainTab, setMainTab]         = useState('Saved Leads');
-  const [stageFilter, setStageFilter] = useState('All');
+  const [stageFilter, setStageFilter] = useState('Saved');
   const [timeFilter, setTimeFilter]   = useState('Last 24h');
   const [hiddenLeads, setHiddenLeads] = useState(new Set());
   const [expandedGroups, setExpandedGroups] = useState(new Set());
+  const [signInModalSource, setSignInModalSource] = useState(null);
   const LEADS_PER_GROUP = 5;
 
   // Must be memoized — a bare sinceForFilter() call produces a new Date string
@@ -728,9 +852,12 @@ export default function MyHub() {
     [savedListings]
   );
 
-  const filteredListings = stageFilter === 'All'
+  // Cumulative filter: Saved = all, Contacted = contacted+visited, Visited = visited only
+  const filteredListings = stageFilter === 'Saved'
     ? normalizedListings
-    : normalizedListings.filter(l => l.stage === stageFilter);
+    : stageFilter === 'Contacted'
+      ? normalizedListings.filter(l => l.stage === 'Contacted' || l.stage === 'Visited')
+      : normalizedListings.filter(l => l.stage === 'Visited');
 
 
   // ── Handlers ─────────────────────────────────────────────────────────────
@@ -773,128 +900,48 @@ export default function MyHub() {
     );
   }
 
-  // ── Gate: not signed in ──────────────────────────────────────────────────
-  if (!authLoading && !user) {
-    const features = [
-      { icon: 'fa-solid fa-bookmark',       label: 'Save listings you like' },
-      { icon: 'fa-solid fa-bolt',           label: 'Get auto leads for your areas' },
-      { icon: 'fa-solid fa-chart-simple',   label: 'Track your search progress' },
-    ];
-    return (
-      <div style={{ ...s.page, marginLeft: isDesktop ? 240 : 0 }}>
-        <DesktopSidebar />
-        <AppHeader />
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: 'calc(100vh - 136px)',
-          padding: '0 32px',
-          textAlign: 'center',
-        }}>
-          {/* NestIQ target icon */}
-          <img
-            src="/icon.svg"
-            alt="NestIQ"
-            style={{ width: 40, height: 40, marginBottom: 24 }}
-          />
-
-          <h1 style={{
-            fontFamily: 'var(--font-sans)',
-            fontWeight: 300,
-            fontSize: 24,
-            letterSpacing: '-0.025em',
-            color: 'var(--color-text-primary)',
-            marginBottom: 10,
-          }}>
-            Sign in to access My Hub
-          </h1>
-
-          <p style={{
-            fontFamily: 'var(--font-sans)',
-            fontSize: 14,
-            color: 'var(--color-text-muted)',
-            lineHeight: 1.55,
-            marginBottom: 28,
-            maxWidth: 260,
-          }}>
-            Save listings, track your search, and get auto leads
-          </p>
-
-          {/* Feature hints */}
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'flex-start',
-            gap: 8,
-            marginBottom: 32,
-          }}>
-            {features.map(({ icon, label }) => (
-              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <i className={icon} style={{ fontSize: 12, color: 'var(--color-amber)', width: 14, textAlign: 'center', flexShrink: 0 }} />
-                <span style={{
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 13,
-                  color: 'var(--color-text-muted)',
-                }}>
-                  {label}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {/* Sign-in button */}
-          <button
-            onClick={signInWithGoogle}
-            style={{
-              width: '100%',
-              maxWidth: 280,
-              height: 48,
-              background: 'var(--color-amber)',
-              color: '#1a0a00',
-              border: 'none',
-              borderRadius: 12,
-              fontFamily: 'var(--font-sans)',
-              fontSize: 15,
-              fontWeight: 500,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 10,
-              letterSpacing: '-0.01em',
-              marginBottom: 12,
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-            </svg>
-            Continue with Google
-          </button>
-
-          <span style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            color: 'var(--color-text-muted)',
-            letterSpacing: '0.04em',
-          }}>
-            Free · No credit card required
-          </span>
-        </div>
-        <BottomNav />
-      </div>
-    );
-  }
 
   return (
     <div style={{ ...s.page, marginLeft: isDesktop ? 240 : 0, paddingBottom: isDesktop ? 40 : 100 }}>
       <DesktopSidebar />
 
       <AppHeader />
+
+      {/* ── PERSISTENT SIGN-IN BANNER (anonymous only) ── */}
+      {!authLoading && !user && (
+        <div style={{
+          background: 'var(--color-bg-surface)',
+          borderBottom: '1px solid var(--color-border)',
+          padding: '12px 16px',
+        }}>
+          <p style={{
+            fontFamily: 'var(--font-sans)',
+            fontSize: 13,
+            color: 'var(--color-text-muted)',
+            lineHeight: 1.45,
+            margin: 0,
+          }}>
+            <button
+              onClick={() => setSignInModalSource('my_hub_banner')}
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                fontFamily: 'inherit',
+                fontSize: 'inherit',
+                color: 'var(--color-amber)',
+                fontWeight: 500,
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                textUnderlineOffset: 2,
+              }}
+            >
+              Sign in
+            </button>
+            {' '}to keep your shortlist safe across devices and unlock auto-curated new listings in your interest areas.
+          </p>
+        </div>
+      )}
 
       {/* ── STICKY TAB BAR ── */}
       <div style={{
@@ -963,19 +1010,19 @@ export default function MyHub() {
                 <h1 style={{ fontWeight: 300, fontSize: 22, letterSpacing: '-0.025em' }}>
                   {savedListings.length} saved
                 </h1>
-                <span style={{ ...s.monoSmall }}>across {PIPELINE_STAGES.length} stages</span>
               </div>
 
               {/* Pipeline progress tracker */}
-              <PipelineTracker listings={normalizedListings} activeStage={stageFilter} />
+              <PipelineTracker listings={normalizedListings} activeStage={stageFilter} totalCount={savedListings.length} />
 
-              {/* Stage filter chips */}
+              {/* Stage filter chips — cumulative counts */}
               <div style={{ display: 'flex', gap: 6, marginBottom: 20, overflowX: 'auto', scrollbarWidth: 'none' }}>
-                <button onClick={() => setStageFilter('All')} style={s.stagePill(stageFilter === 'All')}>
-                  All
-                </button>
                 {PIPELINE_STAGES.map(stage => {
-                  const count = normalizedListings.filter(l => l.stage === stage).length;
+                  const visitedN   = normalizedListings.filter(l => l.stage === 'Visited').length;
+                  const contactedN = normalizedListings.filter(l => l.stage === 'Contacted' || l.stage === 'Visited').length;
+                  const chipCount  = stage === 'Saved' ? savedListings.length
+                                   : stage === 'Contacted' ? contactedN
+                                   : visitedN;
                   return (
                     <button
                       key={stage}
@@ -983,12 +1030,12 @@ export default function MyHub() {
                       style={s.stagePill(stageFilter === stage)}
                     >
                       {stage}
-                      {count > 0 && (
+                      {chipCount > 0 && (
                         <span style={{
                           marginLeft: 5, fontFamily: 'var(--font-mono)', fontSize: 9,
                           opacity: stageFilter === stage ? 0.7 : 0.5,
                         }}>
-                          {count}
+                          {chipCount}
                         </span>
                       )}
                     </button>
@@ -1035,7 +1082,13 @@ export default function MyHub() {
         )}
 
         {/* ════════════════════════════════ NEW LEADS ═════════════════════════════ */}
-        {mainTab === 'New Leads' && (
+        {mainTab === 'New Leads' && !user && (
+          <LockedNewLeadsState
+            savedListings={savedListings}
+            onSignIn={() => setSignInModalSource('leads_tab_lock')}
+          />
+        )}
+        {mainTab === 'New Leads' && user && (
           <>
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14 }}>
@@ -1188,6 +1241,14 @@ export default function MyHub() {
       </div>
 
       <BottomNav />
+
+      {/* ── SIGN-IN MODAL ── */}
+      {signInModalSource && (
+        <SignInModal
+          source={signInModalSource}
+          onClose={() => setSignInModalSource(null)}
+        />
+      )}
     </div>
   );
 }

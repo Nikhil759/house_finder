@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { trackLocalStorageSavesMerged } from '../lib/posthog'
 
 const LS_KEY = 'nestiq_saved_listings_v2'
 
@@ -90,7 +91,7 @@ export function useSavedListings(user) {
     const rows = local.map(post => ({
       user_id: user.id,
       listing_id: String(post.id),
-      status: post._status || 'interested',
+      status: post._status || 'saved',
       notes: post._notes || null,
       listing_snapshot: post,
     }))
@@ -100,6 +101,7 @@ export function useSavedListings(user) {
       .upsert(rows, { onConflict: 'user_id,listing_id', ignoreDuplicates: true })
 
     if (!error) {
+      trackLocalStorageSavesMerged({ count: rows.length })
       localStorage.removeItem('savedListings')
       loadFromSupabase()
     } else {
@@ -140,7 +142,7 @@ export function useSavedListings(user) {
         // Save
         const enriched = {
           ...post,
-          _status: 'interested',
+          _status: 'saved',
           _notes: '',
           _saved_at: new Date().toISOString(),
         }
@@ -150,7 +152,7 @@ export function useSavedListings(user) {
             .insert({
               user_id: user.id,
               listing_id: postId,
-              status: 'interested',
+              status: 'saved',
               notes: null,
               listing_snapshot: post,
             })
@@ -219,6 +221,7 @@ export function useSavedListings(user) {
 
   return {
     savedListings,
+    savedCount: savedListings.length,
     loading,
     isSaved,
     saveListing,
