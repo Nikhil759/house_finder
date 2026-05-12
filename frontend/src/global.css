@@ -51,6 +51,7 @@
 *, *::before, *::after { box-sizing: border-box; }
 html, body { overflow-x: hidden; }
 body { transition: background 0.25s ease, color 0.25s ease; }
+a, button { -webkit-tap-highlight-color: transparent; }
 
 /* ── Page wrapper ───────────────────────────────────────────────────────────── */
 .app-page {
