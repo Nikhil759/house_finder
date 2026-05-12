@@ -2840,26 +2840,37 @@ def email_init_subscription():
             ON CONFLICT (user_id) DO UPDATE SET
                 email = EXCLUDED.email,
                 updated_at = NOW()
-            RETURNING welcome_sent_at
             """,
             (user_id, email),
         )
-        row = cur.fetchone()
-        welcome_already_sent = row and row[0] is not None
+        conn.commit()
+
+        # Atomically claim the welcome send — only one request can succeed
+        cur.execute(
+            """
+            UPDATE email_subscriptions
+            SET welcome_sent_at = NOW()
+            WHERE user_id = %s AND welcome_sent_at IS NULL
+            RETURNING user_id
+            """,
+            (user_id,),
+        )
+        should_send_welcome = cur.fetchone() is not None
         conn.commit()
 
         welcome_sent = False
-        if not welcome_already_sent:
+        if should_send_welcome:
             ok, detail = send_welcome_email(email, user_id)
             if ok:
-                cur.execute(
-                    "UPDATE email_subscriptions SET welcome_sent_at = NOW() WHERE user_id = %s",
-                    (user_id,),
-                )
-                conn.commit()
                 welcome_sent = True
                 posthog_capture(user_id, "email_alert_sent", {"type": "welcome", "email": email})
             else:
+                # Reset so it can be retried next sign-in
+                cur.execute(
+                    "UPDATE email_subscriptions SET welcome_sent_at = NULL WHERE user_id = %s",
+                    (user_id,),
+                )
+                conn.commit()
                 logger.warning("Welcome email failed for %s: %s", email, detail)
 
         return jsonify({"ok": True, "welcome_sent": welcome_sent})
