@@ -14,6 +14,7 @@ import HealthPage from "./HealthPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import NewForYou from "./pages/NewForYou";
 import Profile from "./pages/Profile";
+import Preferences from "./pages/Preferences";
 import Stats from "./pages/Stats";
 import LocalityGuide from "./pages/LocalityGuide";
 import LocalityDetail from "./pages/LocalityDetail";
@@ -52,6 +53,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="/app" element={<Search />} />
           <Route path="/new" element={<MyHub />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/preferences" element={<Preferences />} />
           <Route path="/health" element={<AdminRoute element={<HealthPage />} />} />
           <Route path="/analytics" element={<AdminRoute element={<AnalyticsPage />} />} />
           <Route path="/stats" element={<Stats />} />

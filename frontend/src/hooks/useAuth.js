@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { identifyUser, resetPostHog, trackSigninCompleted, posthog } from '../lib/posthog'
 
+const API_BASE = import.meta.env.VITE_API_URL || ''
 const OWNER_EMAIL = 'bn5799@gmail.com'
 
 function applyOwnerFlag(user) {
@@ -39,6 +40,12 @@ export function useAuth() {
               trackSigninCompleted({ source: signinSource })
               localStorage.removeItem('nestiq_signin_source')
             }
+            // Auto-subscribe to email alerts (fire-and-forget)
+            fetch(`${API_BASE}/api/email/init-subscription`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ user_id: session.user.id, email: session.user.email }),
+            }).catch(() => {})
           }
         } else if (event === 'SIGNED_OUT') {
           resetPostHog()

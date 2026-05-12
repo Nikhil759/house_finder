@@ -2803,6 +2803,336 @@ def listing_statuses():
             conn.close()
 
 
+# ─────────────────────────────────────────────
+# Email subscription & digest routes
+# ─────────────────────────────────────────────
+
+from email_tokens import verify_token, ACTION_UNSUBSCRIBE_TYPE, ACTION_UNSUBSCRIBE_ALL, ACTION_CHANGE_FREQUENCY
+from email_service import (
+    send_welcome_email,
+    posthog_capture,
+    action_success_html,
+    action_error_html,
+    FREQUENCY_LABELS,
+)
+
+
+@app.route("/api/email/init-subscription", methods=["POST"])
+def email_init_subscription():
+    """Auto-subscribe a user on sign-in and send the welcome email (once)."""
+    body = request.get_json(silent=True) or {}
+    user_id = (body.get("user_id") or "").strip()
+    email = (body.get("email") or "").strip()
+    if not user_id or not email:
+        return jsonify({"error": "user_id and email required"}), 400
+
+    conn = None
+    try:
+        conn = _get_pg_conn()
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            INSERT INTO email_subscriptions
+                (user_id, email, new_listings_email_subscribed, new_listings_frequency,
+                 created_at, updated_at)
+            VALUES (%s, %s, true, 'daily', NOW(), NOW())
+            ON CONFLICT (user_id) DO UPDATE SET
+                email = EXCLUDED.email,
+                updated_at = NOW()
+            RETURNING welcome_sent_at
+            """,
+            (user_id, email),
+        )
+        row = cur.fetchone()
+        welcome_already_sent = row and row[0] is not None
+        conn.commit()
+
+        welcome_sent = False
+        if not welcome_already_sent:
+            ok, detail = send_welcome_email(email, user_id)
+            if ok:
+                cur.execute(
+                    "UPDATE email_subscriptions SET welcome_sent_at = NOW() WHERE user_id = %s",
+                    (user_id,),
+                )
+                conn.commit()
+                welcome_sent = True
+                posthog_capture(user_id, "email_alert_sent", {"type": "welcome", "email": email})
+            else:
+                logger.warning("Welcome email failed for %s: %s", email, detail)
+
+        return jsonify({"ok": True, "welcome_sent": welcome_sent})
+    except Exception as e:
+        logger.error("email init-subscription error: %s", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route("/api/email/preferences", methods=["GET"])
+def email_preferences_get():
+    """Return the email subscription state for a user."""
+    user_id = request.args.get("user_id", "").strip()
+    if not user_id:
+        return jsonify({"error": "user_id required"}), 400
+
+    conn = None
+    try:
+        conn = _get_pg_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """SELECT new_listings_email_subscribed, new_listings_frequency,
+                      all_emails_unsubscribed, last_digest_sent_at,
+                      disabled_localities
+               FROM email_subscriptions WHERE user_id = %s""",
+            (user_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify({
+                "exists": False,
+                "new_listings_email_subscribed": False,
+                "new_listings_frequency": "daily",
+                "all_emails_unsubscribed": False,
+                "disabled_localities": [],
+            })
+        return jsonify({
+            "exists": True,
+            "new_listings_email_subscribed": row[0],
+            "new_listings_frequency": row[1],
+            "all_emails_unsubscribed": row[2],
+            "last_digest_sent_at": row[3].isoformat() if row[3] else None,
+            "disabled_localities": row[4] or [],
+        })
+    except Exception as e:
+        logger.error("email preferences GET error: %s", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route("/api/email/preferences", methods=["PUT"])
+def email_preferences_put():
+    """Update email subscription preferences."""
+    body = request.get_json(silent=True) or {}
+    user_id = (body.get("user_id") or "").strip()
+    if not user_id:
+        return jsonify({"error": "user_id required"}), 400
+
+    conn = None
+    try:
+        conn = _get_pg_conn()
+        cur = conn.cursor()
+
+        # Read current state for change detection
+        cur.execute(
+            "SELECT new_listings_email_subscribed, new_listings_frequency, all_emails_unsubscribed FROM email_subscriptions WHERE user_id = %s",
+            (user_id,),
+        )
+        old = cur.fetchone()
+        if not old:
+            return jsonify({"error": "no subscription found"}), 404
+
+        new_sub = body.get("new_listings_email_subscribed")
+        new_freq = body.get("new_listings_frequency")
+        unsub_all = body.get("all_emails_unsubscribed")
+        disabled_locs = body.get("disabled_localities")
+
+        sets, params = [], []
+        if new_sub is not None:
+            sets.append("new_listings_email_subscribed = %s")
+            params.append(bool(new_sub))
+        if new_freq and new_freq in FREQUENCY_LABELS:
+            sets.append("new_listings_frequency = %s")
+            params.append(new_freq)
+        if unsub_all is not None:
+            sets.append("all_emails_unsubscribed = %s")
+            params.append(bool(unsub_all))
+            if bool(unsub_all):
+                sets.append("new_listings_email_subscribed = false")
+        if disabled_locs is not None and isinstance(disabled_locs, list):
+            sets.append("disabled_localities = %s")
+            params.append(disabled_locs)
+
+        if not sets:
+            return jsonify({"ok": True, "changed": False})
+
+        sets.append("updated_at = NOW()")
+        params.append(user_id)
+        cur.execute(
+            f"UPDATE email_subscriptions SET {', '.join(sets)} WHERE user_id = %s",
+            params,
+        )
+        conn.commit()
+
+        # Fire PostHog events
+        if new_sub is not None and not new_sub and old[0]:
+            posthog_capture(user_id, "email_alert_unsubscribed", {
+                "type": "new_listings_digest", "source": "preferences_page",
+            })
+        if unsub_all and not old[2]:
+            posthog_capture(user_id, "email_alert_unsubscribed", {
+                "type": "all", "source": "preferences_page",
+            })
+        if new_freq and new_freq != old[1]:
+            posthog_capture(user_id, "email_alert_frequency_changed", {
+                "new_frequency": new_freq, "source": "preferences_page",
+            })
+
+        return jsonify({"ok": True, "changed": True})
+    except Exception as e:
+        logger.error("email preferences PUT error: %s", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route("/api/email/action")
+def email_action():
+    """One-click email action via signed token (unsubscribe, frequency change)."""
+    token = request.args.get("token", "")
+    if not token:
+        return action_error_html("Missing link token"), 400
+
+    data = verify_token(token)
+    if not data:
+        return action_error_html("This link has expired"), 200
+
+    user_id = data["uid"]
+    action = data["act"]
+    value = data.get("val", "")
+
+    conn = None
+    try:
+        conn = _get_pg_conn()
+        cur = conn.cursor()
+
+        if action == ACTION_UNSUBSCRIBE_TYPE:
+            cur.execute(
+                "UPDATE email_subscriptions SET new_listings_email_subscribed = false, updated_at = NOW() WHERE user_id = %s",
+                (user_id,),
+            )
+            conn.commit()
+            posthog_capture(user_id, "email_alert_unsubscribed", {
+                "type": value or "new_listings_digest", "source": "footer_one_click",
+            })
+            return action_success_html("You've been unsubscribed from new listing emails"), 200
+
+        elif action == ACTION_UNSUBSCRIBE_ALL:
+            cur.execute(
+                "UPDATE email_subscriptions SET all_emails_unsubscribed = true, new_listings_email_subscribed = false, updated_at = NOW() WHERE user_id = %s",
+                (user_id,),
+            )
+            conn.commit()
+            posthog_capture(user_id, "email_alert_unsubscribed", {
+                "type": "all", "source": "footer_one_click",
+            })
+            return action_success_html("You've been unsubscribed from all NestIQ emails"), 200
+
+        elif action == ACTION_CHANGE_FREQUENCY:
+            if value not in FREQUENCY_LABELS:
+                return action_error_html("Invalid frequency"), 400
+            cur.execute(
+                "UPDATE email_subscriptions SET new_listings_frequency = %s, updated_at = NOW() WHERE user_id = %s",
+                (value, user_id),
+            )
+            conn.commit()
+            posthog_capture(user_id, "email_alert_frequency_changed", {
+                "new_frequency": value, "source": "email_footer",
+            })
+            label = FREQUENCY_LABELS[value]
+            return action_success_html(f"Digest frequency changed to {label}"), 200
+
+        return action_error_html("Unknown action"), 400
+    except Exception as e:
+        logger.error("email action error: %s", e)
+        return action_error_html("Something went wrong"), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route("/api/resend/webhook", methods=["POST"])
+def resend_webhook():
+    """Handle Resend bounce / spam-complaint webhooks."""
+    payload = request.get_data()
+    event_data = request.get_json(silent=True) or {}
+
+    event_type = event_data.get("type", "")
+    email_data = event_data.get("data", {})
+    recipient = ""
+
+    if isinstance(email_data.get("to"), list) and email_data["to"]:
+        recipient = email_data["to"][0]
+    elif isinstance(email_data.get("email"), str):
+        recipient = email_data["email"]
+
+    if not recipient:
+        return jsonify({"ok": True, "skipped": "no recipient"}), 200
+
+    conn = None
+    try:
+        conn = _get_pg_conn()
+        cur = conn.cursor()
+
+        if event_type == "email.bounced":
+            cur.execute(
+                """UPDATE email_subscriptions
+                   SET hard_bounce_at = NOW(), new_listings_email_subscribed = false, updated_at = NOW()
+                   WHERE email = %s AND hard_bounce_at IS NULL""",
+                (recipient,),
+            )
+            conn.commit()
+            # Look up user_id for PostHog
+            cur.execute("SELECT user_id FROM email_subscriptions WHERE email = %s", (recipient,))
+            row = cur.fetchone()
+            if row:
+                posthog_capture(str(row[0]), "email_alert_unsubscribed", {
+                    "type": "new_listings_digest", "source": "bounce",
+                })
+
+        elif event_type == "email.complained":
+            cur.execute(
+                """UPDATE email_subscriptions
+                   SET spam_complaint_at = NOW(), new_listings_email_subscribed = false, updated_at = NOW()
+                   WHERE email = %s AND spam_complaint_at IS NULL""",
+                (recipient,),
+            )
+            conn.commit()
+            cur.execute("SELECT user_id FROM email_subscriptions WHERE email = %s", (recipient,))
+            row = cur.fetchone()
+            if row:
+                posthog_capture(str(row[0]), "email_alert_unsubscribed", {
+                    "type": "new_listings_digest", "source": "spam_complaint",
+                })
+
+        return jsonify({"ok": True, "event": event_type}), 200
+    except Exception as e:
+        logger.error("resend webhook error: %s", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route("/api/email/verify-token", methods=["POST"])
+def email_verify_token():
+    """Verify a signed email token and return the user_id (for preferences page access)."""
+    body = request.get_json(silent=True) or {}
+    token = (body.get("token") or "").strip()
+    if not token:
+        return jsonify({"error": "token required"}), 400
+
+    data = verify_token(token)
+    if not data:
+        return jsonify({"error": "invalid or expired token"}), 401
+    return jsonify({"user_id": data["uid"]})
+
+
 if __name__ == "__main__":
     port  = int(os.environ.get("PORT", 5001))
     debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
