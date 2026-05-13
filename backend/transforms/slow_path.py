@@ -64,6 +64,7 @@ def run_rent_anomaly_flagging():
             WHERE status IN ('active', 'stale')
               AND rent IS NOT NULL AND rent > 3000
               AND locality IS NOT NULL AND bhk IS NOT NULL
+              AND listing_type = 'full_house'
             GROUP BY locality, bhk
             HAVING COUNT(*) >= 5
         """)
@@ -77,6 +78,7 @@ def run_rent_anomaly_flagging():
             FROM listings l
             WHERE l.status IN ('active', 'stale')
               AND l.rent IS NOT NULL
+              AND l.listing_type = 'full_house'
         """)
         rows = cur.fetchall()
         processed = len(rows)

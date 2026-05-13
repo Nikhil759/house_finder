@@ -58,6 +58,7 @@ _UPSERT_COLUMNS = [
     "is_flatmate", "is_sponsored", "thumbnail_url",
     "posted_at", "scraped_at", "quality_score", "raw_payload",
     "society_name", "image_urls",
+    "listing_type", "type_attributes",
 ]
 
 _UPDATE_ON_CONFLICT = [
@@ -70,6 +71,7 @@ _UPDATE_ON_CONFLICT = [
     "is_flatmate", "is_sponsored", "thumbnail_url",
     "posted_at", "scraped_at", "quality_score", "raw_payload",
     "society_name", "image_urls",
+    "listing_type", "type_attributes",
 ]
 
 
@@ -78,6 +80,7 @@ def _listing_to_row(listing: StandardListing, now: datetime) -> tuple:
     raw_json = json.dumps(listing.raw_payload, default=str) if listing.raw_payload else None
     amenities = listing.amenities if listing.amenities else []
     image_urls = listing.image_urls if listing.image_urls else []
+    type_attrs_json = json.dumps(listing.type_attributes) if listing.type_attributes else '{}'
     return (
         listing.source, listing.source_id, listing.source_url, listing.source_group,
         listing.title, listing.body, listing.bhk, listing.property_type,
@@ -91,6 +94,7 @@ def _listing_to_row(listing: StandardListing, now: datetime) -> tuple:
         listing.posted_at, now, listing.quality_score,
         raw_json,
         listing.society_name, image_urls,
+        listing.listing_type, type_attrs_json,
     )
 
 

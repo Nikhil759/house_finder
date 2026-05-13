@@ -317,9 +317,18 @@ def main():
         record_run_end(db_run_id, status="failed", error_message=str(e), started_at=started_at)
         return
 
+    if all_listings:
+        from ingestion.classify_listing_type import classify_listing_types, discard_not_a_listing
+        cls_stats = classify_listing_types(all_listings)
+        logger.info(
+            "Listing type classification: %s (fallbacks: %d, errors: %d)",
+            cls_stats["classified"], cls_stats["fallback_count"], cls_stats["errors"],
+        )
+
     stats = UpsertStats()
     if all_listings:
         stats = upsert_listings(all_listings)
+        discard_not_a_listing("telegram", all_listings)
 
     # Geocode listings that still have no coordinates after upsert
     _needs_geocode = [l for l in all_listings if l.latitude is None]

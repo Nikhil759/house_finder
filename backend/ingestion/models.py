@@ -18,7 +18,7 @@ class StandardListing(BaseModel):
     """Canonical listing shape written to the `listings` table."""
 
     # ── Identity ──
-    source: str = Field(..., pattern=r"^(reddit|telegram|nobroker|housing|99acres)$")
+    source: str = Field(..., pattern=r"^(reddit|telegram|nobroker|housing|99acres|zolo|colive)$")
     source_id: str
     source_url: Optional[str] = None
     source_group: Optional[str] = None
@@ -57,6 +57,15 @@ class StandardListing(BaseModel):
     # ── Flags ──
     is_flatmate: bool = False
     is_sponsored: bool = False
+
+    # ── Listing type (full_house | pg | flatmate | not_a_listing) ──
+    listing_type: str = "full_house"
+    # type_attributes JSONB — PG-specific keys include:
+    #   occupancy: 'single' | 'double' | 'triple' | 'quad' | 'couple'
+    #   gender_pref: 'male' | 'female' | 'co-ed'
+    #   meals_included, attached_bathroom: bool
+    #   (plus source-specific keys — see ingest_zolo.py, ingest_colive.py)
+    type_attributes: dict = Field(default_factory=dict)
 
     # ── Media ──
     thumbnail_url: Optional[str] = None

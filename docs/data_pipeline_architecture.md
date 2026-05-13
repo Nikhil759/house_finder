@@ -28,16 +28,18 @@ Each source has its own **dedicated cron job** running on an independent schedul
 
 - **Schedules:**
 
-  | Stream   | Source      | Script                         | Schedule                      | Cron Host     |
-  |----------|-------------|--------------------------------|-------------------------------|---------------|
-  | Listings | NoBroker    | `ingest_nobroker.py`           | Every 3 hours (`0 */3 * * *`) | Railway Cron  |
-  | Listings | Housing.com | `ingest_housing.py`            | Every 3 hours (`0 */3 * * *`) | Railway Cron  |
-  | Listings | Telegram    | `ingest_telegram.py`           | Every 3 hours (`0 */3 * * *`) | Railway Cron  |
-  | Listings | Reddit      | `ingest_reddit.py`             | Every 6 hours (`0 */6 * * *`) | Local crontab |
-  | Pulse    | Reddit      | `scrape_reddit_discussions.py` | Every 6 hours (`0 */6 * * *`) | Local crontab |
-  | Pulse    | Google News | `scrape_news.py`               | Every 6 hours (`0 */6 * * *`) | Railway Cron  |
+  | Stream   | Source      | Script                         | Schedule                       | Cron Host     |
+  |----------|-------------|--------------------------------|--------------------------------|---------------|
+  | Listings | NoBroker    | `ingest_nobroker.py`           | Every 3 hours (`0 */3 * * *`)  | Railway Cron  |
+  | Listings | Housing.com | `ingest_housing.py`            | Every 3 hours (`0 */3 * * *`)  | Railway Cron  |
+  | Listings | Telegram    | `ingest_telegram.py`           | Every 3 hours (`0 */3 * * *`)  | Railway Cron  |
+  | Listings | Reddit      | `ingest_reddit.py`             | Every 6 hours (`0 */6 * * *`)  | Local crontab |
+  | Listings | Zolo (PG)   | `ingest_zolo.py`               | Every 12 hours (`0 */12 * * *`)| Railway Cron  |
+  | Listings | Colive (PG) | `ingest_colive.py`             | Every 12 hours (`0 */12 * * *`)| Railway Cron  |
+  | Pulse    | Reddit      | `scrape_reddit_discussions.py` | Every 6 hours (`0 */6 * * *`)  | Local crontab |
+  | Pulse    | Google News | `scrape_news.py`               | Every 6 hours (`0 */6 * * *`)  | Railway Cron  |
 
-- **Orchestration:** Railway Cron for 4 non-Reddit jobs, local macOS crontab for 2 Reddit jobs (Reddit blocks Railway IP ranges). No external orchestrator (Prefect/Airflow) — at current scale, cron + the `ingestion_runs` audit table provides sufficient scheduling and observability.
+- **Orchestration:** Railway Cron for 6 non-Reddit jobs, local macOS crontab for 2 Reddit jobs (Reddit blocks Railway IP ranges). No external orchestrator (Prefect/Airflow) — at current scale, cron + the `ingestion_runs` audit table provides sufficient scheduling and observability.
 - **Compute Provider:** **Railway** provisions the compute for all backend scripts except Reddit scraping.
 - **Fast-path transforms:** Each ingestion script calls `run_post_ingest_transforms()` (or `run_post_pulse_transforms()` for Pulse scripts) at the end of its `main()` function after a successful ingest. This chains transforms to ingestion without needing a separate orchestrator for dependency management.
 

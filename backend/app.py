@@ -2484,6 +2484,7 @@ def bangalore_rent_trend():
                   AND rent BETWEEN 3000 AND 500000
                   AND bhk IN ('1 BHK', '2 BHK', '3 BHK')
                   AND source IN ('nobroker', 'housing')
+                  AND listing_type = 'full_house'
                 GROUP BY bhk
                 HAVING COUNT(*) >= 30
             ),
@@ -2496,6 +2497,7 @@ def bangalore_rent_trend():
                   AND rent BETWEEN 3000 AND 500000
                   AND bhk IN ('1 BHK', '2 BHK', '3 BHK')
                   AND source IN ('nobroker', 'housing')
+                  AND listing_type = 'full_house'
                 GROUP BY bhk
                 HAVING COUNT(*) >= 30
             )

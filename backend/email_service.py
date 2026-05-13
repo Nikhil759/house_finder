@@ -216,6 +216,57 @@ def send_welcome_email(to_email: str, user_id: str) -> Tuple[bool, str]:
     )
 
 
+def build_launch_announcement_html(user_id: str) -> str:
+    prefs_token = generate_token(user_id, ACTION_UNSUBSCRIBE_TYPE, "new_listings")
+    prefs_url = f"{APP_URL}/preferences?token={prefs_token}"
+
+    body = f"""
+<p style="color:{_STYLE['amber']};font-size:10px;letter-spacing:0.2em;margin:0 0 8px 0;font-family:{_STYLE['mono']};">
+  NESTIQ
+</p>
+<h1 style="color:{_STYLE['text']};font-weight:400;font-size:24px;margin:0 0 24px 0;line-height:1.3;">
+  New on NestIQ &mdash; email alerts for new listings
+</h1>
+<p style="font-size:15px;line-height:1.7;color:{_STYLE['text']};margin:0 0 16px 0;">
+  We just shipped something you'll like &mdash; NestIQ now sends you curated
+  new rental listings in your interest areas, straight to your inbox.
+</p>
+<p style="font-size:15px;line-height:1.7;color:{_STYLE['text']};margin:0 0 16px 0;">
+  Based on your saved listings and locality preferences, we've enabled
+  <strong>daily email alerts</strong> for you. Each email includes the top new
+  listings from NoBroker, Housing.com, 99acres, and more &mdash; scored and
+  grouped by locality.
+</p>
+<p style="font-size:15px;line-height:1.7;color:{_STYLE['text']};margin:0 0 24px 0;">
+  You can change frequency to every 3 days, every 5 days, weekly &mdash; or
+  unsubscribe anytime. Zero friction.
+</p>
+<a href="{prefs_url}"
+   style="display:inline-block;background:{_STYLE['amber']};color:#1a0a00;
+          font-family:{_STYLE['mono']};font-size:13px;font-weight:600;
+          letter-spacing:0.04em;text-decoration:none;padding:12px 28px;
+          border-radius:6px;">
+  Manage email preferences
+</a>
+<p style="margin:24px 0 0 0;">
+  <a href="{APP_URL}" style="color:{_STYLE['amber']};font-size:13px;font-family:{_STYLE['mono']};text-decoration:none;">
+    Go to NestIQ &rarr;
+  </a>
+</p>
+{_footer_html(user_id, include_frequency_switchers=False)}"""
+
+    return _email_wrapper(body)
+
+
+def send_launch_announcement(to_email: str, user_id: str) -> Tuple[bool, str]:
+    html = build_launch_announcement_html(user_id)
+    return _resend_send(
+        to_email,
+        "New on NestIQ \u2014 email alerts for new listings",
+        html,
+    )
+
+
 # ── Digest email ─────────────────────────────────────────────────────────────
 
 
