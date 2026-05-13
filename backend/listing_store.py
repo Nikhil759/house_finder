@@ -189,6 +189,7 @@ def query_listings(
     limit=50,
     include_expired=False,
     since_utc=None,
+    listing_type=None,
 ):
     conn, is_pg = _get_conn()
 
@@ -204,6 +205,10 @@ def query_listings(
         if not include_expired:
             conditions.append("l.status = %s")
             params.append("active")
+
+        if listing_type:
+            conditions.append("l.listing_type = %s")
+            params.append(listing_type)
 
         if sources:
             placeholders = ",".join(["%s"] * len(sources))
@@ -275,6 +280,7 @@ def query_listings(
                               CASE WHEN jsonb_typeof(l.images) = 'array'
                                    THEN jsonb_array_length(l.images)
                               END, 0)) AS image_count,
+                       l.listing_type, l.type_attributes,
                        ROW_NUMBER() OVER (
                            PARTITION BY l.source
                            ORDER BY COALESCE(lc.quality_score, l.quality_score) DESC NULLS LAST
@@ -295,7 +301,8 @@ def query_listings(
                    detail_score, price_comp_score,
                    locality_sent_score, freshness_score,
                    price_anomaly, is_per_room, rent_type,
-                   image_count
+                   image_count,
+                   listing_type, type_attributes
             FROM ranked
             WHERE rn <= %s
             ORDER BY quality_score DESC NULLS LAST
@@ -388,6 +395,8 @@ def query_listings(
                 "is_per_room": row[38] or False,
                 "rent_type": row[39] or "unknown",
                 "image_count": row[40] or 0,
+                "listing_type": row[41] or "full_house",
+                "type_attributes": row[42] or {},
             })
             results.append(base)
         return results
@@ -491,7 +500,8 @@ _LISTING_SELECT = """
            l.society_name, l.society_place_id, l.image_urls, l.images,
            lc.detail_score, lc.price_comp_score,
            lc.locality_sent_score, lc.freshness_score,
-           lc.price_anomaly, lc.is_per_room, lc.rent_type
+           lc.price_anomaly, lc.is_per_room, lc.rent_type,
+           l.listing_type, l.type_attributes
     FROM listings l
     LEFT JOIN listings_curated lc ON lc.listing_id = l.id
 """
@@ -635,6 +645,9 @@ def _row_to_listing(row):
         "price_anomaly": row[41] or False,
         "is_per_room": row[42] or False,
         "rent_type": row[43] or "unknown",
+        "listing_type": row[44] or "full_house",
+        "type_attributes": row[45] or {},
+        "image_count": len(row[35] or []),
     })
     return base
 

@@ -236,10 +236,20 @@ def normalize(center: dict) -> StandardListing | None:
 
     title = name.strip() or f"PG in {canonical_locality or 'Bangalore'}"
 
+    # Construct property page URL: zolostays.com/pg-hostel-near-{locality}-in-{city}-{name_slug}-{code}
+    locality_key = (basic.get("localityKey") or "").strip().lower()
+    city_key = (basic.get("cityKey") or "bangalore").strip().lower()
+    zolo_code = (basic.get("zoloCode") or "").strip().lower()
+    name_slug = name.strip().lower().replace(" ", "_")
+    if locality_key and zolo_code and name_slug:
+        source_url = f"https://zolostays.com/pg-hostel-near-{locality_key}-in-{city_key}-{name_slug}-{zolo_code}"
+    else:
+        source_url = None
+
     return StandardListing(
         source=SOURCE,
         source_id=str(center_id),
-        source_url=None,
+        source_url=source_url,
         title=title,
         body=(description[:5000] if description else None),
         bhk=None,

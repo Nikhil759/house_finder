@@ -247,10 +247,20 @@ def normalize(prop: dict) -> StandardListing | None:
 
     title = name or f"Colive PG in {canonical_locality or 'Bangalore'}"
 
+    # Construct property page URL: colive.com/bangalore/pg-in-{location}/{title-slug}/{link}
+    link = (prop.get("Link") or "").strip()
+    loc_name = (prop.get("LocationName") or "").strip().lower().rstrip()
+    title_slug = title.lower().replace(" ", "-")
+    loc_slug = loc_name.replace(" ", "-") if loc_name else None
+    if link and loc_slug:
+        source_url = f"https://www.colive.com/bangalore/pg-in-{loc_slug}/{title_slug}/{link.lower()}"
+    else:
+        source_url = None
+
     return StandardListing(
         source=SOURCE,
         source_id=str(pid),
-        source_url=None,
+        source_url=source_url,
         title=title,
         body=None,
         bhk=None,

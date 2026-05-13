@@ -43,6 +43,8 @@ const SOURCE_CONFIG = {
   housing:   { label: 'Housing.com', color: '#7C3AED', icon: 'fa-solid fa-building' },
   telegram:  { label: 'Telegram',    color: '#38BDF8', icon: 'fa-brands fa-telegram' },
   '99acres': { label: '99acres',     color: '#0076BE', icon: 'fa-solid fa-landmark' },
+  zolo:      { label: 'Zolo',        color: '#FF6F61', icon: 'fa-solid fa-bed' },
+  colive:    { label: 'Colive',      color: '#00BFA5', icon: 'fa-solid fa-people-roof' },
 };
 
 const SOURCE_LABELS = Object.fromEntries(
@@ -74,19 +76,65 @@ const LOCALITY_CHIPS = [
   { label: 'Bannerghatta',   icon: faLeaf          },
 ];
 
-const QUICK_FILTERS = [
-  { key: '1bhk',       label: '1 BHK',              category: 'bhk'       },
-  { key: '2bhk',       label: '2 BHK',              category: 'bhk'       },
-  { key: '3bhk',       label: '3 BHK',              category: 'bhk'       },
-  { key: 'furnished',  label: 'Furnished',           category: 'furnished' },
-  { key: 'semi',       label: 'Semi-furnished',      category: 'furnished' },
-  { key: 'u20k',       label: '< ₹20k',             category: 'price'     },
-  { key: 'u35k',       label: '< ₹35k',             category: 'price'     },
-  { key: 'u50k',       label: '< ₹50k',             category: 'price'     },
-  { key: 'community',  label: 'Community listings',  category: 'source'    },
-  { key: 'high_score', label: 'High score 70+',      category: 'quality'   },
-  { key: 'has_photos', label: 'Has Photos',          category: 'media'     },
+const CATEGORY_TABS = [
+  { key: null,         label: 'All',        icon: 'fa-solid fa-layer-group' },
+  { key: 'full_house', label: 'Rentals',    icon: 'fa-solid fa-house' },
+  { key: 'pg',         label: 'PG',         icon: 'fa-solid fa-bed' },
+  { key: 'flatmate',   label: 'Flatmates',  icon: 'fa-solid fa-people-roof' },
 ];
+
+const QUICK_FILTERS_BY_CATEGORY = {
+  _default: [
+    { key: '1bhk',       label: '1 BHK',              category: 'bhk'       },
+    { key: '2bhk',       label: '2 BHK',              category: 'bhk'       },
+    { key: '3bhk',       label: '3 BHK',              category: 'bhk'       },
+    { key: 'furnished',  label: 'Furnished',           category: 'furnished' },
+    { key: 'semi',       label: 'Semi-furnished',      category: 'furnished' },
+    { key: 'u20k',       label: '< ₹20k',             category: 'price'     },
+    { key: 'u35k',       label: '< ₹35k',             category: 'price'     },
+    { key: 'u50k',       label: '< ₹50k',             category: 'price'     },
+    { key: 'community',  label: 'Community listings',  category: 'source'    },
+    { key: 'high_score', label: 'High score 70+',      category: 'quality'   },
+    { key: 'has_photos', label: 'Has Photos',          category: 'media'     },
+  ],
+  full_house: [
+    { key: '1bhk',       label: '1 BHK',              category: 'bhk'       },
+    { key: '2bhk',       label: '2 BHK',              category: 'bhk'       },
+    { key: '3bhk',       label: '3 BHK',              category: 'bhk'       },
+    { key: 'furnished',  label: 'Furnished',           category: 'furnished' },
+    { key: 'semi',       label: 'Semi-furnished',      category: 'furnished' },
+    { key: 'u20k',       label: '< ₹20k',             category: 'price'     },
+    { key: 'u35k',       label: '< ₹35k',             category: 'price'     },
+    { key: 'u50k',       label: '< ₹50k',             category: 'price'     },
+    { key: 'community',  label: 'Community listings',  category: 'source'    },
+    { key: 'high_score', label: 'High score 70+',      category: 'quality'   },
+    { key: 'has_photos', label: 'Has Photos',          category: 'media'     },
+  ],
+  pg: [
+    { key: 'male',       label: 'Male',               category: 'gender'    },
+    { key: 'female',     label: 'Female',              category: 'gender'    },
+    { key: 'co-ed',      label: 'Co-ed',              category: 'gender'    },
+    { key: 'single',     label: 'Single',             category: 'occupancy' },
+    { key: 'double',     label: 'Double',             category: 'occupancy' },
+    { key: 'couple',     label: 'Couple',             category: 'occupancy' },
+    { key: 'meals',      label: 'Meals included',     category: 'meals'     },
+    { key: 'bathroom',   label: 'Attached bath',      category: 'bathroom'  },
+    { key: 'u8k',        label: '< ₹8k',             category: 'price'     },
+    { key: 'u12k',       label: '< ₹12k',            category: 'price'     },
+    { key: 'u18k',       label: '< ₹18k',            category: 'price'     },
+  ],
+  flatmate: [
+    { key: 'male',       label: 'Male',               category: 'gender'    },
+    { key: 'female',     label: 'Female',              category: 'gender'    },
+    { key: 'u8k',        label: '< ₹8k',             category: 'price'     },
+    { key: 'u12k',       label: '< ₹12k',            category: 'price'     },
+    { key: 'u18k',       label: '< ₹18k',            category: 'price'     },
+    { key: 'community',  label: 'Community listings',  category: 'source'   },
+    { key: 'has_photos', label: 'Has Photos',          category: 'media'    },
+  ],
+};
+
+const QUICK_FILTERS = QUICK_FILTERS_BY_CATEGORY._default;
 
 const DEFAULT_FILTERS = {
   bhk:       [],
@@ -94,7 +142,11 @@ const DEFAULT_FILTERS = {
   maxBudget: '',
   furnished: 'Any',
   keywords:  '',
-  sources:   { reddit: true, nobroker: true, housing: true, telegram: true, '99acres': true },
+  sources:   { reddit: true, nobroker: true, housing: true, telegram: true, '99acres': true, zolo: true, colive: true },
+  genderPref:       '',
+  occupancy:        '',
+  mealsIncluded:    false,
+  attachedBathroom: false,
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -119,7 +171,7 @@ function scoreColor(score) {
   return '#555555';                               // muted gray
 }
 
-const KNOWN_SOURCES = new Set(['reddit', 'nobroker', 'telegram', 'housing', '99acres']);
+const KNOWN_SOURCES = new Set(['reddit', 'nobroker', 'telegram', 'housing', '99acres', 'zolo', 'colive']);
 
 // Always returns a stable compound ID: "{source}_{source_id}"
 // Handles: DB listings (already compound), live NoBroker cache (nb_xxx), live Reddit (bare id)
@@ -163,6 +215,8 @@ function normalizePost(p) {
     flagCount:       Number(p.flag_count) || 0,
     flagTopCategory: p.flag_top_category || null,
     viewCount:       Number(p.view_count) || 0,
+    listingType:     p.listing_type || 'full_house',
+    typeAttrs:       p.type_attributes || {},
     _raw:        p,
   };
 }
@@ -296,7 +350,7 @@ function BudgetInput({ placeholder, value, onChange }) {
   );
 }
 
-function FilterBottomSheet({ open, onClose, initialFilters, initialSort, onApply }) {
+function FilterBottomSheet({ open, onClose, initialFilters, initialSort, onApply, activeCategory }) {
   const [draft, setDraft]       = useState(() => ({
     ...DEFAULT_FILTERS,
     sources: { ...DEFAULT_FILTERS.sources },
@@ -404,21 +458,23 @@ function FilterBottomSheet({ open, onClose, initialFilters, initialSort, onApply
         {/* Scrollable content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px 0', scrollbarWidth: 'none' }}>
 
-          {/* BHK */}
-          <SheetSection label="BHK">
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {BHK_OPTIONS.map(opt => (
-                <PillToggle
-                  key={opt}
-                  label={opt}
-                  active={draft.bhk.includes(opt)}
-                  onClick={() => toggleBhk(opt)}
-                />
-              ))}
-            </div>
-          </SheetSection>
+          {/* BHK — Rentals / All only */}
+          {(!activeCategory || activeCategory === 'full_house') && (
+            <SheetSection label="BHK">
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {BHK_OPTIONS.filter(o => o !== 'Studio').map(opt => (
+                  <PillToggle
+                    key={opt}
+                    label={opt}
+                    active={draft.bhk.includes(opt)}
+                    onClick={() => toggleBhk(opt)}
+                  />
+                ))}
+              </div>
+            </SheetSection>
+          )}
 
-          {/* Budget */}
+          {/* Budget — all categories, different range for PG/Flatmate */}
           <SheetSection label="Budget">
             <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
               <BudgetInput
@@ -435,8 +491,8 @@ function FilterBottomSheet({ open, onClose, initialFilters, initialSort, onApply
             <input
               type="range"
               min={0}
-              max={150000}
-              step={5000}
+              max={(activeCategory === 'pg' || activeCategory === 'flatmate') ? 30000 : 150000}
+              step={(activeCategory === 'pg' || activeCategory === 'flatmate') ? 1000 : 5000}
               value={sliderMax}
               onChange={e => setDraft(d => ({ ...d, maxBudget: e.target.value === '0' ? '' : e.target.value }))}
               className="filter-range-slider"
@@ -455,19 +511,77 @@ function FilterBottomSheet({ open, onClose, initialFilters, initialSort, onApply
             )}
           </SheetSection>
 
-          {/* Furnished */}
-          <SheetSection label="Furnished">
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {FURNISHED_OPTIONS.map(opt => (
+          {/* Furnished — Rentals / All only */}
+          {(!activeCategory || activeCategory === 'full_house') && (
+            <SheetSection label="Furnished">
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {FURNISHED_OPTIONS.map(opt => (
+                  <PillToggle
+                    key={opt}
+                    label={opt}
+                    active={draft.furnished === opt}
+                    onClick={() => setDraft(d => ({ ...d, furnished: opt }))}
+                  />
+                ))}
+              </div>
+            </SheetSection>
+          )}
+
+          {/* Gender — PG / Flatmate only */}
+          {(activeCategory === 'pg' || activeCategory === 'flatmate') && (
+            <SheetSection label="Gender preference">
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {['Male', 'Female', 'Co-ed'].map(opt => (
+                  <PillToggle
+                    key={opt}
+                    label={opt}
+                    active={draft.genderPref === opt.toLowerCase()}
+                    onClick={() => setDraft(d => ({
+                      ...d,
+                      genderPref: d.genderPref === opt.toLowerCase() ? '' : opt.toLowerCase(),
+                    }))}
+                  />
+                ))}
+              </div>
+            </SheetSection>
+          )}
+
+          {/* Occupancy — PG only */}
+          {activeCategory === 'pg' && (
+            <SheetSection label="Occupancy">
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {['Single', 'Double', 'Triple', 'Couple'].map(opt => (
+                  <PillToggle
+                    key={opt}
+                    label={opt}
+                    active={draft.occupancy === opt.toLowerCase()}
+                    onClick={() => setDraft(d => ({
+                      ...d,
+                      occupancy: d.occupancy === opt.toLowerCase() ? '' : opt.toLowerCase(),
+                    }))}
+                  />
+                ))}
+              </div>
+            </SheetSection>
+          )}
+
+          {/* Amenities — PG only */}
+          {activeCategory === 'pg' && (
+            <SheetSection label="Amenities">
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <PillToggle
-                  key={opt}
-                  label={opt}
-                  active={draft.furnished === opt}
-                  onClick={() => setDraft(d => ({ ...d, furnished: opt }))}
+                  label="Meals included"
+                  active={draft.mealsIncluded === true}
+                  onClick={() => setDraft(d => ({ ...d, mealsIncluded: !d.mealsIncluded }))}
                 />
-              ))}
-            </div>
-          </SheetSection>
+                <PillToggle
+                  label="Attached bathroom"
+                  active={draft.attachedBathroom === true}
+                  onClick={() => setDraft(d => ({ ...d, attachedBathroom: !d.attachedBathroom }))}
+                />
+              </div>
+            </SheetSection>
+          )}
 
           {/* Keywords */}
           <SheetSection label="Keywords">
@@ -1651,6 +1765,7 @@ export default function Search() {
   const [geoLabel, setGeoLabel]       = useState(_saved.geoLabel  ?? '');
   const isDesktop = useDesktop();
   const [activeLocality, setActiveLocality] = useState(null);
+  const [activeCategory, setActiveCategory] = useState(null);
   const [quickFilters, setQuickFilters]     = useState(new Set());
   const [geoSuggestions, setGeoSuggestions] = useState([]);
   const [showGeoSuggestions, setShowGeoSuggestions] = useState(false);
@@ -1696,15 +1811,16 @@ export default function Search() {
   // back to the search results from a listing detail page. Defaults to false so
   // that user-initiated searches (locality click, clear, new query) still reset
   // to page 1 as expected.
-  const doSearch = useCallback(async (area, { preservePage = false } = {}) => {
+  const doSearch = useCallback(async (area, { preservePage = false, category = activeCategory } = {}) => {
     setLoading(true);
     const isDefaultLoad = !area;
     const params = new URLSearchParams({
-      sources:   'reddit,telegram,nobroker,housing,99acres',
+      sources:   'reddit,telegram,nobroker,housing,99acres,zolo,colive',
       sort:      'score',
       min_score: isDefaultLoad ? 40 : 20,
       limit:     isDefaultLoad ? 20 : 50,
       ...(area ? { area } : {}),
+      ...(category ? { listing_type: category } : {}),
     });
     try {
       const res  = await fetch(`${API_BASE}/api/search?${params}`);
@@ -1724,7 +1840,7 @@ export default function Search() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeCategory]);
 
   useEffect(() => {
     // On initial mount (including back-navigation from a listing detail page),
@@ -1961,12 +2077,16 @@ export default function Search() {
     activePills.push(`${min}–${max}`);
   }
   if (activeFilters.furnished !== 'Any') activePills.push(activeFilters.furnished);
+  if (activeFilters.genderPref) activePills.push(activeFilters.genderPref.charAt(0).toUpperCase() + activeFilters.genderPref.slice(1));
+  if (activeFilters.occupancy) activePills.push(activeFilters.occupancy.charAt(0).toUpperCase() + activeFilters.occupancy.slice(1));
+  if (activeFilters.mealsIncluded) activePills.push('Meals included');
+  if (activeFilters.attachedBathroom) activePills.push('Attached bathroom');
   if (activeFilters.keywords) activePills.push(`"${activeFilters.keywords}"`);
   // Skip source pills for sources that are already covered by the community quick filter
   const communityActive = quickFilters.has('community');
   Object.entries(SOURCE_CONFIG).forEach(([key, cfg]) => {
     if (!activeFilters.sources[key]) {
-                  if (communityActive && (key === 'nobroker' || key === 'housing' || key === '99acres')) return;
+                  if (communityActive && (key === 'nobroker' || key === 'housing' || key === '99acres' || key === 'zolo' || key === 'colive')) return;
       activePills.push(`No ${cfg.label}`);
     }
   });
@@ -1979,6 +2099,14 @@ export default function Search() {
       setActiveFilters(f => ({ ...f, minBudget: '', maxBudget: '' }));
     } else if (label === 'Furnished' || label === 'Unfurnished') {
       setActiveFilters(f => ({ ...f, furnished: 'Any' }));
+    } else if (label === 'Male' || label === 'Female' || label === 'Co-ed') {
+      setActiveFilters(f => ({ ...f, genderPref: '' }));
+    } else if (label === 'Single' || label === 'Double' || label === 'Triple' || label === 'Couple') {
+      setActiveFilters(f => ({ ...f, occupancy: '' }));
+    } else if (label === 'Meals included') {
+      setActiveFilters(f => ({ ...f, mealsIncluded: false }));
+    } else if (label === 'Attached bathroom') {
+      setActiveFilters(f => ({ ...f, attachedBathroom: false }));
     } else if (label.startsWith('"')) {
       setActiveFilters(f => ({ ...f, keywords: '' }));
     } else if (label.startsWith('No ')) {
@@ -1997,11 +2125,11 @@ export default function Search() {
   function toggleSourceFilter(rawSource) {
     // If community filter is active and user re-enables nobroker or housing,
     // treat it as "exit community mode" and turn that source back on
-    if (quickFilters.has('community') && (rawSource === 'nobroker' || rawSource === 'housing' || rawSource === '99acres')) {
+    if (quickFilters.has('community') && (rawSource === 'nobroker' || rawSource === 'housing' || rawSource === '99acres' || rawSource === 'zolo' || rawSource === 'colive')) {
       setQuickFilters(prev => { const n = new Set(prev); n.delete('community'); return n; });
       setActiveFilters(prev => ({
         ...prev,
-        sources: { ...prev.sources, nobroker: true, housing: true, '99acres': true },
+        sources: { ...prev.sources, nobroker: true, housing: true, '99acres': true, zolo: true, colive: true },
       }));
     } else {
       setActiveFilters(prev => ({
@@ -2022,7 +2150,7 @@ export default function Search() {
     if (sort === 'Top Rated') return [...listings].sort((a, b) => b.score - a.score);
     // Balanced
     const qualitySorted = [...listings].sort((a, b) => b.score - a.score);
-    const sourceOrder = ['nobroker', 'housing', '99acres', 'reddit', 'telegram'];
+    const sourceOrder = ['nobroker', 'housing', '99acres', 'zolo', 'colive', 'reddit', 'telegram'];
     const buckets = Object.fromEntries(sourceOrder.map(s => [s, []]));
     const other = [];
     qualitySorted.forEach(p => {
@@ -2058,6 +2186,29 @@ export default function Search() {
     const furnished = (listing.furnished || '').toLowerCase();
     if (activeFilters.furnished === 'Furnished'   && !furnished.includes('furnished')) return false;
     if (activeFilters.furnished === 'Unfurnished' && furnished !== 'unfurnished')      return false;
+    // Gender preference (from filter sheet)
+    if (activeFilters.genderPref) {
+      const gp = (listing.typeAttrs || {}).gender_pref;
+      if (activeFilters.genderPref === 'co-ed') {
+        if (gp !== 'co-ed') return false;
+      } else {
+        if (gp !== activeFilters.genderPref && gp !== 'co-ed') return false;
+      }
+    }
+    // Occupancy (from filter sheet)
+    if (activeFilters.occupancy) {
+      if ((listing.typeAttrs || {}).occupancy !== activeFilters.occupancy) return false;
+    }
+    // Meals included (from filter sheet)
+    if (activeFilters.mealsIncluded) {
+      const m = (listing.typeAttrs || {}).meals_included;
+      if (m !== true && m !== 'true') return false;
+    }
+    // Attached bathroom (from filter sheet)
+    if (activeFilters.attachedBathroom) {
+      const b = (listing.typeAttrs || {}).attached_bathroom;
+      if (b !== true && b !== 'true') return false;
+    }
     // Keywords
     if (activeFilters.keywords) {
       if (!listing.title.toLowerCase().includes(activeFilters.keywords.toLowerCase())) return false;
@@ -2070,6 +2221,7 @@ export default function Search() {
       const qFurnished = (listing.furnished || '').toLowerCase();
       const qRent      = listing.rawRent;
 
+      const ta = listing.typeAttrs || {};
       const matchesKey = key => {
         if (key === '1bhk')      return qBhk.startsWith('1bhk');
         if (key === '2bhk')      return qBhk.startsWith('2bhk');
@@ -2079,15 +2231,27 @@ export default function Search() {
         if (key === 'u20k')      return qRent == null || qRent < 20000;
         if (key === 'u35k')      return qRent == null || qRent < 35000;
         if (key === 'u50k')      return qRent == null || qRent < 50000;
+        if (key === 'u8k')       return qRent == null || qRent < 8000;
+        if (key === 'u12k')      return qRent == null || qRent < 12000;
+        if (key === 'u18k')      return qRent == null || qRent < 18000;
         if (key === 'community') return listing.rawSource === 'reddit' || listing.rawSource === 'telegram';
         if (key === 'high_score')return listing.score >= 70;
         if (key === 'has_photos')return Boolean(listing.thumbnail);
+        if (key === 'male')      return ta.gender_pref === 'male' || ta.gender_pref === 'co-ed';
+        if (key === 'female')    return ta.gender_pref === 'female' || ta.gender_pref === 'co-ed';
+        if (key === 'co-ed')     return ta.gender_pref === 'co-ed';
+        if (key === 'single')    return ta.occupancy === 'single';
+        if (key === 'double')    return ta.occupancy === 'double';
+        if (key === 'couple')    return ta.occupancy === 'couple';
+        if (key === 'meals')     return ta.meals_included === true || ta.meals_included === 'true';
+        if (key === 'bathroom')  return ta.attached_bathroom === true || ta.attached_bathroom === 'true';
         return true;
       };
 
+      const currentFilters = QUICK_FILTERS_BY_CATEGORY[activeCategory] || QUICK_FILTERS_BY_CATEGORY._default;
       // Group active keys by category, then AND across groups
       const byCategory = {};
-      for (const f of QUICK_FILTERS) {
+      for (const f of currentFilters) {
         if (quickFilters.has(f.key)) {
           (byCategory[f.category] = byCategory[f.category] || []).push(f.key);
         }
@@ -2304,7 +2468,8 @@ export default function Search() {
             <div style={{ borderTop: '0.5px solid var(--color-border)', paddingTop: 16 }}>
               <p style={{ ...monoLabel, marginBottom: 14 }}>Filters</p>
 
-              {/* BHK */}
+              {/* BHK — Rentals / All only */}
+              {(!activeCategory || activeCategory === 'full_house') && (
               <div style={{ marginBottom: 16 }}>
                 <p style={monoLabel}>BHK</p>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -2320,6 +2485,7 @@ export default function Search() {
                   ))}
                 </div>
               </div>
+              )}
 
               {/* Budget */}
               <div style={{ marginBottom: 16 }}>
@@ -2330,7 +2496,8 @@ export default function Search() {
                 </div>
               </div>
 
-              {/* Furnished */}
+              {/* Furnished — Rentals / All only */}
+              {(!activeCategory || activeCategory === 'full_house') && (
               <div style={{ marginBottom: 16 }}>
                 <p style={monoLabel}>Furnished</p>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -2343,6 +2510,50 @@ export default function Search() {
                   ))}
                 </div>
               </div>
+              )}
+
+              {/* Gender — PG / Flatmate only */}
+              {(activeCategory === 'pg' || activeCategory === 'flatmate') && (
+              <div style={{ marginBottom: 16 }}>
+                <p style={monoLabel}>Gender preference</p>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {['', 'male', 'female', 'any'].map(v => (
+                    <PillToggle
+                      key={v || 'all'} label={v ? v.charAt(0).toUpperCase() + v.slice(1) : 'All'}
+                      active={activeFilters.genderPref === v}
+                      onClick={() => setActiveFilters(f => ({ ...f, genderPref: v }))}
+                    />
+                  ))}
+                </div>
+              </div>
+              )}
+
+              {/* Occupancy — PG only */}
+              {activeCategory === 'pg' && (
+              <div style={{ marginBottom: 16 }}>
+                <p style={monoLabel}>Occupancy</p>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {['', 'single', 'double', 'triple', 'couple'].map(v => (
+                    <PillToggle
+                      key={v || 'all'} label={v ? v.charAt(0).toUpperCase() + v.slice(1) : 'All'}
+                      active={activeFilters.occupancy === v}
+                      onClick={() => setActiveFilters(f => ({ ...f, occupancy: v }))}
+                    />
+                  ))}
+                </div>
+              </div>
+              )}
+
+              {/* Amenities — PG only */}
+              {activeCategory === 'pg' && (
+              <div style={{ marginBottom: 16 }}>
+                <p style={monoLabel}>Amenities</p>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <PillToggle label="Meals included" active={activeFilters.mealsIncluded} onClick={() => setActiveFilters(f => ({ ...f, mealsIncluded: !f.mealsIncluded }))} />
+                  <PillToggle label="Attached bathroom" active={activeFilters.attachedBathroom} onClick={() => setActiveFilters(f => ({ ...f, attachedBathroom: !f.attachedBathroom }))} />
+                </div>
+              </div>
+              )}
 
               {/* Sources */}
               <div style={{ marginBottom: 16 }}>
@@ -2396,6 +2607,9 @@ export default function Search() {
                   setActiveFilters({ ...DEFAULT_FILTERS, sources: { ...DEFAULT_FILTERS.sources } });
                   setQuickFilters(new Set());
                   setSort('Balanced');
+                  setActiveCategory(null);
+                  setPage(1);
+                  doSearch(query, { category: null });
                 }}
                 style={{
                   fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
@@ -2414,8 +2628,53 @@ export default function Search() {
           </div>{/* end left panel */}
 
           {/* ── RIGHT PANEL: results ── */}
-          <div style={{ flex: 1, minWidth: 0, padding: '16px 20px 40px' }}>
+          <div style={{ flex: 1, minWidth: 0, padding: '0 20px 40px' }}>
 
+            {/* ── CATEGORY TABS (desktop) ── */}
+            <div style={{
+              display: 'flex', gap: 0,
+              borderBottom: '1px solid var(--color-border)',
+              paddingLeft: 4,
+            }}>
+              {CATEGORY_TABS.map(({ key, label, icon }) => {
+                const active = activeCategory === key;
+                return (
+                  <button
+                    key={label}
+                    onClick={() => {
+                      setActiveCategory(key);
+                      setQuickFilters(new Set());
+                      setActiveFilters(f => ({
+                        ...f,
+                        bhk: [],
+                        furnished: 'Any',
+                        genderPref: '',
+                        occupancy: '',
+                        mealsIncluded: false,
+                        attachedBathroom: false,
+                      }));
+                      setPage(1);
+                      doSearch(query, { category: key });
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
+                      textTransform: 'uppercase', padding: '12px 20px', cursor: 'pointer',
+                      background: 'transparent',
+                      color: active ? '#E8A020' : '#777',
+                      border: 'none',
+                      borderBottom: active ? '2px solid #E8A020' : '2px solid transparent',
+                      transition: 'color 0.15s, border-color 0.15s',
+                    }}
+                  >
+                    <i className={icon} style={{ fontSize: 12 }} />
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ padding: '16px 0 0' }}>
             {/* Results header */}
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
               <div style={{ minWidth: 0, flex: 1 }}>
@@ -2506,6 +2765,7 @@ export default function Search() {
               </>
             )}
 
+          </div>{/* end padded content */}
           </div>{/* end right panel */}
 
         </div>/* end desktop two-column */
@@ -2819,6 +3079,63 @@ export default function Search() {
         })}
       </div>
 
+      {/* ── CATEGORY TABS ── */}
+      <div style={{
+        display: 'flex',
+        gap: 0,
+        paddingLeft: 12,
+        paddingRight: 12,
+        paddingTop: 10,
+        paddingBottom: 2,
+      }}>
+        {CATEGORY_TABS.map(({ key, label, icon }) => {
+          const active = activeCategory === key;
+          return (
+            <button
+              key={label}
+              onClick={() => {
+                setActiveCategory(key);
+                setQuickFilters(new Set());
+                setActiveFilters(f => ({
+                  ...f,
+                  bhk: [],
+                  furnished: 'Any',
+                  genderPref: '',
+                  occupancy: '',
+                  mealsIncluded: false,
+                  attachedBathroom: false,
+                }));
+                setPage(1);
+                doSearch(query, { category: key });
+              }}
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                padding: '8px 0',
+                cursor: 'pointer',
+                background: 'transparent',
+                color: active ? '#E8A020' : '#777',
+                borderTop: 'none',
+                borderLeft: 'none',
+                borderRight: 'none',
+                borderBottom: active ? '2px solid #E8A020' : '2px solid transparent',
+                transition: 'color 0.15s, border-color 0.15s',
+              }}
+            >
+              <i className={icon} style={{ fontSize: 11 }} />
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* ── ROW 2: QUICK FILTER PILLS ── */}
       <div ref={pillsRowRef} style={{
         overflowX: 'auto',
@@ -2863,8 +3180,8 @@ export default function Search() {
           {' '}▼
         </button>
 
-        {/* Quick toggle pills — fixed order, subtle active state */}
-        {QUICK_FILTERS.map(({ key, label }) => {
+        {/* Quick toggle pills — category-aware, fixed order, subtle active state */}
+        {(QUICK_FILTERS_BY_CATEGORY[activeCategory] || QUICK_FILTERS_BY_CATEGORY._default).map(({ key, label }) => {
           const active = quickFilters.has(key);
           return (
             <button
@@ -2882,6 +3199,8 @@ export default function Search() {
                         nobroker:  !turning_on,
                         housing:   !turning_on,
                         '99acres': !turning_on,
+                        zolo:      !turning_on,
+                        colive:    !turning_on,
                       },
                     }));
                   }
@@ -2953,7 +3272,7 @@ export default function Search() {
           )}
 
           {/* Quick filter chips */}
-          {QUICK_FILTERS.filter(f => quickFilters.has(f.key)).map(({ key, label }) => (
+          {(QUICK_FILTERS_BY_CATEGORY[activeCategory] || QUICK_FILTERS_BY_CATEGORY._default).filter(f => quickFilters.has(f.key)).map(({ key, label }) => (
             <span key={key} style={{
               flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
               fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
@@ -2966,7 +3285,7 @@ export default function Search() {
                 onClick={() => {
                   setQuickFilters(prev => { const n = new Set(prev); n.delete(key); return n; });
                   if (key === 'community') {
-                    setActiveFilters(f => ({ ...f, sources: { ...f.sources, nobroker: true, housing: true, '99acres': true } }));
+                    setActiveFilters(f => ({ ...f, sources: { ...f.sources, nobroker: true, housing: true, '99acres': true, zolo: true, colive: true } }));
                   }
                   setPage(1);
                 }}
@@ -3202,6 +3521,7 @@ export default function Search() {
         initialFilters={activeFilters}
         initialSort={sort}
         onApply={handleApply}
+        activeCategory={activeCategory}
       />
 
         </>/* end mobile layout */

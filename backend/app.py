@@ -673,6 +673,27 @@ def score_post(post):
     if post.get("source") == "99acres":
         return max(0, min(100, score + 15))
 
+    if post.get("source") in ("zolo", "colive"):
+        s = 30
+        age = time.time() - post.get("created", 0)
+        if age < 86400: s += 15
+        elif age < 604800: s += 10
+        elif age < 2592000: s += 5
+        if post.get("price") or post.get("rent"):
+            s += 10
+        if post.get("latitude") and post.get("longitude"):
+            s += 10
+        if post.get("image_count") or post.get("thumbnail_url"):
+            s += 10
+        ta = post.get("type_attributes") or {}
+        if ta.get("gender_pref"):
+            s += 5
+        if ta.get("occupancy"):
+            s += 5
+        if ta.get("attached_bathroom") is not None:
+            s += 5
+        return max(0, min(100, s))
+
     broker_hits = sum(1 for s in _BROKER_SIGNALS if s in text)
     if broker_hits >= 2:
         score -= 20
@@ -1161,6 +1182,7 @@ def search():
     min_score  = max(0, min(60, int(request.args.get("min_score", 20))))
     sources_param = request.args.get("sources", "reddit,telegram,nobroker")
     source_list   = [s.strip() for s in sources_param.split(",") if s.strip()]
+    listing_type  = request.args.get("listing_type", "").strip() or None
 
     # Resolve locality expansion upfront
     canonical_area = normalize_locality(area) if area else None
@@ -1182,15 +1204,18 @@ def search():
         budget=budget,
         min_budget=min_budget or None,
         limit=limit * 2,
+        listing_type=listing_type,
     )
 
     if db_posts:
         all_posts += db_posts
         from_db = True
 
-    # Check which sources came back from DB; live-fetch any missing ones
+    # Check which sources came back from DB; live-fetch any missing ones.
+    # Skip live-fetch when a specific listing_type is requested — live sources
+    # don't carry listing_type metadata and would pollute filtered results.
     found_sources = {p.get("source") for p in db_posts} if db_posts else set()
-    missing_sources = [s for s in source_list if s not in found_sources]
+    missing_sources = [s for s in source_list if s not in found_sources] if not listing_type else []
 
     for src in missing_sources:
         if src == "reddit":
@@ -1234,6 +1259,13 @@ def search():
     elif area:
         # Unrecognised locality — return no results so the "Did you mean?" banner is the only output
         all_posts = []
+
+    # ── listing_type filter for live-fetched posts (DB already filtered) ──
+    if listing_type and all_posts:
+        all_posts = [
+            p for p in all_posts
+            if p.get("listing_type", "full_house") == listing_type
+        ]
 
     # ── Keyword filter (applied regardless of DB or live) ──
     if keywords and all_posts:

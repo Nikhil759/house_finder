@@ -81,7 +81,7 @@ function deltaColor(delta) {
 }
 
 function normalizeSource(raw) {
-  const map = { reddit: 'Reddit', telegram: 'Telegram', nobroker: 'NoBroker', housing: 'Housing.com', 'housing.com': 'Housing.com', '99acres': '99acres' };
+  const map = { reddit: 'Reddit', telegram: 'Telegram', nobroker: 'NoBroker', housing: 'Housing.com', 'housing.com': 'Housing.com', '99acres': '99acres', zolo: 'Zolo', colive: 'Colive' };
   return map[(raw || '').toLowerCase()] || raw || 'Unknown';
 }
 
@@ -548,6 +548,8 @@ export default function ListingDetail() {
     'housing.com': '#7C3AED',
     telegram:      '#38BDF8',
     '99acres':     '#0076BE',
+    zolo:          '#FF6F61',
+    colive:        '#00BFA5',
   };
   const brandColor = SOURCE_BRAND[(listing?.source || '').toLowerCase()] || 'var(--color-amber)';
 

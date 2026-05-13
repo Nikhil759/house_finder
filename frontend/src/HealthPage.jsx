@@ -749,7 +749,7 @@ export default function HealthPage() {
   const cardBord = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
 
   const bySource = data?.by_source || {};
-  const allSourceIds = ["reddit", "telegram", "nobroker", "housing", "99acres"];
+  const allSourceIds = ["reddit", "telegram", "nobroker", "housing", "99acres", "zolo", "colive"];
   const totalAllSources = data?.total_listings_all ?? null;
 
   const overallStatus = allSourceIds.every(s => statusFor(s, bySource[s]) === "ok")

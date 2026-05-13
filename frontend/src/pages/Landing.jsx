@@ -17,6 +17,8 @@ const SOURCE_DEFS = [
   { id: 'nobroker', label: 'NoBroker',    icon: 'fa-solid fa-building',  color: '#e63946' },
   { id: 'housing',  label: 'Housing.com', icon: 'fa-solid fa-house',     color: '#7c3aed' },
   { id: '99acres',  label: '99acres',     icon: 'fa-solid fa-landmark',  color: '#0076BE' },
+  { id: 'zolo',     label: 'Zolo',        icon: 'fa-solid fa-bed',       color: '#FF6F61' },
+  { id: 'colive',   label: 'Colive',      icon: 'fa-solid fa-people-roof', color: '#00BFA5' },
 ];
 
 const s = {

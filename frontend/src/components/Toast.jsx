@@ -24,18 +24,11 @@ export default function Toast({ toast, onDismiss, onSignIn }) {
           from { transform: translateY(12px); opacity: 0; }
           to   { transform: translateY(0);    opacity: 1; }
         }
-        @keyframes toast-slide-down {
-          from { transform: translateY(-12px); opacity: 0; }
-          to   { transform: translateY(0);     opacity: 1; }
-        }
         @media (min-width: 768px) {
           .nq-toast-container {
             top: 20px !important;
             bottom: auto !important;
-            left: 50% !important;
-            right: auto !important;
-            transform: translateX(-50%);
-            animation: toast-slide-down 0.22s ease !important;
+            left: 240px !important;
           }
         }
         .nq-toast-close {
@@ -72,8 +65,8 @@ export default function Toast({ toast, onDismiss, onSignIn }) {
         style={{
           position: 'fixed',
           bottom: 88,
-          left: 16,
-          right: 16,
+          left: 0,
+          right: 0,
           maxWidth: 440,
           margin: '0 auto',
           zIndex: 1000,

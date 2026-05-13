@@ -81,6 +81,10 @@ default to not_a_listing.
 For each numbered post below, return a JSON array where each element has:
 - "id": the post number (integer)
 - "type": exactly one of "full_house", "pg", "flatmate", "not_a_listing"
+- "gender_pref": (only when type is "flatmate") one of "male", "female",
+  or "any". Infer from phrases like "female flatmate", "boys only",
+  "I'm 24F looking for…", "male flatmate needed", etc.
+  If no gender signal is present, use "any".
 
 Return ONLY the JSON array. No markdown, no explanation.
 
@@ -175,7 +179,13 @@ def _parse_response(raw: str) -> list[dict] | None:
             ltype = str(item.get("type", "full_house")).strip().lower()
             if ltype not in VALID_TYPES:
                 ltype = "full_house"
-            results.append({"id": idx, "type": ltype})
+            parsed = {"id": idx, "type": ltype}
+            if ltype == "flatmate":
+                gp = str(item.get("gender_pref", "any")).strip().lower()
+                if gp not in ("male", "female", "any"):
+                    gp = "any"
+                parsed["gender_pref"] = gp
+            results.append(parsed)
         except Exception as e:
             logger.warning("Classification item parse error: %s — %s", e, item)
     return results
@@ -248,12 +258,17 @@ def classify_listing_types(listings) -> dict:
             result_map = {r["id"]: r["type"] for r in results}
 
             for batch_idx, l in enumerate(batch):
-                classified_type = result_map.get(batch_idx + 1)
+                result_entry = {r["id"]: r for r in results}.get(batch_idx + 1)
+                classified_type = result_entry.get("type") if result_entry else None
                 if classified_type and classified_type in VALID_TYPES:
                     l.listing_type = classified_type
                 else:
                     l.listing_type = "full_house"
                     stats["fallback_count"] += 1
+
+                if l.listing_type == "flatmate" and result_entry:
+                    gp = result_entry.get("gender_pref", "any")
+                    l.type_attributes = {**l.type_attributes, "gender_pref": gp}
 
                 stats["classified"][l.listing_type] += 1
                 logger.info(
