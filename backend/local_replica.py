@@ -93,6 +93,8 @@ SCHEMA = {
             images              TEXT,
             listing_type        TEXT NOT NULL DEFAULT 'full_house',
             type_attributes     TEXT DEFAULT '{}',
+            geocode_source      TEXT,
+            geocode_confidence  TEXT,
             UNIQUE (source, source_id)
         )
         """,
@@ -130,16 +132,17 @@ SCHEMA = {
         CREATE TABLE IF NOT EXISTS locality_feed (
             id              INTEGER PRIMARY KEY,
             source          TEXT NOT NULL,
-            source_id       TEXT NOT NULL,
+            source_id       TEXT,
             locality        TEXT,
             title           TEXT,
             body            TEXT,
             url             TEXT,
             author          TEXT,
-            engagement      INTEGER NOT NULL DEFAULT 0,
+            engagement      INTEGER DEFAULT 0,
             topic           TEXT,
             sentiment       TEXT,
             posted_at       TEXT,
+            fetched_at      TEXT NOT NULL,
             scraped_at      TEXT NOT NULL,
             category        TEXT,
             canonical_topic TEXT,
@@ -250,6 +253,7 @@ SCHEMA = {
             image_url       TEXT,
             photo_reference TEXT,
             attribution     TEXT,
+            image_type      TEXT,
             fetched_at      TEXT
         )
         """,
@@ -258,15 +262,19 @@ SCHEMA = {
     "society_images": [
         """
         CREATE TABLE IF NOT EXISTS society_images (
-            place_id         TEXT PRIMARY KEY,
+            id               INTEGER PRIMARY KEY,
+            place_id         TEXT,
             society_name     TEXT,
             image_urls       TEXT DEFAULT '[]',
             google_name      TEXT,
-            match_confidence REAL,
+            match_confidence TEXT,
             listing_count    INTEGER,
+            image_type       TEXT,
+            attribution      TEXT,
             fetched_at       TEXT
         )
         """,
+        "CREATE INDEX IF NOT EXISTS idx_r_society_place_id ON society_images (place_id)",
     ],
 }
 
