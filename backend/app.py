@@ -2272,6 +2272,27 @@ def replica_status():
     return jsonify(health_check())
 
 
+@app.route("/api/admin/trigger-sync", methods=["POST"])
+def trigger_sync():
+    provided_secret = request.headers.get("X-Sync-Secret", "")
+    expected_secret = os.environ.get("SYNC_TRIGGER_SECRET", "")
+    if not expected_secret or provided_secret != expected_secret:
+        return jsonify({"error": "unauthorized"}), 401
+
+    dry_run = request.args.get("dry_run", "false").lower() == "true"
+    limit = request.args.get("limit", type=int)
+    tables_arg = request.args.get("tables")
+    tables = [t.strip() for t in tables_arg.split(",")] if tables_arg else None
+
+    from sync.sync_to_sqlite import sync_all
+    try:
+        result = sync_all(limit=limit, dry_run=dry_run, tables=tables)
+        return jsonify(result), 200
+    except Exception as e:
+        logger.exception("Sync trigger failed", extra={"error": str(e)})
+        return jsonify({"error": "sync_failed", "details": str(e)}), 500
+
+
 @app.route("/api/pulse/feed")
 def pulse_feed():
     """
