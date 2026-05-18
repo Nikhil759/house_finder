@@ -168,6 +168,13 @@ def _log_db_connection_info():
 
 _log_db_connection_info()
 
+# ── Initialize SQLite read replica (non-fatal if it fails) ────────────────────
+try:
+    from local_replica import initialize_replica
+    initialize_replica()
+except Exception as _replica_err:
+    logger.error("SQLite replica init failed (non-fatal): %s", _replica_err)
+
 # Start background ingestion workers
 start_background_refresh()   # NoBroker: every 3 hours
 
@@ -1857,6 +1864,7 @@ def locality_feed_status():
             SELECT locality, COUNT(*) AS cnt
             FROM locality_feed
             WHERE scraped_at >= NOW() - INTERVAL '24 hours'
+              AND locality IS NOT NULL
             GROUP BY locality
             ORDER BY cnt DESC
             LIMIT 20
@@ -2256,6 +2264,12 @@ def health_db():
     finally:
         if conn:
             conn.close()
+
+
+@app.route("/api/admin/replica-status")
+def replica_status():
+    from local_replica import health_check
+    return jsonify(health_check())
 
 
 @app.route("/api/pulse/feed")
