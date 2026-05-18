@@ -4,6 +4,8 @@ import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
 import DesktopSidebar from '../components/DesktopSidebar';
 import { useDesktop } from '../hooks/useDesktop';
+import { captureApiError } from '../lib/posthog';
+import { logStart, logSuccess, logError } from '../lib/apiLogger';
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 const FEED_TABS = ['All', 'Reddit', 'Telegram', 'News'];
@@ -167,6 +169,7 @@ export default function PulseLocality() {
   const [loading,      setLoading]      = useState(true);
   const [feedLoading,  setFeedLoading]  = useState(true);
   const [notFound,     setNotFound]     = useState(false);
+  const [fetchError,   setFetchError]   = useState(null);
   const [localityImage, setLocalityImage] = useState(null);
   const [sentimentData, setSentimentData] = useState(null);
 
@@ -179,49 +182,54 @@ export default function PulseLocality() {
       setLoading(true);
       setFeedLoading(true);
       setNotFound(false);
+      setFetchError(null);
+      const t0 = performance.now();
+      const endpoint = `/api/locality-stats/${loc}`;
+      logStart(endpoint);
 
-      const [statsRes, sentRes, imgRes, feedRes] = await Promise.all([
-        fetch(`${API_BASE}/api/locality-stats/${loc}`).then(r => r.json()).catch(() => null),
-        fetch(`${API_BASE}/api/pulse/locality/${loc}`).then(r => r.json()).catch(() => null),
-        fetch(`${API_BASE}/api/locality-image/${loc}`).then(r => r.json()).catch(() => null),
-        fetch(`${API_BASE}/api/pulse/feed-for-locality/${loc}`).then(r => r.json()).catch(() => null),
-      ]);
+      try {
+        const [statsRes, sentRes, imgRes, feedRes] = await Promise.all([
+          fetch(`${API_BASE}/api/locality-stats/${loc}`).then(r => { if (!r.ok) throw new Error(`locality-stats ${r.status}`); return r.json(); }).catch(() => null),
+          fetch(`${API_BASE}/api/pulse/locality/${loc}`).then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch(`${API_BASE}/api/locality-image/${loc}`).then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch(`${API_BASE}/api/pulse/feed-for-locality/${loc}`).then(r => r.ok ? r.json() : null).catch(() => null),
+        ]);
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      // Stats + deposit
-      const sData = statsRes?.rent_stats || [];
-      if (sData.length === 0) {
-        setNotFound(true);
-      } else {
-        setStatsRows(sData);
-        setDepositRows(statsRes?.deposit_stats || []);
+        const sData = statsRes?.rent_stats || [];
+        if (sData.length === 0) {
+          setNotFound(true);
+        } else {
+          setStatsRows(sData);
+          setDepositRows(statsRes?.deposit_stats || []);
+        }
+
+        if (sentRes) setSentimentData(sentRes);
+        if (imgRes?.image_url) setLocalityImage(imgRes);
+
+        if (feedRes) {
+          const sorted = (feedRes.topics || [])
+            .map(t => ({
+              label: t.topic.charAt(0).toUpperCase() + t.topic.slice(1),
+              count: t.count,
+            }))
+            .sort((a, b) => {
+              if (a.label.toLowerCase() === 'other') return 1;
+              if (b.label.toLowerCase() === 'other') return -1;
+              return b.count - a.count;
+            });
+          setTopicCounts(sorted);
+          setFeedPosts(feedRes.posts || []);
+        }
+        logSuccess(endpoint, (statsRes?.rent_stats || []).length, performance.now() - t0);
+      } catch (err) {
+        logError(endpoint, err.message, performance.now() - t0);
+        if (!cancelled) setFetchError({ message: err.message || 'Failed to load locality data' });
+        captureApiError(err, { endpoint: `/api/locality-stats/${loc}` });
+      } finally {
+        if (!cancelled) { setLoading(false); setFeedLoading(false); }
       }
-
-      // Sentiment
-      if (sentRes) setSentimentData(sentRes);
-
-      // Image
-      if (imgRes?.image_url) setLocalityImage(imgRes);
-
-      // Feed topics + posts
-      if (feedRes) {
-        const sorted = (feedRes.topics || [])
-          .map(t => ({
-            label: t.topic.charAt(0).toUpperCase() + t.topic.slice(1),
-            count: t.count,
-          }))
-          .sort((a, b) => {
-            if (a.label.toLowerCase() === 'other') return 1;
-            if (b.label.toLowerCase() === 'other') return -1;
-            return b.count - a.count;
-          });
-        setTopicCounts(sorted);
-        setFeedPosts(feedRes.posts || []);
-      }
-
-      setLoading(false);
-      setFeedLoading(false);
     }
 
     load();
@@ -328,6 +336,18 @@ export default function PulseLocality() {
 
   const totalFeedPages = Math.max(1, Math.ceil(visibleFeed.length / FEED_PAGE_SIZE));
   const pagedFeed      = visibleFeed.slice((feedPage - 1) * FEED_PAGE_SIZE, feedPage * FEED_PAGE_SIZE);
+
+  // ── Error state ────────────────────────────────────────────────────────────
+  if (fetchError && !loading) {
+    return (
+      <div style={{ ...s.page, marginLeft: isDesktop ? 240 : 0, padding: '80px 24px', textAlign: 'center' }}>
+        <DesktopSidebar />
+        <p style={{ color: 'var(--color-text-muted)', marginBottom: 12 }}>Something went wrong loading locality data. Please try again.</p>
+        <button onClick={() => window.location.reload()} style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid var(--color-amber)', background: 'transparent', color: 'var(--color-amber)', fontWeight: 600, cursor: 'pointer' }}>Retry</button>
+        {!isDesktop && <BottomNav />}
+      </div>
+    );
+  }
 
   // ── Graceful fallback for unknown slugs ────────────────────────────────────
   if (notFound && !loading) {

@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, g, has_request_context
 from flask_cors import CORS
 import requests as http
 import re
@@ -10,8 +10,11 @@ import asyncio
 import logging
 import random
 import threading
+import uuid as uuid_mod
 from decimal import Decimal
+from urllib.parse import urlparse
 from dotenv import load_dotenv
+from pythonjsonlogger import json as jsonlog
 from nobroker import (
     start_background_refresh,
     get_cached_listings,
@@ -64,10 +67,106 @@ from view_store import (
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
+# ── Structured JSON logging ──────────────────────────────────────────────────
+_json_handler = logging.StreamHandler()
+_json_handler.setFormatter(
+    jsonlog.JsonFormatter(
+        "%(asctime)s %(levelname)s %(name)s %(message)s",
+        rename_fields={"asctime": "timestamp", "levelname": "level"},
+    )
+)
+logging.basicConfig(level=logging.INFO, handlers=[_json_handler])
 logger = logging.getLogger(__name__)
+
+
+class _RequestIdFilter(logging.Filter):
+    def filter(self, record):
+        record.request_id = getattr(g, "request_id", None) if has_request_context() else None
+        return True
+
+
+logging.getLogger().addFilter(_RequestIdFilter())
 
 app = Flask(__name__)
 CORS(app)
+
+
+@app.before_request
+def _set_request_id():
+    g.request_id = str(uuid_mod.uuid4())
+    g.req_start = time.time()
+    logger.info(
+        "request_start",
+        extra={"endpoint": request.path, "query_params": dict(request.args), "request_id": g.request_id},
+    )
+
+
+@app.after_request
+def _log_response(response):
+    duration_ms = round((time.time() - getattr(g, "req_start", time.time())) * 1000, 1)
+    logger.info(
+        "request_end",
+        extra={
+            "endpoint": request.path,
+            "status": response.status_code,
+            "duration_ms": duration_ms,
+            "request_id": getattr(g, "request_id", None),
+        },
+    )
+    return response
+
+
+# ── PostHog exception tracking ────────────────────────────────────────────────
+from posthog import Posthog  # noqa: E402
+
+_posthog_api_key = os.environ.get("POSTHOG_API_KEY", "")
+_posthog_host = os.environ.get("POSTHOG_HOST", "https://us.i.posthog.com")
+posthog_client = None
+if _posthog_api_key:
+    posthog_client = Posthog(_posthog_api_key, host=_posthog_host)
+    logger.info("PostHog error tracking initialized", extra={"host": _posthog_host})
+else:
+    logger.warning("POSTHOG_API_KEY not set — exception tracking disabled")
+
+
+@app.errorhandler(Exception)
+def _handle_unhandled_exception(e):
+    """Catch-all: send to PostHog and return 500."""
+    req_id = getattr(g, "request_id", None)
+    logger.error("unhandled exception: %s", e, exc_info=True, extra={"request_id": req_id})
+    if posthog_client:
+        posthog_client.capture_exception(
+            e,
+            distinct_id=req_id or "anonymous",
+            properties={
+                "request_url": request.url,
+                "query_params": dict(request.args),
+                "request_id": req_id,
+            },
+        )
+    return jsonify({"error": "internal_server_error", "request_id": req_id}), 500
+
+
+# ── Log Supabase connection routing on startup ────────────────────────────────
+def _log_db_connection_info():
+    for var_name in ("DATABASE_URL", "SUPABASE_DB_URL"):
+        raw = os.environ.get(var_name, "")
+        if not raw:
+            continue
+        try:
+            parsed = urlparse(raw)
+            host = parsed.hostname or "unknown"
+            port = parsed.port or 5432
+            conn_type = "pooler" if "pooler" in host else "direct"
+            logger.info(
+                "db_connection_info",
+                extra={"env_var": var_name, "host": host, "port": port, "connection_type": conn_type},
+            )
+        except Exception:
+            logger.warning("Could not parse %s for connection info logging", var_name)
+
+
+_log_db_connection_info()
 
 # Start background ingestion workers
 start_background_refresh()   # NoBroker: every 3 hours
@@ -1197,15 +1296,19 @@ def search():
     db_localities = target_localities if canonical_area else None
 
     # ── Single DB query for ALL sources at once (1 connection, not N) ──
-    db_posts = query_listings(
-        localities=db_localities,
-        sources=source_list,
-        bhk=bhk,
-        budget=budget,
-        min_budget=min_budget or None,
-        limit=limit * 2,
-        listing_type=listing_type,
-    )
+    try:
+        db_posts = query_listings(
+            localities=db_localities,
+            sources=source_list,
+            bhk=bhk,
+            budget=budget,
+            min_budget=min_budget or None,
+            limit=limit * 2,
+            listing_type=listing_type,
+        )
+    except Exception as e:
+        logger.error("search db_query error: %s", e, exc_info=True)
+        return jsonify({"error": "database_error", "request_id": g.request_id}), 500
 
     if db_posts:
         all_posts += db_posts
@@ -1337,7 +1440,11 @@ def search():
 @app.route("/api/listing/<path:listing_id>")
 def get_listing(listing_id):
     """Return a single listing by composite ID (source_sourceid)."""
-    listing = get_listing_by_id(listing_id)
+    try:
+        listing = get_listing_by_id(listing_id)
+    except Exception as e:
+        logger.error("listing detail db error: %s", e, exc_info=True)
+        return jsonify({"error": "database_error", "request_id": g.request_id}), 500
     if not listing:
         return jsonify({"error": "Listing not found"}), 404
     listing["quality_score"] = score_post(listing)
@@ -1573,14 +1680,18 @@ def search_new():
     db_localities     = target_localities if canonical_area else None
 
     # Single DB query for all sources at once
-    all_posts = query_listings(
-        localities=db_localities,
-        sources=source_list,
-        bhk=bhk,
-        budget=budget,
-        limit=limit,
-        since_utc=since_utc,
-    )
+    try:
+        all_posts = query_listings(
+            localities=db_localities,
+            sources=source_list,
+            bhk=bhk,
+            budget=budget,
+            limit=limit,
+            since_utc=since_utc,
+        )
+    except Exception as e:
+        logger.error("search/new db_query error: %s", e, exc_info=True)
+        return jsonify({"error": "database_error", "request_id": g.request_id}), 500
 
     # Locality filter
     if canonical_area and target_set:
@@ -1704,9 +1815,13 @@ def nobroker_status():
 @app.route("/api/ingestion/status")
 def ingestion_status():
     """Show DB listing counts by source, locality breakdown, and total."""
-    source_counts = get_listing_counts()
-    locality_breakdown = get_locality_counts()
-    totals = total_listing_count()
+    try:
+        source_counts = get_listing_counts()
+        locality_breakdown = get_locality_counts()
+        totals = total_listing_count()
+    except Exception as e:
+        logger.error("ingestion/status error: %s", e, exc_info=True)
+        return jsonify({"error": "database_error", "detail": str(e), "request_id": getattr(g, "request_id", None)}), 500
     return jsonify({
         "total_listings": totals["active"],
         "total_listings_all": totals["total"],
@@ -1770,7 +1885,7 @@ def locality_feed_status():
         })
     except Exception as e:
         logger.error("locality-feed/status error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "database_error", "detail": str(e), "request_id": getattr(g, "request_id", None)}), 500
 
 
 @app.route("/api/localities")
@@ -2104,7 +2219,7 @@ def stats():
 
     except Exception as e:
         logger.error("PostHog stats error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "database_error", "detail": str(e), "request_id": getattr(g, "request_id", None)}), 500
 
 
 # ─────────────────────────────────────────────
@@ -2120,6 +2235,27 @@ def _get_pg_conn():
     if url.startswith("postgres://"):
         url = "postgresql://" + url[len("postgres://"):]
     return psycopg2.connect(url)
+
+
+@app.route("/api/db-health")
+def health_db():
+    """Lightweight check that DB connectivity is alive."""
+    start = time.time()
+    conn = None
+    try:
+        conn = _get_pg_conn()
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.close()
+        latency = round((time.time() - start) * 1000, 1)
+        return jsonify({"status": "ok", "db_latency_ms": latency}), 200
+    except Exception as e:
+        latency = round((time.time() - start) * 1000, 1)
+        logger.error("health check failed: %s", e, exc_info=True)
+        return jsonify({"status": "error", "error": str(e), "db_latency_ms": latency}), 503
+    finally:
+        if conn:
+            conn.close()
 
 
 @app.route("/api/pulse/feed")
@@ -2244,7 +2380,7 @@ def pulse_feed():
 
     except Exception as e:
         logger.error("pulse/feed error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "database_error", "detail": str(e), "request_id": getattr(g, "request_id", None)}), 500
     finally:
         if conn:
             conn.close()
@@ -2286,7 +2422,7 @@ def pulse_topics():
 
     except Exception as e:
         logger.error("pulse/topics error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "database_error", "detail": str(e), "request_id": getattr(g, "request_id", None)}), 500
     finally:
         if conn:
             conn.close()
@@ -2322,7 +2458,7 @@ def pulse_trending():
 
     except Exception as e:
         logger.error("pulse/trending error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "database_error", "detail": str(e), "request_id": getattr(g, "request_id", None)}), 500
     finally:
         if conn:
             conn.close()
@@ -2407,7 +2543,7 @@ def pulse_locality(locality):
 
     except Exception as e:
         logger.error("pulse/locality error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "database_error", "detail": str(e), "request_id": getattr(g, "request_id", None)}), 500
     finally:
         if conn:
             conn.close()
@@ -2464,7 +2600,7 @@ def locality_stats(locality):
 
     except Exception as e:
         logger.error("locality-stats error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "database_error", "detail": str(e), "request_id": getattr(g, "request_id", None)}), 500
     finally:
         if conn:
             conn.close()
@@ -2492,7 +2628,7 @@ def pulse_rent_overview():
         return jsonify({"rent_data": rows})
     except Exception as e:
         logger.error("pulse/rent-overview error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "database_error", "detail": str(e), "request_id": getattr(g, "request_id", None)}), 500
     finally:
         if conn:
             conn.close()
@@ -2556,7 +2692,7 @@ def bangalore_rent_trend():
         return jsonify({"bhk_trends": rows})
     except Exception as e:
         logger.error("pulse/bangalore-rent-trend error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "database_error", "detail": str(e), "request_id": getattr(g, "request_id", None)}), 500
     finally:
         if conn:
             conn.close()
@@ -2600,7 +2736,7 @@ def locality_stats_all():
         return jsonify({"locality_stats": rent_rows, "deposit_stats": dep_rows})
     except Exception as e:
         logger.error("locality-stats-all error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "database_error", "detail": str(e), "request_id": getattr(g, "request_id", None)}), 500
     finally:
         if conn:
             conn.close()
@@ -2625,7 +2761,7 @@ def locality_image(locality):
         return jsonify({}), 200
     except Exception as e:
         logger.error("locality-image error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "database_error", "detail": str(e), "request_id": getattr(g, "request_id", None)}), 500
     finally:
         if conn:
             conn.close()
@@ -2673,7 +2809,7 @@ def pulse_feed_for_locality(locality):
         return jsonify({"topics": topics, "posts": posts})
     except Exception as e:
         logger.error("pulse/feed-for-locality error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "database_error", "detail": str(e), "request_id": getattr(g, "request_id", None)}), 500
     finally:
         if conn:
             conn.close()
@@ -2784,7 +2920,7 @@ def pipeline_status():
 
     except Exception as e:
         logger.error("pipeline-status error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "database_error", "detail": str(e), "request_id": getattr(g, "request_id", None)}), 500
     finally:
         _put_conn(conn)
 
@@ -2831,7 +2967,7 @@ def listing_statuses():
         return jsonify(result)
     except Exception as e:
         logger.error("listing-statuses error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "database_error", "detail": str(e), "request_id": getattr(g, "request_id", None)}), 500
     finally:
         if conn:
             conn.close()
@@ -2910,7 +3046,7 @@ def email_init_subscription():
         return jsonify({"ok": True, "welcome_sent": welcome_sent})
     except Exception as e:
         logger.error("email init-subscription error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "database_error", "detail": str(e), "request_id": getattr(g, "request_id", None)}), 500
     finally:
         if conn:
             conn.close()
@@ -2953,7 +3089,7 @@ def email_preferences_get():
         })
     except Exception as e:
         logger.error("email preferences GET error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "database_error", "detail": str(e), "request_id": getattr(g, "request_id", None)}), 500
     finally:
         if conn:
             conn.close()
@@ -3030,7 +3166,7 @@ def email_preferences_put():
         return jsonify({"ok": True, "changed": True})
     except Exception as e:
         logger.error("email preferences PUT error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "database_error", "detail": str(e), "request_id": getattr(g, "request_id", None)}), 500
     finally:
         if conn:
             conn.close()
@@ -3158,7 +3294,7 @@ def resend_webhook():
         return jsonify({"ok": True, "event": event_type}), 200
     except Exception as e:
         logger.error("resend webhook error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "database_error", "detail": str(e), "request_id": getattr(g, "request_id", None)}), 500
     finally:
         if conn:
             conn.close()

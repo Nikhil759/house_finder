@@ -402,8 +402,8 @@ def query_listings(
         return results
 
     except Exception as e:
-        logger.error("query_listings failed: %s", e)
-        return []
+        logger.error("query_listings failed: %s", e, exc_info=True)
+        raise
     finally:
         _put_conn(conn)
 
@@ -672,8 +672,8 @@ def _query_single_by_source_id(source_id: str, source: str = None):
         row = cur.fetchone()
         return _row_to_listing(row) if row else None
     except Exception as e:
-        logger.error("_query_single_by_source_id failed: %s", e)
-        return None
+        logger.error("_query_single_by_source_id failed: %s", e, exc_info=True)
+        raise
     finally:
         _put_conn(conn)
 

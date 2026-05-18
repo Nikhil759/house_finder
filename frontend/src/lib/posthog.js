@@ -52,6 +52,10 @@ export function initPostHog() {
     api_host: 'https://app.posthog.com',
     capture_pageview: false,
     persistence: 'localStorage+cookie',
+    capture_exceptions: {
+      capture_unhandled_errors: true,
+      capture_unhandled_rejections: true,
+    },
   })
 
   applyInternalSuperProperties()
@@ -202,6 +206,23 @@ export function identifyUser(userId, traits = {}) {
 export function resetPostHog() {
   if (!clientReady) return
   posthog.reset()
+}
+
+// ── Error tracking ──────────────────────────────────────────────────────────
+
+/**
+ * Capture an API error in PostHog error tracking with context.
+ * @param {Error} error - The error or exception
+ * @param {{ endpoint?: string, params?: object, status?: number, requestId?: string }} context
+ */
+export function captureApiError(error, context = {}) {
+  if (!clientReady) return
+  posthog.captureException(error, {
+    endpoint: context.endpoint,
+    params: context.params,
+    response_status: context.status,
+    request_id: context.requestId,
+  })
 }
 
 export { posthog }

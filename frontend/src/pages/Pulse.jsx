@@ -4,6 +4,8 @@ import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
 import DesktopSidebar from '../components/DesktopSidebar';
 import { useDesktop } from '../hooks/useDesktop';
+import { captureApiError } from '../lib/posthog';
+import { logStart, logSuccess, logError } from '../lib/apiLogger';
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -458,6 +460,7 @@ export default function Pulse() {
   const [citySentimentData, setCitySentimentData] = useState(null);
   const [bangaloreRentTrend, setBangaloreRentTrend] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [pulseError, setPulseError] = useState(null);
 
   // ── Data fetching via Flask API ─────────────────────────────────────────────
 
@@ -466,49 +469,52 @@ export default function Pulse() {
 
     async function load() {
       setLoading(true);
-
-      const [feedRes, topicsRes, rentRes] = await Promise.all([
-        fetch(`${API_BASE}/api/pulse/feed?limit=50`).then(r => r.json()),
-        fetch(`${API_BASE}/api/pulse/topics`).then(r => r.json()),
-        fetch(`${API_BASE}/api/pulse/trending`).then(r => r.json()),
-      ]);
-
-      if (cancelled) return;
-
-      // Posts
-      setFeedPosts((feedRes.posts || []).map(p => ({
-        ...p,
-        title: p.title || '',
-        body: decodeHTML(p.body) || '',
-        timeAgo: timeAgoShort(p.posted_at || p.scraped_at),
-      })));
-
-      // City sentiment (server-computed from all 7-day posts).
-      // Kept on a shorter window than per-locality (30d) so the city pulse
-      // feels live; locality / listing scoring use the more stable 30d baseline.
-      setCitySentimentData({
-        score: feedRes.city_sentiment || 0,
-        count: feedRes.city_sentiment_count || 0,
-        updatedAt: feedRes.city_sentiment_updated_at || null,
-      });
-
-      // Locality sentiments (server-computed)
-      setLocalityStats(feedRes.locality_sentiments || []);
-
-      // Topics (server-aggregated)
-      setTopicStats(topicsRes.topics || []);
+      setPulseError(null);
+      const t0 = performance.now();
+      logStart('/api/pulse/*', { feed: true, topics: true, trending: true });
 
       try {
-        const rentDataRes = await fetch(`${API_BASE}/api/pulse/rent-overview`).then(r => r.json());
-        setRentData(rentDataRes.rent_data || []);
-      } catch { setRentData([]); }
+        const [feedRes, topicsRes, rentRes] = await Promise.all([
+          fetch(`${API_BASE}/api/pulse/feed?limit=50`).then(r => { if (!r.ok) throw new Error(`pulse/feed ${r.status}`); return r.json(); }),
+          fetch(`${API_BASE}/api/pulse/topics`).then(r => { if (!r.ok) throw new Error(`pulse/topics ${r.status}`); return r.json(); }),
+          fetch(`${API_BASE}/api/pulse/trending`).then(r => { if (!r.ok) throw new Error(`pulse/trending ${r.status}`); return r.json(); }),
+        ]);
 
-      try {
-        const blrTrendRes = await fetch(`${API_BASE}/api/pulse/bangalore-rent-trend`).then(r => r.json());
-        setBangaloreRentTrend(blrTrendRes.bhk_trends || []);
-      } catch { setBangaloreRentTrend([]); }
+        if (cancelled) return;
 
-      setLoading(false);
+        setFeedPosts((feedRes.posts || []).map(p => ({
+          ...p,
+          title: p.title || '',
+          body: decodeHTML(p.body) || '',
+          timeAgo: timeAgoShort(p.posted_at || p.scraped_at),
+        })));
+
+        setCitySentimentData({
+          score: feedRes.city_sentiment || 0,
+          count: feedRes.city_sentiment_count || 0,
+          updatedAt: feedRes.city_sentiment_updated_at || null,
+        });
+
+        setLocalityStats(feedRes.locality_sentiments || []);
+        setTopicStats(topicsRes.topics || []);
+
+        try {
+          const rentDataRes = await fetch(`${API_BASE}/api/pulse/rent-overview`).then(r => r.json());
+          setRentData(rentDataRes.rent_data || []);
+        } catch { setRentData([]); }
+
+        try {
+          const blrTrendRes = await fetch(`${API_BASE}/api/pulse/bangalore-rent-trend`).then(r => r.json());
+          setBangaloreRentTrend(blrTrendRes.bhk_trends || []);
+        } catch { setBangaloreRentTrend([]); }
+        logSuccess('/api/pulse/*', (feedRes.posts || []).length, performance.now() - t0);
+      } catch (err) {
+        logError('/api/pulse/*', err.message, performance.now() - t0);
+        if (!cancelled) setPulseError({ message: err.message || 'Failed to load Pulse data' });
+        captureApiError(err, { endpoint: '/api/pulse/*' });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
 
     load();
@@ -693,7 +699,12 @@ export default function Pulse() {
             </div>
 
             {/* Signal cards */}
-            {loading ? (
+            {pulseError ? (
+              <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+                <p style={{ color: 'var(--color-text-muted)', marginBottom: 12 }}>Something went wrong loading Pulse data. Please try again.</p>
+                <button onClick={() => window.location.reload()} style={{ padding: '8px 20px', borderRadius: 8, border: '1px solid var(--color-amber)', background: 'transparent', color: 'var(--color-amber)', fontWeight: 600, cursor: 'pointer' }}>Retry</button>
+              </div>
+            ) : loading ? (
               <p className="type-data" style={{
                 padding: '40px 0', textAlign: 'center',
                 color: 'var(--color-text-muted)',

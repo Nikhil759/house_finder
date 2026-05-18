@@ -29,7 +29,9 @@ import {
   trackUnsaveListing,
   trackFirstSaveToastShown,
   trackSigninNudgeShown,
+  captureApiError,
 } from '../lib/posthog';
+import { logStart, logSuccess, logError } from '../lib/apiLogger';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -1779,6 +1781,7 @@ export default function Search() {
   const [total, setTotal]             = useState(0);
   // sourceCounts is derived from `displayed` after all client-side filters run (see below)
   const [loading, setLoading]         = useState(false);
+  const [searchError, setSearchError] = useState(null);
   const [isTopPicks, setIsTopPicks]   = useState(false);
   const [page, setPage]               = useState(Number(searchParams.get('page')) || 1);
   const PAGE_SIZE = isDesktop ? 12 : 10;
@@ -1822,21 +1825,39 @@ export default function Search() {
       ...(area ? { area } : {}),
       ...(category ? { listing_type: category } : {}),
     });
+    const t0 = performance.now();
+    logStart('/api/search', Object.fromEntries(params));
     try {
       const res  = await fetch(`${API_BASE}/api/search?${params}`);
+      const elapsed = performance.now() - t0;
+      if (!res.ok) {
+        let errorBody = {};
+        try { errorBody = await res.json(); } catch (_) {}
+        const errInfo = { status: res.status, message: errorBody.error || `HTTP ${res.status}`, requestId: errorBody.request_id };
+        setSearchError(errInfo);
+        setListings([]);
+        setTotal(0);
+        logError('/api/search', `${res.status}`, elapsed, errorBody.request_id);
+        captureApiError(new Error(`Search API ${res.status}`), { endpoint: '/api/search', params: Object.fromEntries(params), status: res.status, requestId: errorBody.request_id });
+        return;
+      }
       const data = await res.json();
       const posts = (data.posts || []).map(normalizePost);
+      logSuccess('/api/search', posts.length, elapsed);
+      setSearchError(null);
       setListings(posts);
       setTotal(data.total ?? posts.length);
       setIsTopPicks(isDefaultLoad);
       if (!preservePage) setPage(1);
-      // Source counts are now derived from `displayed` (after all client-side filters)
-      // so we no longer compute them here from the raw API response.
-      // Log the search and check auto-save triggers
       await logSearchRef.current(area, {});
       runTriggerRef.current(area);
     } catch (err) {
-      console.error('Search failed', err);
+      const elapsed = performance.now() - t0;
+      logError('/api/search', err.message, elapsed);
+      setSearchError({ message: err.message || 'Network error' });
+      setListings([]);
+      setTotal(0);
+      captureApiError(err, { endpoint: '/api/search', params: Object.fromEntries(params) });
     } finally {
       setLoading(false);
     }
@@ -2740,7 +2761,13 @@ export default function Search() {
             )}
 
             {/* Results */}
-            {loading ? (
+            {searchError ? (
+              <div style={{ padding: '40px 20px', textAlign: 'center', background: 'var(--color-bg-surface)', borderRadius: 12 }}>
+                <p style={{ color: 'var(--color-text-muted)', marginBottom: 12 }}>Something went wrong loading listings. Please try again.</p>
+                {searchError.requestId && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', opacity: 0.6 }}>Request ID: {searchError.requestId}</p>}
+                <button onClick={() => doSearch(query)} style={{ marginTop: 12, padding: '8px 20px', borderRadius: 8, border: '1px solid var(--color-amber)', background: 'transparent', color: 'var(--color-amber)', fontWeight: 600, cursor: 'pointer' }}>Retry</button>
+              </div>
+            ) : loading ? (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
                 {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
               </div>
@@ -3470,7 +3497,13 @@ export default function Search() {
 
       {/* ── RESULTS ── */}
       <div style={{ padding: '0 16px' }}>
-        {loading ? (
+        {searchError ? (
+          <div style={{ padding: '32px 16px', textAlign: 'center', background: 'var(--color-bg-surface)', borderRadius: 12 }}>
+            <p style={{ color: 'var(--color-text-muted)', marginBottom: 12 }}>Something went wrong loading listings. Please try again.</p>
+            {searchError.requestId && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', opacity: 0.6 }}>Request ID: {searchError.requestId}</p>}
+            <button onClick={() => doSearch(query)} style={{ marginTop: 12, padding: '8px 20px', borderRadius: 8, border: '1px solid var(--color-amber)', background: 'transparent', color: 'var(--color-amber)', fontWeight: 600, cursor: 'pointer' }}>Retry</button>
+          </div>
+        ) : loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>

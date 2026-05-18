@@ -568,6 +568,130 @@ function TransformRunsTable({ runs, isDark }) {
   );
 }
 
+function DbHealthCard({ isDark }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [history, setHistory] = useState([]);
+
+  const ping = useCallback(async () => {
+    setLoading(true);
+    const t0 = performance.now();
+    try {
+      const res = await fetch(`${API_BASE}/api/db-health`);
+      const json = await res.json();
+      const clientMs = Math.round(performance.now() - t0);
+      const result = { ...json, client_rtt_ms: clientMs, ts: Date.now() };
+      setData(result);
+      setHistory(prev => [...prev.slice(-19), result]);
+    } catch (err) {
+      const result = { status: "error", error: err.message, db_latency_ms: null, client_rtt_ms: Math.round(performance.now() - t0), ts: Date.now() };
+      setData(result);
+      setHistory(prev => [...prev.slice(-19), result]);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { ping(); }, [ping]);
+
+  const statusColor = !data || loading ? "#6b7280"
+    : data.status === "ok" && data.db_latency_ms < 300 ? "#22c55e"
+    : data.status === "ok" ? "#f59e0b"
+    : "#ef4444";
+  const statusLabel = loading ? "Checking…"
+    : data?.status === "ok" && data.db_latency_ms < 300 ? "Healthy"
+    : data?.status === "ok" ? "Slow"
+    : "Unreachable";
+
+  const bg = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)";
+  const muted = isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.45)";
+
+  return (
+    <div style={{
+      background: bg,
+      border: `1px solid ${statusColor}33`,
+      borderRadius: 12, padding: "20px 24px",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Supabase DB (Pooler)</div>
+          <div style={{ fontSize: 12, opacity: 0.6 }}>
+            Singapore → Mumbai via Supavisor (port 6543)
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
+          {data?.db_latency_ms != null && (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "monospace", color: data.db_latency_ms > 300 ? "#f59e0b" : "#22c55e" }}>
+                {data.db_latency_ms}
+              </div>
+              <div style={{ fontSize: 10, opacity: 0.5 }}>db ms</div>
+            </div>
+          )}
+          {data?.client_rtt_ms != null && (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 18, fontWeight: 600, fontFamily: "monospace", opacity: 0.6 }}>
+                {data.client_rtt_ms}
+              </div>
+              <div style={{ fontSize: 10, opacity: 0.5 }}>rtt ms</div>
+            </div>
+          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: statusColor, display: "inline-block" }} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: statusColor }}>{statusLabel}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Latency sparkline */}
+      {history.length > 1 && (
+        <div style={{ marginTop: 14, display: "flex", alignItems: "flex-end", gap: 2, height: 32 }}>
+          {history.map((h, i) => {
+            const val = h.db_latency_ms ?? 0;
+            const max = Math.max(...history.map(x => x.db_latency_ms ?? 0), 100);
+            const pct = Math.max(4, (val / max) * 100);
+            const c = h.status !== "ok" ? "#ef4444" : val > 300 ? "#f59e0b" : "#22c55e";
+            return (
+              <div key={i} title={`${val}ms`} style={{
+                flex: 1, height: `${pct}%`, minHeight: 3,
+                background: c, borderRadius: 2, opacity: 0.7,
+              }} />
+            );
+          })}
+        </div>
+      )}
+
+      {/* Ping button */}
+      <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12 }}>
+        <button onClick={ping} disabled={loading} style={{
+          fontFamily: "monospace", fontSize: 11, padding: "4px 12px",
+          borderRadius: 6, border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)"}`,
+          background: "transparent", color: "inherit", cursor: loading ? "not-allowed" : "pointer",
+          opacity: loading ? 0.5 : 1,
+        }}>
+          Ping
+        </button>
+        {history.length > 0 && (
+          <span style={{ fontSize: 11, color: muted }}>
+            {history.length} sample{history.length > 1 ? "s" : ""}
+            {history.length > 1 && ` · avg ${Math.round(history.reduce((a, h) => a + (h.db_latency_ms || 0), 0) / history.filter(h => h.db_latency_ms).length)}ms`}
+          </span>
+        )}
+      </div>
+
+      {data?.error && (
+        <div style={{
+          marginTop: 10, paddingTop: 10,
+          borderTop: `1px solid ${statusColor}22`,
+          fontSize: 12, color: "#ef4444", fontFamily: "monospace",
+          wordBreak: "break-word",
+        }}>
+          {data.error}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GeminiHealthCard({ isDark }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -833,6 +957,11 @@ export default function HealthPage() {
         {/* ═══════ TAB: LIVE STATUS ═══════ */}
         {activeTab === "live" && (
           <>
+            {/* DB connectivity */}
+            <div style={{ marginBottom: 16 }}>
+              <DbHealthCard isDark={isDark} />
+            </div>
+
             {/* Summary bar */}
             <div style={{
               background: cardBg,

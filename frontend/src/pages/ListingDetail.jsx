@@ -19,7 +19,9 @@ import {
   trackFlagRetracted,
   trackSaveListing,
   trackUnsaveListing,
+  captureApiError,
 } from '../lib/posthog';
+import { logStart, logSuccess, logError } from '../lib/apiLogger';
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -351,6 +353,7 @@ export default function ListingDetail() {
   const [listing,        setListing]        = useState(seedListing);
   const [loading,        setLoading]        = useState(!seedListing);
   const [notFound,       setNotFound]       = useState(false);
+  const [fetchError,     setFetchError]     = useState(null);
   const [localityStats,  setLocalityStats]  = useState(null);
 
   const [descExpanded,   setDescExpanded]   = useState(false);
@@ -443,18 +446,40 @@ export default function ListingDetail() {
     let cancelled = false;
     async function load() {
       if (!seedListing) { setLoading(true); setNotFound(false); }
+      const endpoint = `/api/listing/${id}`;
+      const t0 = performance.now();
+      logStart(endpoint);
       try {
-        const res = await fetch(`${API_BASE}/api/listing/${id}`);
+        const res = await fetch(`${API_BASE}${endpoint}`);
+        const elapsed = performance.now() - t0;
         if (!res.ok) {
-          if (!seedListing) { setNotFound(true); setLoading(false); }
+          if (cancelled) return;
+          if (res.status === 404) {
+            logError(endpoint, '404', elapsed);
+            if (!seedListing) setNotFound(true);
+          } else {
+            let errorBody = {};
+            try { errorBody = await res.json(); } catch (_) {}
+            setFetchError({ status: res.status, message: errorBody.error || `HTTP ${res.status}`, requestId: errorBody.request_id });
+            logError(endpoint, `${res.status}`, elapsed, errorBody.request_id);
+            captureApiError(new Error(`Listing API ${res.status}`), { endpoint, status: res.status, requestId: errorBody.request_id });
+          }
+          setLoading(false);
           return;
         }
         const data = await res.json();
         if (cancelled) return;
+        logSuccess(endpoint, 1, elapsed);
+        setFetchError(null);
         setListing(data);
         trackListingClick(id);
-      } catch {
-        if (!cancelled && !seedListing) setNotFound(true);
+      } catch (err) {
+        const elapsed = performance.now() - t0;
+        if (!cancelled) {
+          logError(endpoint, err.message, elapsed);
+          if (!seedListing) setFetchError({ message: err.message || 'Network error' });
+          captureApiError(err, { endpoint });
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -572,6 +597,20 @@ export default function ListingDetail() {
           </span>
         </div>
         {!isDesktop && <BottomNav />}
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div style={{ ...s.page, marginLeft: isDesktop ? 240 : 0 }}>
+        <DesktopSidebar />
+        <AppHeader backTo />
+        <div style={{ padding: '40px 16px', textAlign: 'center' }}>
+          <p style={{ color: 'var(--color-text-muted)', marginBottom: 12 }}>Something went wrong loading this listing. Please try again.</p>
+          {fetchError.requestId && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', opacity: 0.6 }}>Request ID: {fetchError.requestId}</p>}
+          <button onClick={() => window.location.reload()} style={{ marginTop: 12, padding: '8px 20px', borderRadius: 8, border: '1px solid var(--color-amber)', background: 'transparent', color: 'var(--color-amber)', fontWeight: 600, cursor: 'pointer' }}>Retry</button>
+        </div>
       </div>
     );
   }
