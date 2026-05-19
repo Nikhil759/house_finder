@@ -7,9 +7,13 @@ Each function opens and closes its own connection. Exceptions propagate
 to the caller so the endpoint's try/except can trigger Supabase fallback.
 """
 
-from typing import Optional
+import json
+import logging
+from typing import List, Optional
 
 from local_replica import get_connection
+
+logger = logging.getLogger(__name__)
 
 
 def get_locality_image(locality: str) -> Optional[dict]:
@@ -81,7 +85,7 @@ def get_all_locality_stats() -> dict:
         conn.close()
 
 
-def get_rent_overview() -> list[dict]:
+def get_rent_overview() -> List[dict]:
     """Return rent overview data for the Pulse sidebar."""
     conn = get_connection()
     try:
@@ -94,5 +98,433 @@ def get_rent_overview() -> list[dict]:
             """
         ).fetchall()
         return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Phase 3b: Listings search helpers
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def _json_loads_safe(val):
+    """Parse a JSON string from SQLite. Returns the parsed object or val as-is."""
+    if val is None:
+        return None
+    if isinstance(val, str):
+        try:
+            return json.loads(val)
+        except (json.JSONDecodeError, TypeError):
+            return None
+    return val
+
+
+def build_image_list_replica(images_jsonb, image_urls, society_place_id, locality):
+    """
+    Build a unified image list for a listing response (SQLite replica version).
+
+    Priority order:
+      1. images jsonb (NoBroker interior shots with full metadata)
+      2. image_urls fallback -> converted to same structure
+      3. society_images for society_place_id (society exterior)
+      4. locality_images for locality (locality hero, always last)
+    """
+    result = []
+
+    if images_jsonb:
+        entries = images_jsonb if isinstance(images_jsonb, list) else []
+        result.extend(entries)
+    elif image_urls:
+        for url in image_urls:
+            if url and url.strip():
+                result.append({
+                    "url": url,
+                    "source": "nobroker",
+                    "image_type": "listing_interior",
+                    "attribution": "NoBroker",
+                })
+
+    if society_place_id:
+        conn = get_connection()
+        try:
+            soc_row = conn.execute(
+                "SELECT image_urls FROM society_images WHERE place_id = ? LIMIT 1",
+                (society_place_id,),
+            ).fetchone()
+            if soc_row and soc_row["image_urls"]:
+                urls = _json_loads_safe(soc_row["image_urls"]) or []
+                for url in urls:
+                    if url and url.strip():
+                        result.append({
+                            "url": url,
+                            "source": "google_places",
+                            "image_type": "society_exterior",
+                            "attribution": "Google",
+                        })
+        finally:
+            conn.close()
+
+    if locality:
+        conn = get_connection()
+        try:
+            loc_row = conn.execute(
+                "SELECT image_url FROM locality_images WHERE locality = ? LIMIT 1",
+                (locality,),
+            ).fetchone()
+            if loc_row and loc_row["image_url"]:
+                result.append({
+                    "url": loc_row["image_url"],
+                    "source": "google_places",
+                    "image_type": "locality_hero",
+                    "attribution": "Google",
+                })
+        finally:
+            conn.close()
+
+    return result
+
+
+def query_listings_replica(
+    localities=None,
+    sources=None,
+    bhk=None,
+    budget=None,
+    min_budget=None,
+    limit=50,
+    include_expired=False,
+    since_utc=None,
+    listing_type=None,
+) -> List[dict]:
+    """
+    SQLite replica version of query_listings() from listing_store.py.
+    Same signature, same return shape.
+    """
+    conn = get_connection()
+    try:
+        conditions = []
+        params = []
+
+        if not include_expired:
+            conditions.append("l.status = ?")
+            params.append("active")
+
+        if listing_type:
+            conditions.append("l.listing_type = ?")
+            params.append(listing_type)
+
+        if sources:
+            placeholders = ",".join(["?"] * len(sources))
+            conditions.append(f"l.source IN ({placeholders})")
+            params.extend(sources)
+
+        if localities:
+            placeholders = ",".join(["?"] * len(localities))
+            conditions.append(f"LOWER(l.locality) IN ({placeholders})")
+            params.extend([loc.lower() for loc in localities])
+
+        if bhk and bhk != "any":
+            conditions.append("LOWER(REPLACE(l.bhk, ' ', '')) LIKE ?")
+            params.append(f"%{bhk.lower().replace(' ', '')}%")
+
+        if budget:
+            try:
+                budget_val = int(budget)
+                conditions.append("(l.rent IS NULL OR l.rent <= ?)")
+                params.append(budget_val)
+            except ValueError:
+                pass
+
+        if min_budget:
+            try:
+                min_budget_val = int(min_budget)
+                conditions.append("(l.rent IS NULL OR l.rent >= ?)")
+                params.append(min_budget_val)
+            except ValueError:
+                pass
+
+        conditions.append("(l.rent IS NULL OR (l.rent >= 2000 AND l.rent <= 150000))")
+        conditions.append(
+            "(l.duplicate_group_id IS NULL OR l.id = l.duplicate_group_id)"
+        )
+        conditions.append("(lc.is_listing IS NULL OR lc.is_listing = 1)")
+
+        if since_utc is not None:
+            conditions.append("CAST(strftime('%s', l.posted_at) AS REAL) > ?")
+            params.append(since_utc)
+
+        where = " AND ".join(conditions) if conditions else "1=1"
+
+        PER_SOURCE_CAP = 30
+
+        sql = f"""
+            WITH ranked AS (
+                SELECT l.source, l.source_id, l.source_url, l.source_group,
+                       l.title, l.body, l.bhk, l.property_type, l.furnishing,
+                       l.rent, l.deposit, l.maintenance,
+                       l.locality, l.address, l.latitude, l.longitude, l.maps_url,
+                       l.area_sqft, l.floor_info, l.amenities, l.lease_type,
+                       l.contact_phone, l.contact_name, l.is_broker, l.no_brokerage,
+                       l.is_flatmate, l.is_sponsored, l.thumbnail_url,
+                       CAST(strftime('%s', l.posted_at) AS REAL) AS posted_epoch,
+                       COALESCE(lc.quality_score, l.quality_score) AS quality_score,
+                       l.raw_payload,
+                       l.id, l.duplicate_group_id,
+                       lc.detail_score, lc.price_comp_score,
+                       lc.locality_sent_score, lc.freshness_score,
+                       lc.price_anomaly, lc.is_per_room, lc.rent_type,
+                       (CASE WHEN l.image_urls IS NOT NULL AND json_valid(l.image_urls)
+                             THEN json_array_length(l.image_urls) ELSE 0 END
+                        + CASE WHEN l.images IS NOT NULL AND json_valid(l.images)
+                             THEN json_array_length(l.images) ELSE 0 END) AS image_count,
+                       l.listing_type, l.type_attributes,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY l.source
+                           ORDER BY COALESCE(lc.quality_score, l.quality_score) DESC
+                       ) AS rn
+                FROM listings l
+                LEFT JOIN listings_curated lc ON lc.listing_id = l.id
+                WHERE {where}
+            )
+            SELECT source, source_id, source_url, source_group,
+                   title, body, bhk, property_type, furnishing,
+                   rent, deposit, maintenance,
+                   locality, address, latitude, longitude, maps_url,
+                   area_sqft, floor_info, amenities, lease_type,
+                   contact_phone, contact_name, is_broker, no_brokerage,
+                   is_flatmate, is_sponsored, thumbnail_url,
+                   posted_epoch, quality_score, raw_payload,
+                   id, duplicate_group_id,
+                   detail_score, price_comp_score,
+                   locality_sent_score, freshness_score,
+                   price_anomaly, is_per_room, rent_type,
+                   image_count,
+                   listing_type, type_attributes
+            FROM ranked
+            WHERE rn <= ?
+            ORDER BY quality_score DESC
+        """
+        params.append(PER_SOURCE_CAP)
+
+        cur = conn.execute(sql, params)
+        rows = cur.fetchall()
+
+        canonical_with_group = {}
+        for row in rows:
+            listing_id = row[31]
+            dup_group_id = row[32]
+            if dup_group_id is not None:
+                canonical_with_group[listing_id] = dup_group_id
+
+        sibling_map = {}
+        if canonical_with_group:
+            group_ids = list(set(canonical_with_group.values()))
+            placeholders = ",".join(["?"] * len(group_ids))
+            sib_rows = conn.execute(
+                f"""
+                SELECT duplicate_group_id, source, source_url
+                FROM listings
+                WHERE duplicate_group_id IN ({placeholders})
+                  AND status = 'active'
+                ORDER BY quality_score DESC
+                """,
+                group_ids,
+            ).fetchall()
+            for sib_row in sib_rows:
+                grp_id = sib_row[0]
+                src = sib_row[1]
+                url = sib_row[2]
+                sibling_map.setdefault(grp_id, []).append({"source": src, "url": url})
+
+        results = []
+        for row in rows:
+            listing_id = row[31]
+            dup_group_id = row[32]
+            siblings = []
+            if dup_group_id is not None:
+                all_in_group = sibling_map.get(dup_group_id, [])
+                current_source = row[0]
+                siblings = [s for s in all_in_group if s["source"] != current_source]
+
+            raw_payload = _json_loads_safe(row[30]) or {}
+            amenities = _json_loads_safe(row[19]) or []
+            type_attributes = _json_loads_safe(row[42]) or {}
+
+            raw_payload.update({
+                "id": f"{row[0]}_{row[1]}",
+                "source": row[0],
+                "source_id": row[1],
+                "url": row[2],
+                "source_url": row[2],
+                "source_group": row[3],
+                "title": row[4] or "",
+                "body": row[5] or "",
+                "selftext": row[5] or "",
+                "bhk": row[6],
+                "property_type": row[7],
+                "furnishing": row[8],
+                "price": row[9],
+                "rent": row[9],
+                "deposit": row[10],
+                "maintenance": row[11],
+                "locality": row[12],
+                "address": row[13],
+                "latitude": row[14],
+                "longitude": row[15],
+                "maps_url": row[16],
+                "area_sqft": row[17],
+                "floor_info": row[18],
+                "amenities": amenities,
+                "lease_type": row[20],
+                "contact": row[21],
+                "contact_phone": row[21],
+                "contact_name": row[22],
+                "is_broker": bool(row[23]) if row[23] is not None else None,
+                "no_brokerage": bool(row[24]) if row[24] is not None else None,
+                "is_flatmate": bool(row[25]) if row[25] is not None else None,
+                "is_sponsored": bool(row[26]) if row[26] is not None else None,
+                "thumbnail_url": row[27],
+                "created": row[28] or 0,
+                "created_utc": row[28] or 0,
+                "quality_score": row[29] or 0,
+                "duplicate_sources": siblings,
+                "detail_score": row[33],
+                "price_comp_score": row[34],
+                "locality_sent_score": row[35],
+                "freshness_score": row[36],
+                "price_anomaly": bool(row[37]) if row[37] is not None else False,
+                "is_per_room": bool(row[38]) if row[38] is not None else False,
+                "rent_type": row[39] or "unknown",
+                "image_count": row[40] or 0,
+                "listing_type": row[41] or "full_house",
+                "type_attributes": type_attributes,
+            })
+            results.append(raw_payload)
+        return results
+
+    finally:
+        conn.close()
+
+
+def _row_to_listing_replica(row):
+    """Convert a wide-SELECT row (46 columns) to a listing dict (SQLite version)."""
+    raw_payload = _json_loads_safe(row[30]) or {}
+    amenities = _json_loads_safe(row[19]) or []
+    image_urls = _json_loads_safe(row[35]) or []
+    images = _json_loads_safe(row[36]) or []
+    type_attributes = _json_loads_safe(row[45]) or {}
+
+    raw_payload.update({
+        "id": f"{row[0]}_{row[1]}",
+        "source": row[0],
+        "source_id": row[1],
+        "url": row[2],
+        "source_url": row[2],
+        "source_group": row[3],
+        "title": row[4] or "",
+        "body": row[5] or "",
+        "selftext": row[5] or "",
+        "bhk": row[6],
+        "property_type": row[7],
+        "furnishing": row[8],
+        "price": row[9],
+        "rent": row[9],
+        "deposit": row[10],
+        "maintenance": row[11],
+        "locality": row[12],
+        "address": row[13],
+        "latitude": row[14],
+        "longitude": row[15],
+        "maps_url": row[16],
+        "area_sqft": row[17],
+        "floor_info": row[18],
+        "amenities": amenities,
+        "lease_type": row[20],
+        "contact": row[21],
+        "contact_phone": row[21],
+        "contact_name": row[22],
+        "is_broker": bool(row[23]) if row[23] is not None else None,
+        "no_brokerage": bool(row[24]) if row[24] is not None else None,
+        "is_flatmate": bool(row[25]) if row[25] is not None else None,
+        "is_sponsored": bool(row[26]) if row[26] is not None else None,
+        "thumbnail_url": row[27],
+        "created": row[28] or 0,
+        "created_utc": row[28] or 0,
+        "quality_score": row[29] or 0,
+        "society_name": row[33],
+        "society_place_id": row[34],
+        "image_urls": image_urls,
+        "images": images,
+        "image_list": build_image_list_replica(
+            images_jsonb=images,
+            image_urls=image_urls,
+            society_place_id=row[34],
+            locality=row[12],
+        ),
+        "detail_score": row[37],
+        "price_comp_score": row[38],
+        "locality_sent_score": row[39],
+        "freshness_score": row[40],
+        "price_anomaly": bool(row[41]) if row[41] is not None else False,
+        "is_per_room": bool(row[42]) if row[42] is not None else False,
+        "rent_type": row[43] or "unknown",
+        "listing_type": row[44] or "full_house",
+        "type_attributes": type_attributes,
+        "image_count": len(image_urls) + len(images),
+    })
+    return raw_payload
+
+
+_LISTING_SELECT_REPLICA = """
+    SELECT l.source, l.source_id, l.source_url, l.source_group,
+           l.title, l.body, l.bhk, l.property_type, l.furnishing,
+           l.rent, l.deposit, l.maintenance,
+           l.locality, l.address, l.latitude, l.longitude, l.maps_url,
+           l.area_sqft, l.floor_info, l.amenities, l.lease_type,
+           l.contact_phone, l.contact_name, l.is_broker, l.no_brokerage,
+           l.is_flatmate, l.is_sponsored, l.thumbnail_url,
+           CAST(strftime('%s', l.posted_at) AS REAL) AS posted_epoch,
+           COALESCE(lc.quality_score, l.quality_score) AS quality_score,
+           l.raw_payload,
+           l.id, l.duplicate_group_id,
+           l.society_name, l.society_place_id, l.image_urls, l.images,
+           lc.detail_score, lc.price_comp_score,
+           lc.locality_sent_score, lc.freshness_score,
+           lc.price_anomaly, lc.is_per_room, lc.rent_type,
+           l.listing_type, l.type_attributes
+    FROM listings l
+    LEFT JOIN listings_curated lc ON lc.listing_id = l.id
+"""
+
+
+def get_listing_by_id_replica(composite_id: str) -> Optional[dict]:
+    """
+    SQLite replica version of get_listing_by_id() from listing_store.py.
+    Same signature, same return shape.
+    """
+    if not composite_id:
+        return None
+
+    from listing_store import _SOURCE_ALIAS
+
+    if '_' not in composite_id:
+        source = None
+        source_id = composite_id
+    else:
+        source, source_id = composite_id.split('_', 1)
+        source = _SOURCE_ALIAS.get(source, source)
+
+    conn = get_connection()
+    try:
+        if source:
+            row = conn.execute(
+                _LISTING_SELECT_REPLICA + " WHERE l.source = ? AND l.source_id = ? LIMIT 1",
+                (source, source_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                _LISTING_SELECT_REPLICA + " WHERE l.source_id = ? LIMIT 1",
+                (source_id,),
+            ).fetchone()
+        return _row_to_listing_replica(row) if row else None
     finally:
         conn.close()

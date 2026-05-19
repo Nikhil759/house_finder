@@ -1304,7 +1304,8 @@ def search():
 
     # ── Single DB query for ALL sources at once (1 connection, not N) ──
     try:
-        db_posts = query_listings(
+        from sync.replica_queries import query_listings_replica
+        db_posts = query_listings_replica(
             localities=db_localities,
             sources=source_list,
             bhk=bhk,
@@ -1314,8 +1315,23 @@ def search():
             listing_type=listing_type,
         )
     except Exception as e:
-        logger.error("search db_query error: %s", e, exc_info=True)
-        return jsonify({"error": "database_error", "request_id": g.request_id}), 500
+        logger.warning(
+            "replica_fallback",
+            extra={"endpoint": "/api/search", "error": str(e), "request_id": getattr(g, "request_id", None)},
+        )
+        try:
+            db_posts = query_listings(
+                localities=db_localities,
+                sources=source_list,
+                bhk=bhk,
+                budget=budget,
+                min_budget=min_budget or None,
+                limit=limit * 2,
+                listing_type=listing_type,
+            )
+        except Exception as e2:
+            logger.error("search db_query error: %s", e2, exc_info=True)
+            return jsonify({"error": "database_error", "request_id": g.request_id}), 500
 
     if db_posts:
         all_posts += db_posts
@@ -1448,10 +1464,18 @@ def search():
 def get_listing(listing_id):
     """Return a single listing by composite ID (source_sourceid)."""
     try:
-        listing = get_listing_by_id(listing_id)
+        from sync.replica_queries import get_listing_by_id_replica
+        listing = get_listing_by_id_replica(listing_id)
     except Exception as e:
-        logger.error("listing detail db error: %s", e, exc_info=True)
-        return jsonify({"error": "database_error", "request_id": g.request_id}), 500
+        logger.warning(
+            "replica_fallback",
+            extra={"endpoint": "/api/listing", "error": str(e), "request_id": getattr(g, "request_id", None)},
+        )
+        try:
+            listing = get_listing_by_id(listing_id)
+        except Exception as e2:
+            logger.error("listing detail db error: %s", e2, exc_info=True)
+            return jsonify({"error": "database_error", "request_id": g.request_id}), 500
     if not listing:
         return jsonify({"error": "Listing not found"}), 404
     listing["quality_score"] = score_post(listing)
@@ -1688,7 +1712,8 @@ def search_new():
 
     # Single DB query for all sources at once
     try:
-        all_posts = query_listings(
+        from sync.replica_queries import query_listings_replica
+        all_posts = query_listings_replica(
             localities=db_localities,
             sources=source_list,
             bhk=bhk,
@@ -1697,8 +1722,22 @@ def search_new():
             since_utc=since_utc,
         )
     except Exception as e:
-        logger.error("search/new db_query error: %s", e, exc_info=True)
-        return jsonify({"error": "database_error", "request_id": g.request_id}), 500
+        logger.warning(
+            "replica_fallback",
+            extra={"endpoint": "/api/search/new", "error": str(e), "request_id": getattr(g, "request_id", None)},
+        )
+        try:
+            all_posts = query_listings(
+                localities=db_localities,
+                sources=source_list,
+                bhk=bhk,
+                budget=budget,
+                limit=limit,
+                since_utc=since_utc,
+            )
+        except Exception as e2:
+            logger.error("search/new db_query error: %s", e2, exc_info=True)
+            return jsonify({"error": "database_error", "request_id": g.request_id}), 500
 
     # Locality filter
     if canonical_area and target_set:
@@ -3398,3 +3437,19 @@ if __name__ == "__main__":
     port  = int(os.environ.get("PORT", 5001))
     debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
     app.run(debug=debug, host="0.0.0.0", port=port)
+
+
+
+# curl "https://housefinder-production.up.railway.app/api/locality-stats/Koramangala" > old.json
+
+# https://housefinder-production.up.railway.app/api/admin/replica-status
+
+
+# curl "http://localhost:5001/api/locality-stats/Koramangala" > new.json
+
+
+# /api/locality-image/Koramangala
+# /api/locality-stats-all
+# /api/pulse/rent-overview
+
+# curl -X POST -H "X-Sync-Secret: 010e6ce9f756f4f808ae55a470ce0ed317a6b2ac072acda5301e99711fd40cf2" "http://localhost:5001/api/admin/trigger-sync"
