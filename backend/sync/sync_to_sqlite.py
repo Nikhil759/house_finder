@@ -18,6 +18,7 @@ import os
 import sys
 import time
 import uuid
+from typing import Optional
 from decimal import Decimal
 
 from dotenv import load_dotenv
@@ -171,10 +172,71 @@ def sync_table(
         }
 
 
+def _record_sync_start(sync_run_id: str, trigger_reason: str, dry_run: bool) -> Optional[int]:
+    """Insert a sync_runs row with status='running'. Returns row id or None on failure."""
+    try:
+        from ingestion.db import get_connection as get_pg_conn
+        conn = get_pg_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO sync_runs (sync_run_id, started_at, status, trigger_reason, dry_run)
+            VALUES (%s, NOW(), 'running', %s, %s)
+            RETURNING id
+        """, (sync_run_id, trigger_reason, dry_run))
+        row_id = cur.fetchone()[0]
+        conn.commit()
+        conn.close()
+        return row_id
+    except Exception as e:
+        logger.warning("sync_runs INSERT failed (non-fatal): %s", e)
+        return None
+
+
+def _record_sync_end(row_id: int, status: str, total_duration_ms, total_rows_read,
+                     total_rows_written, success_count, error_count,
+                     per_table_stats, error_message=None):
+    """Update sync_runs row with final results. Non-fatal on failure."""
+    if row_id is None:
+        return
+    try:
+        import json as _json
+        from ingestion.db import get_connection as get_pg_conn
+        conn = get_pg_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE sync_runs SET
+                finished_at = NOW(),
+                status = %s,
+                total_duration_ms = %s,
+                total_rows_read = %s,
+                total_rows_written = %s,
+                success_count = %s,
+                error_count = %s,
+                per_table_stats = %s,
+                error_message = %s
+            WHERE id = %s
+        """, (
+            status,
+            int(total_duration_ms) if total_duration_ms else None,
+            total_rows_read,
+            total_rows_written,
+            success_count,
+            error_count,
+            _json.dumps(per_table_stats, default=str) if per_table_stats else None,
+            error_message,
+            row_id,
+        ))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning("sync_runs UPDATE failed (non-fatal): %s", e)
+
+
 def sync_all(
     limit: int = None,
     dry_run: bool = False,
     tables: list = None,
+    trigger_reason: str = "manual",
 ) -> dict:
     """
     Orchestrate full-refresh sync across all (or a subset of) replica tables.
@@ -197,6 +259,9 @@ def sync_all(
     else:
         table_order = SYNC_ORDER
 
+    # Record sync start in Supabase (non-fatal)
+    db_row_id = _record_sync_start(sync_run_id, trigger_reason, dry_run)
+
     logger.info(
         "Sync starting",
         extra={
@@ -204,12 +269,14 @@ def sync_all(
             "tables": table_order,
             "dry_run": dry_run,
             "limit": limit,
+            "trigger_reason": trigger_reason,
         },
     )
 
     results = []
     supabase_conn = None
     replica_conn = None
+    error_message = None
 
     try:
         supabase_conn = get_supabase_connection()
@@ -235,6 +302,9 @@ def sync_all(
                 }
             results.append(result)
 
+    except Exception as e:
+        error_message = str(e)
+        logger.error("sync_all crashed: %s", e, exc_info=True)
     finally:
         if supabase_conn:
             try:
@@ -260,12 +330,30 @@ def sync_all(
         "total_rows_written": total_rows_written,
     }
 
+    # Determine final status
+    if error_message:
+        final_status = "error"
+    elif error_count > 0 and success_count > 0:
+        final_status = "partial"
+    elif error_count > 0:
+        final_status = "error"
+    else:
+        final_status = "success"
+
+    # Record sync end in Supabase (non-fatal)
+    _record_sync_end(
+        db_row_id, final_status, total_duration_ms,
+        total_rows_read, total_rows_written,
+        success_count, error_count, results, error_message,
+    )
+
     logger.info(
         "Sync complete",
         extra={
             "sync_run_id": sync_run_id,
             "total_duration_ms": total_duration_ms,
             "summary": summary,
+            "status": final_status,
         },
     )
 

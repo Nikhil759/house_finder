@@ -34,6 +34,7 @@ def trigger_sync_after_completion(reason: str = "scraper_completed") -> None:
         resp = requests.post(
             url,
             headers={"X-Sync-Secret": secret},
+            params={"trigger_reason": reason},
             timeout=30,
         )
         if resp.status_code == 200:

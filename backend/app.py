@@ -2308,7 +2308,17 @@ def health_db():
 @app.route("/api/admin/replica-status")
 def replica_status():
     from local_replica import health_check
-    return jsonify(health_check())
+    from sync.health import get_sync_health
+    result = health_check()
+    result["sync_health"] = get_sync_health()
+    return jsonify(result)
+
+
+@app.route("/api/admin/sync-runs")
+def sync_runs_list():
+    from sync.health import get_recent_sync_runs
+    limit = request.args.get("limit", 10, type=int)
+    return jsonify({"sync_runs": get_recent_sync_runs(limit=min(limit, 50))})
 
 
 @app.route("/api/admin/trigger-sync", methods=["POST"])
@@ -2322,10 +2332,11 @@ def trigger_sync():
     limit = request.args.get("limit", type=int)
     tables_arg = request.args.get("tables")
     tables = [t.strip() for t in tables_arg.split(",")] if tables_arg else None
+    trigger_reason = request.args.get("trigger_reason", "manual")
 
     from sync.sync_to_sqlite import sync_all
     try:
-        result = sync_all(limit=limit, dry_run=dry_run, tables=tables)
+        result = sync_all(limit=limit, dry_run=dry_run, tables=tables, trigger_reason=trigger_reason)
         return jsonify(result), 200
     except Exception as e:
         logger.exception("Sync trigger failed", extra={"error": str(e)})
@@ -3509,3 +3520,5 @@ if __name__ == "__main__":
 # curl -X POST -H "X-Sync-Secret: 010e6ce9f756f4f808ae55a470ce0ed317a6b2ac072acda5301e99711fd40cf2" "http://localhost:5001/api/admin/trigger-sync"
 
 # curl -X POST -H "X-Sync-Secret: 010e6ce9f756f4f808ae55a470ce0ed317a6b2ac072acda5301e99711fd40cf2" "https://housefinder-production.up.railway.app/api/admin/trigger-sync"
+
+# curl "https://housefinder-production.up.railway.app/api/pulse/bangalore-rent-trend" | python -m json.tool

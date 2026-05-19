@@ -320,26 +320,125 @@ def initialize_replica():
         conn.close()
 
 
+def _get_freshness_comparison(sqlite_tables):
+    """
+    Compare SQLite row counts and newest timestamps against Supabase.
+    Returns a dict of {table_name: {supabase_count, newest_sqlite, newest_supabase, lag_seconds}}.
+    Non-fatal: returns empty dict on any failure.
+    """
+    TIMESTAMP_COLS = {
+        "listings": "scraped_at",
+        "locality_feed": "scraped_at",
+        "listings_curated": "updated_at",
+        "feed_topics": "created_at",
+        "feed_curated": "updated_at",
+        "locality_stats_cache": "updated_at",
+        "deposit_stats_cache": "updated_at",
+        "locality_images": "fetched_at",
+        "society_images": "fetched_at",
+    }
+    try:
+        from ingestion.db import get_connection as get_pg_conn
+        pg_conn = get_pg_conn()
+        pg_conn.autocommit = True
+        pg_cur = pg_conn.cursor()
+
+        sqlite_conn = get_connection()
+        result = {}
+
+        sqlite_table_names = [t["name"] for t in sqlite_tables]
+        for tbl in sqlite_table_names:
+            try:
+                pg_cur.execute(f"SELECT COUNT(*) FROM {tbl}")
+                pg_count = pg_cur.fetchone()[0]
+
+                ts_col = TIMESTAMP_COLS.get(tbl)
+                newest_pg = None
+                newest_sqlite = None
+                lag_seconds = None
+
+                if ts_col:
+                    try:
+                        pg_cur.execute(f"SELECT MAX({ts_col}) FROM {tbl}")
+                        row = pg_cur.fetchone()
+                        if row and row[0]:
+                            newest_pg = row[0].isoformat() if hasattr(row[0], 'isoformat') else str(row[0])
+                    except Exception:
+                        pass
+
+                    try:
+                        sqlite_row = sqlite_conn.execute(
+                            f"SELECT MAX({ts_col}) FROM [{tbl}]"
+                        ).fetchone()
+                        if sqlite_row and sqlite_row[0]:
+                            newest_sqlite = str(sqlite_row[0])
+                    except Exception:
+                        pass
+
+                    if newest_pg and newest_sqlite:
+                        from datetime import datetime, timezone
+                        try:
+                            pg_dt = datetime.fromisoformat(newest_pg)
+                            if pg_dt.tzinfo is None:
+                                pg_dt = pg_dt.replace(tzinfo=timezone.utc)
+                            sqlite_str = newest_sqlite.replace('T', ' ').split('+')[0].split('.')[0]
+                            sqlite_dt = datetime.strptime(sqlite_str, '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
+                            lag_seconds = max(0, int((pg_dt - sqlite_dt).total_seconds()))
+                        except Exception:
+                            lag_seconds = None
+
+                result[tbl] = {
+                    "supabase_count": pg_count,
+                    "newest_supabase": newest_pg,
+                    "newest_sqlite": newest_sqlite,
+                    "lag_seconds": lag_seconds,
+                }
+            except Exception:
+                continue
+
+        sqlite_conn.close()
+        pg_conn.close()
+        return result
+    except Exception as e:
+        logging.getLogger(__name__).warning("freshness comparison failed: %s", e)
+        return {}
+
+
 def health_check() -> dict:
     """
     Return replica status for the /api/admin/replica-status endpoint.
 
-    Confirms the DB file is accessible, lists existing tables, and reports file size.
+    Confirms the DB file is accessible, lists existing tables with row counts,
+    and reports file size. Also compares freshness against Supabase.
     """
     try:
         conn = get_connection()
         cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
         tables = [row[0] for row in cursor.fetchall()]
+
+        table_details = []
+        total_rows = 0
+        for t in tables:
+            count = conn.execute(f"SELECT COUNT(*) FROM [{t}]").fetchone()[0]
+            total_rows += count
+            table_details.append({"name": t, "row_count": count})
+
         conn.close()
 
         db_size = 0
         if os.path.exists(REPLICA_DB_PATH):
             db_size = os.path.getsize(REPLICA_DB_PATH)
 
+        freshness = _get_freshness_comparison(table_details)
+        for td in table_details:
+            if td["name"] in freshness:
+                td.update(freshness[td["name"]])
+
         return {
             "status": "ok",
-            "tables": tables,
+            "tables": table_details,
             "table_count": len(tables),
+            "total_rows": total_rows,
             "db_path": REPLICA_DB_PATH,
             "db_size_bytes": db_size,
         }

@@ -568,6 +568,103 @@ function TransformRunsTable({ runs, isDark }) {
   );
 }
 
+function SyncRunsSection({ isDark }) {
+  const [runs, setRuns] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(null);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/admin/sync-runs?limit=10`)
+      .then(r => r.json())
+      .then(d => { setRuns(d.sync_runs || []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const headerBg = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
+  const rowBorder = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)";
+
+  const statusColor = (s) => s === "success" ? "#22c55e" : s === "partial" ? "#f59e0b" : s === "error" ? "#ef4444" : "#6b7280";
+
+  if (loading) return <div style={{ fontSize: 13, opacity: 0.5, padding: "16px 0" }}>Loading sync runs…</div>;
+  if (runs.length === 0) return <div style={{ fontSize: 13, opacity: 0.5, padding: "16px 0" }}>No sync runs recorded yet.</div>;
+
+  return (
+    <div style={{
+      background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+      border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`,
+      borderRadius: 12, overflow: "hidden",
+    }}>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, fontFamily: "monospace" }}>
+          <thead>
+            <tr style={{ background: headerBg }}>
+              {["Status", "Trigger", "Tables", "Rows Written", "Duration", "When", ""].map(h => (
+                <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontWeight: 600, fontSize: 11, opacity: 0.7, whiteSpace: "nowrap" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {runs.map((run, i) => (
+              <>
+                <tr key={run.sync_run_id} style={{ borderBottom: `1px solid ${rowBorder}`, cursor: "pointer" }} onClick={() => setExpanded(expanded === i ? null : i)}>
+                  <td style={{ padding: "8px 12px" }}>
+                    <span style={{
+                      display: "inline-flex", alignItems: "center", gap: 5,
+                      padding: "2px 8px", borderRadius: 4, fontSize: 11, fontWeight: 600,
+                      background: `${statusColor(run.status)}18`, color: statusColor(run.status),
+                    }}>
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: statusColor(run.status) }} />
+                      {run.status}{run.dry_run ? " (dry)" : ""}
+                    </span>
+                  </td>
+                  <td style={{ padding: "8px 12px" }}>{run.trigger_reason || "manual"}</td>
+                  <td style={{ padding: "8px 12px" }}>
+                    {run.success_count != null && (
+                      <span>
+                        <span style={{ color: "#22c55e" }}>{run.success_count}</span>
+                        {run.error_count > 0 && <span style={{ color: "#ef4444" }}> / {run.error_count} err</span>}
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ padding: "8px 12px" }}>{run.rows_written != null ? run.rows_written.toLocaleString() : "—"}</td>
+                  <td style={{ padding: "8px 12px" }}>{formatDuration(run.duration_ms)}</td>
+                  <td style={{ padding: "8px 12px", opacity: 0.6, whiteSpace: "nowrap" }}>{relativeTime(run.started_at)}</td>
+                  <td style={{ padding: "8px 12px", opacity: 0.4, fontSize: 10 }}>{expanded === i ? "▼" : "▶"}</td>
+                </tr>
+                {expanded === i && run.tables && run.tables.length > 0 && (
+                  <tr key={`${run.sync_run_id}-detail`} style={{ borderBottom: `1px solid ${rowBorder}` }}>
+                    <td colSpan={7} style={{ padding: "0 12px 12px 24px" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 6, paddingTop: 8 }}>
+                        {run.tables.map(t => (
+                          <div key={t.table} style={{
+                            display: "flex", alignItems: "center", gap: 8,
+                            padding: "4px 8px", borderRadius: 6,
+                            background: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+                          }}>
+                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: statusColor(t.status), flexShrink: 0 }} />
+                            <span style={{ flex: 1, fontSize: 11 }}>{t.table}</span>
+                            <span style={{ fontSize: 10, opacity: 0.6 }}>{(t.rows_written ?? 0).toLocaleString()} rows</span>
+                            <span style={{ fontSize: 10, opacity: 0.4 }}>{formatDuration(t.duration_ms)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {run.error_message && (
+                        <div style={{ marginTop: 8, fontSize: 11, color: "#ef4444", fontFamily: "monospace", wordBreak: "break-word" }}>
+                          {run.error_message}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )}
+              </>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function DbHealthCard({ isDark }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -686,6 +783,228 @@ function DbHealthCard({ isDark }) {
           wordBreak: "break-word",
         }}>
           {data.error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReplicaHealthCard({ isDark }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [showTables, setShowTables] = useState(false);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    const t0 = performance.now();
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/replica-status`);
+      const json = await res.json();
+      const clientMs = Math.round(performance.now() - t0);
+      setData({ ...json, client_rtt_ms: clientMs });
+    } catch (err) {
+      setData({ status: "error", error: err.message, client_rtt_ms: Math.round(performance.now() - t0) });
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const bg = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)";
+  const muted = isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.45)";
+  const cellBg = isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)";
+
+  const replicaStatus = data?.status;
+  const syncHealth = data?.sync_health;
+  const assessment = syncHealth?.health_assessment;
+
+  const statusColor = !data || loading ? "#6b7280"
+    : replicaStatus !== "ok" ? "#ef4444"
+    : assessment === "healthy" ? "#22c55e"
+    : assessment === "stale" ? "#f59e0b"
+    : assessment === "failing" ? "#ef4444"
+    : replicaStatus === "ok" ? "#22c55e"
+    : "#6b7280";
+  const statusLabel = loading ? "Checking…"
+    : replicaStatus !== "ok" ? "Unreachable"
+    : assessment === "healthy" ? "Healthy"
+    : assessment === "stale" ? "Stale"
+    : assessment === "failing" ? "Failing"
+    : "Connected";
+
+  const formatBytes = (bytes) => {
+    if (!bytes) return "—";
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const formatMinutes = (mins) => {
+    if (!mins && mins !== 0) return "—";
+    if (mins < 60) return `${Math.round(mins)}m ago`;
+    if (mins < 1440) return `${(mins / 60).toFixed(1)}h ago`;
+    return `${(mins / 1440).toFixed(1)}d ago`;
+  };
+
+  const formatNum = (n) => n != null ? n.toLocaleString() : "—";
+
+  const tables = Array.isArray(data?.tables) ? data.tables : [];
+  const maxRows = Math.max(...tables.map(t => t.row_count || 0), 1);
+
+  return (
+    <div style={{
+      background: bg,
+      border: `1px solid ${statusColor}33`,
+      borderRadius: 12, padding: "20px 24px",
+    }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>SQLite Read Replica</div>
+          <div style={{ fontSize: 12, opacity: 0.6 }}>
+            Local file · WAL mode · {data?.table_count ?? "—"} tables · {formatNum(data?.total_rows)} rows
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
+          {data?.db_size_bytes != null && (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "monospace" }}>
+                {formatBytes(data.db_size_bytes)}
+              </div>
+              <div style={{ fontSize: 10, opacity: 0.5 }}>db size</div>
+            </div>
+          )}
+          {data?.client_rtt_ms != null && (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 18, fontWeight: 600, fontFamily: "monospace", opacity: 0.6 }}>
+                {data.client_rtt_ms}
+              </div>
+              <div style={{ fontSize: 10, opacity: 0.5 }}>rtt ms</div>
+            </div>
+          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: statusColor, display: "inline-block" }} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: statusColor }}>{statusLabel}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Sync health stats row */}
+      {syncHealth && syncHealth.health_assessment !== "unknown" && (
+        <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+          <div style={{ background: cellBg, borderRadius: 8, padding: "10px 12px" }}>
+            <div style={{ fontSize: 10, opacity: 0.5, marginBottom: 2 }}>Last Sync</div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>
+              {formatMinutes(syncHealth.last_sync_minutes_ago)}
+            </div>
+            {syncHealth.last_sync_trigger && (
+              <div style={{ fontSize: 10, opacity: 0.5, marginTop: 2 }}>{syncHealth.last_sync_trigger}</div>
+            )}
+          </div>
+          <div style={{ background: cellBg, borderRadius: 8, padding: "10px 12px" }}>
+            <div style={{ fontSize: 10, opacity: 0.5, marginBottom: 2 }}>Duration</div>
+            <div style={{ fontSize: 13, fontWeight: 600, fontFamily: "monospace" }}>
+              {syncHealth.last_sync_duration_ms != null ? `${(syncHealth.last_sync_duration_ms / 1000).toFixed(1)}s` : "—"}
+            </div>
+            <div style={{ fontSize: 10, opacity: 0.5, marginTop: 2 }}>{syncHealth.last_sync_status ?? "—"}</div>
+          </div>
+          <div style={{ background: cellBg, borderRadius: 8, padding: "10px 12px" }}>
+            <div style={{ fontSize: 10, opacity: 0.5, marginBottom: 2 }}>24h Syncs</div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>
+              <span style={{ color: "#22c55e" }}>{syncHealth.successful_syncs_last_24h ?? 0}</span>
+              {(syncHealth.failed_syncs_last_24h ?? 0) > 0 && (
+                <span style={{ color: "#ef4444", marginLeft: 6 }}>/ {syncHealth.failed_syncs_last_24h} failed</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Per-table freshness comparison */}
+      {tables.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <button
+            onClick={() => setShowTables(!showTables)}
+            style={{
+              background: "transparent", border: "none", color: "inherit",
+              cursor: "pointer", fontSize: 12, opacity: 0.6, padding: 0,
+              display: "flex", alignItems: "center", gap: 4,
+            }}
+          >
+            <span style={{ transform: showTables ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s", display: "inline-block" }}>▶</span>
+            {tables.length} tables — freshness breakdown
+          </button>
+          {showTables && (
+            <div style={{ marginTop: 10 }}>
+              {/* Header */}
+              <div style={{ display: "grid", gridTemplateColumns: "140px 80px 80px 60px 1fr", gap: 8, marginBottom: 6, paddingBottom: 6, borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}` }}>
+                <span style={{ fontSize: 10, opacity: 0.4, fontWeight: 600 }}>TABLE</span>
+                <span style={{ fontSize: 10, opacity: 0.4, fontWeight: 600, textAlign: "right" }}>SQLITE</span>
+                <span style={{ fontSize: 10, opacity: 0.4, fontWeight: 600, textAlign: "right" }}>SUPABASE</span>
+                <span style={{ fontSize: 10, opacity: 0.4, fontWeight: 600, textAlign: "right" }}>DELTA</span>
+                <span style={{ fontSize: 10, opacity: 0.4, fontWeight: 600, textAlign: "right" }}>LAG</span>
+              </div>
+              {/* Rows */}
+              {tables.map((t) => {
+                const delta = t.supabase_count != null ? t.supabase_count - t.row_count : null;
+                const lagColor = !t.lag_seconds ? "#6b7280"
+                  : t.lag_seconds < 3600 ? "#22c55e"
+                  : t.lag_seconds < 21600 ? "#f59e0b"
+                  : "#ef4444";
+                const formatLag = (s) => {
+                  if (s == null) return "—";
+                  if (s < 60) return `${s}s`;
+                  if (s < 3600) return `${Math.round(s / 60)}m`;
+                  if (s < 86400) return `${(s / 3600).toFixed(1)}h`;
+                  return `${(s / 86400).toFixed(1)}d`;
+                };
+                return (
+                  <div key={t.name} style={{ display: "grid", gridTemplateColumns: "140px 80px 80px 60px 1fr", gap: 8, alignItems: "center", padding: "3px 0" }}>
+                    <span style={{ fontSize: 11, fontFamily: "monospace", opacity: 0.7 }}>
+                      {t.name}
+                    </span>
+                    <span style={{ fontSize: 11, fontFamily: "monospace", textAlign: "right" }}>
+                      {formatNum(t.row_count)}
+                    </span>
+                    <span style={{ fontSize: 11, fontFamily: "monospace", textAlign: "right", opacity: 0.6 }}>
+                      {t.supabase_count != null ? formatNum(t.supabase_count) : "—"}
+                    </span>
+                    <span style={{ fontSize: 11, fontFamily: "monospace", textAlign: "right", color: delta === 0 ? "#22c55e" : delta > 0 ? "#f59e0b" : "#6b7280" }}>
+                      {delta != null ? (delta === 0 ? "=" : `+${formatNum(delta)}`) : "—"}
+                    </span>
+                    <span style={{ fontSize: 11, fontFamily: "monospace", textAlign: "right", color: lagColor }}>
+                      {formatLag(t.lag_seconds)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12 }}>
+        <button onClick={refresh} disabled={loading} style={{
+          fontFamily: "monospace", fontSize: 11, padding: "4px 12px",
+          borderRadius: 6, border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)"}`,
+          background: "transparent", color: "inherit", cursor: loading ? "not-allowed" : "pointer",
+          opacity: loading ? 0.5 : 1,
+        }}>
+          Refresh
+        </button>
+        {data?.db_path && (
+          <span style={{ fontSize: 11, color: muted, fontFamily: "monospace" }}>{data.db_path}</span>
+        )}
+      </div>
+
+      {(data?.error || syncHealth?.error) && (
+        <div style={{
+          marginTop: 10, paddingTop: 10,
+          borderTop: `1px solid ${statusColor}22`,
+          fontSize: 12, color: "#ef4444", fontFamily: "monospace",
+          wordBreak: "break-word",
+        }}>
+          {data?.error || syncHealth?.error}
         </div>
       )}
     </div>
@@ -962,6 +1281,11 @@ export default function HealthPage() {
               <DbHealthCard isDark={isDark} />
             </div>
 
+            {/* SQLite Replica */}
+            <div style={{ marginBottom: 16 }}>
+              <ReplicaHealthCard isDark={isDark} />
+            </div>
+
             {/* Summary bar */}
             <div style={{
               background: cardBg,
@@ -1164,6 +1488,17 @@ export default function HealthPage() {
               })() : (
                 <div style={{ fontSize: 13, opacity: 0.5, padding: "16px 0" }}>No transform runs recorded yet.</div>
               )}
+            </div>
+
+            {/* Sync Runs */}
+            <div style={{ marginBottom: 32 }}>
+              <div style={{
+                fontSize: 11, fontWeight: 600, letterSpacing: "0.08em",
+                textTransform: "uppercase", opacity: 0.45, marginBottom: 12,
+              }}>
+                Sync Runs (SQLite Replica)
+              </div>
+              <SyncRunsSection isDark={isDark} />
             </div>
 
             {/* Listing health by source x status */}
