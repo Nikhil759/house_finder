@@ -372,6 +372,9 @@ def main():
         from transforms.fast_path import run_post_ingest_transforms
         run_post_ingest_transforms("housing", started_at)
 
+    from sync.trigger import trigger_sync_after_completion
+    trigger_sync_after_completion(reason="ingest_housing")
+
 
 if __name__ == "__main__":
     main()

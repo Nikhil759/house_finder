@@ -643,6 +643,9 @@ def main():
 
     logger.info("Slow-path transforms complete")
 
+    from sync.trigger import trigger_sync_after_completion
+    trigger_sync_after_completion(reason="slow_path")
+
 
 if __name__ == "__main__":
     main()

@@ -618,6 +618,9 @@ def main():
 
     logger.info("Pulse slow-path transforms complete")
 
+    from sync.trigger import trigger_sync_after_completion
+    trigger_sync_after_completion(reason="pulse_transforms")
+
 
 if __name__ == "__main__":
     main()

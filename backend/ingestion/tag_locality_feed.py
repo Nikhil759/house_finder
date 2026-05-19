@@ -442,6 +442,9 @@ def main():
         f"DB update failures:  {failed}"
     )
 
+    from sync.trigger import trigger_sync_after_completion
+    trigger_sync_after_completion(reason="tag_locality_feed")
+
 
 if __name__ == "__main__":
     main()

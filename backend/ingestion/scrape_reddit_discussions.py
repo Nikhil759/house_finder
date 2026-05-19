@@ -433,6 +433,9 @@ def main():
         from transforms.fast_path import run_post_pulse_transforms
         run_post_pulse_transforms("reddit_discussions")
 
+    from sync.trigger import trigger_sync_after_completion
+    trigger_sync_after_completion(reason="scrape_reddit_discussions")
+
 
 if __name__ == "__main__":
     main()

@@ -330,4 +330,7 @@ def run_dedup() -> dict:
 
 if __name__ == "__main__":
     result = run_dedup()
+    if result["errors"] == 0:
+        from sync.trigger import trigger_sync_after_completion
+        trigger_sync_after_completion(reason="run_dedup")
     sys.exit(0 if result["errors"] == 0 else 1)

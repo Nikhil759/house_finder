@@ -398,6 +398,9 @@ def main():
         from transforms.fast_path import run_post_ingest_transforms
         run_post_ingest_transforms("reddit", started_at)
 
+    from sync.trigger import trigger_sync_after_completion
+    trigger_sync_after_completion(reason="ingest_reddit")
+
 
 if __name__ == "__main__":
     main()
