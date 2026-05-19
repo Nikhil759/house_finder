@@ -563,7 +563,7 @@ def pulse_feed_replica(locality=None, topic=None, limit=50) -> dict:
         where_clauses = [
             "lf.category IN ('discussion', 'news')",
             "lf.relevance_score >= 0.3",
-            "lf.scraped_at >= datetime('now', '-7 days')",
+            "strftime('%Y-%m-%d %H:%M:%S', lf.scraped_at) >= strftime('%Y-%m-%d %H:%M:%S', datetime('now', '-7 days'))",
         ]
         params = []
 
@@ -626,7 +626,7 @@ def pulse_feed_replica(locality=None, topic=None, limit=50) -> dict:
             WHERE category IN ('discussion', 'news')
               AND sentiment_score IS NOT NULL
               AND relevance_score >= 0.3
-              AND scraped_at >= datetime('now', '-7 days')
+              AND strftime('%Y-%m-%d %H:%M:%S', scraped_at) >= strftime('%Y-%m-%d %H:%M:%S', datetime('now', '-7 days'))
         """).fetchone()
         avg_sent = row[0]
         sent_count = row[1] or 0
@@ -641,7 +641,7 @@ def pulse_feed_replica(locality=None, topic=None, limit=50) -> dict:
                   AND locality IS NOT NULL
                   AND sentiment_score IS NOT NULL
                   AND relevance_score >= 0.3
-                  AND scraped_at >= datetime('now', '-30 days')
+                  AND strftime('%Y-%m-%d %H:%M:%S', scraped_at) >= strftime('%Y-%m-%d %H:%M:%S', datetime('now', '-30 days'))
                 UNION
                 SELECT lf.id, je.value AS locality, lf.sentiment_score
                 FROM locality_feed lf, json_each(lf.detected_localities) je
@@ -651,7 +651,7 @@ def pulse_feed_replica(locality=None, topic=None, limit=50) -> dict:
                   AND json_array_length(lf.detected_localities) > 0
                   AND lf.sentiment_score IS NOT NULL
                   AND lf.relevance_score >= 0.3
-                  AND lf.scraped_at >= datetime('now', '-30 days')
+                  AND strftime('%Y-%m-%d %H:%M:%S', lf.scraped_at) >= strftime('%Y-%m-%d %H:%M:%S', datetime('now', '-30 days'))
             )
             SELECT locality, AVG(sentiment_score) AS avg_sent, COUNT(*) AS cnt
             FROM expanded
@@ -690,7 +690,7 @@ def pulse_topics_replica() -> dict:
             JOIN locality_feed lf ON lf.id = fc.feed_id
             WHERE lf.canonical_topic IS NOT NULL
               AND lf.canonical_topic != 'other'
-              AND lf.scraped_at >= datetime('now', '-30 days')
+              AND strftime('%Y-%m-%d %H:%M:%S', lf.scraped_at) >= strftime('%Y-%m-%d %H:%M:%S', datetime('now', '-30 days'))
             GROUP BY lf.canonical_topic
             ORDER BY post_count DESC
         """).fetchall()
@@ -752,7 +752,7 @@ def pulse_locality_replica(locality: str) -> dict:
               AND category IN ('discussion', 'news')
               AND sentiment_score IS NOT NULL
               AND relevance_score >= 0.3
-              AND scraped_at >= datetime('now', '-30 days')
+              AND strftime('%Y-%m-%d %H:%M:%S', scraped_at) >= strftime('%Y-%m-%d %H:%M:%S', datetime('now', '-30 days'))
             """,
             (locality, locality),
         ).fetchone()
@@ -769,7 +769,7 @@ def pulse_locality_replica(locality: str) -> dict:
             ))
               AND canonical_topic IS NOT NULL
               AND canonical_topic != 'other'
-              AND scraped_at >= datetime('now', '-30 days')
+              AND strftime('%Y-%m-%d %H:%M:%S', scraped_at) >= strftime('%Y-%m-%d %H:%M:%S', datetime('now', '-30 days'))
             GROUP BY canonical_topic
             ORDER BY cnt DESC
             LIMIT 8
@@ -830,7 +830,7 @@ def pulse_feed_for_locality_replica(locality: str) -> dict:
                 SELECT 1 FROM json_each(detected_localities) WHERE json_each.value = ?
             ))
               AND canonical_topic IS NOT NULL
-              AND scraped_at >= datetime('now', '-30 days')
+              AND strftime('%Y-%m-%d %H:%M:%S', scraped_at) >= strftime('%Y-%m-%d %H:%M:%S', datetime('now', '-30 days'))
             GROUP BY canonical_topic
             ORDER BY cnt DESC
             """,
@@ -885,7 +885,7 @@ def bangalore_rent_trend_replica() -> dict:
         # Previous period: first_seen_at older than 30 days
         prior_rows = conn.execute("""
             SELECT bhk, rent FROM listings
-            WHERE first_seen_at < datetime('now', '-30 days')
+            WHERE strftime('%Y-%m-%d %H:%M:%S', first_seen_at) < strftime('%Y-%m-%d %H:%M:%S', datetime('now', '-30 days'))
               AND rent IS NOT NULL
               AND rent BETWEEN 3000 AND 500000
               AND bhk IN ('1 BHK', '2 BHK', '3 BHK')
