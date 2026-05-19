@@ -2594,6 +2594,17 @@ def locality_stats(locality):
     Return rent stats (median, P25, P75, price_per_sqft) + deposit stats
     for a locality, per BHK. Replaces direct Supabase queries.
     """
+    try:
+        from sync.replica_queries import get_locality_stats
+        result = get_locality_stats(locality)
+        if result is not None:
+            return jsonify(result)
+    except Exception as e:
+        logger.warning(
+            "replica_fallback",
+            extra={"endpoint": "/api/locality-stats", "error": str(e), "request_id": getattr(g, "request_id", None)},
+        )
+
     conn = None
     try:
         conn = _get_pg_conn()
@@ -2644,6 +2655,17 @@ def locality_stats(locality):
 @app.route("/api/pulse/rent-overview")
 def pulse_rent_overview():
     """All locality rent stats for Pulse sidebar."""
+    try:
+        from sync.replica_queries import get_rent_overview
+        result = get_rent_overview()
+        if result is not None:
+            return jsonify({"rent_data": result})
+    except Exception as e:
+        logger.warning(
+            "replica_fallback",
+            extra={"endpoint": "/api/pulse/rent-overview", "error": str(e), "request_id": getattr(g, "request_id", None)},
+        )
+
     conn = None
     try:
         conn = _get_pg_conn()
@@ -2736,6 +2758,17 @@ def bangalore_rent_trend():
 @app.route("/api/locality-stats-all")
 def locality_stats_all():
     """All locality stats + deposit benchmarks for LocalityGuide overview."""
+    try:
+        from sync.replica_queries import get_all_locality_stats
+        result = get_all_locality_stats()
+        if result is not None:
+            return jsonify(result)
+    except Exception as e:
+        logger.warning(
+            "replica_fallback",
+            extra={"endpoint": "/api/locality-stats-all", "error": str(e), "request_id": getattr(g, "request_id", None)},
+        )
+
     conn = None
     try:
         conn = _get_pg_conn()
@@ -2780,6 +2813,18 @@ def locality_stats_all():
 @app.route("/api/locality-image/<locality>")
 def locality_image(locality):
     """Return hero image for a locality."""
+    try:
+        from sync.replica_queries import get_locality_image
+        result = get_locality_image(locality)
+        if result is not None:
+            return jsonify(result)
+        return jsonify({}), 200
+    except Exception as e:
+        logger.warning(
+            "replica_fallback",
+            extra={"endpoint": "/api/locality-image", "error": str(e), "request_id": getattr(g, "request_id", None)},
+        )
+
     conn = None
     try:
         conn = _get_pg_conn()
