@@ -2343,6 +2343,15 @@ def pulse_feed():
     topic = request.args.get("topic", "").strip() or None
     limit_val = min(int(request.args.get("limit", 50)), 100)
 
+    try:
+        from sync.replica_queries import pulse_feed_replica
+        return jsonify(pulse_feed_replica(locality=locality, topic=topic, limit=limit_val))
+    except Exception as e:
+        logger.warning(
+            "replica_fallback",
+            extra={"endpoint": "/api/pulse/feed", "error": str(e), "request_id": getattr(g, "request_id", None)},
+        )
+
     conn = None
     try:
         conn = _get_pg_conn()
@@ -2466,6 +2475,15 @@ def pulse_topics():
     Aggregate canonical_topic counts + avg sentiment from feed_curated
     for the last 30 days.
     """
+    try:
+        from sync.replica_queries import pulse_topics_replica
+        return jsonify(pulse_topics_replica())
+    except Exception as e:
+        logger.warning(
+            "replica_fallback",
+            extra={"endpoint": "/api/pulse/topics", "error": str(e), "request_id": getattr(g, "request_id", None)},
+        )
+
     conn = None
     try:
         conn = _get_pg_conn()
@@ -2505,6 +2523,15 @@ def pulse_topics():
 @app.route("/api/pulse/trending")
 def pulse_trending():
     """Return trending posts from feed_curated."""
+    try:
+        from sync.replica_queries import pulse_trending_replica
+        return jsonify(pulse_trending_replica())
+    except Exception as e:
+        logger.warning(
+            "replica_fallback",
+            extra={"endpoint": "/api/pulse/trending", "error": str(e), "request_id": getattr(g, "request_id", None)},
+        )
+
     conn = None
     try:
         conn = _get_pg_conn()
@@ -2548,6 +2575,15 @@ def pulse_locality(locality):
     uses for the city-overview locality breakdown, so the same locality always
     shows the same sentiment score regardless of which page the user is on.
     """
+    try:
+        from sync.replica_queries import pulse_locality_replica
+        return jsonify(pulse_locality_replica(locality))
+    except Exception as e:
+        logger.warning(
+            "replica_fallback",
+            extra={"endpoint": "/api/pulse/locality", "error": str(e), "request_id": getattr(g, "request_id", None)},
+        )
+
     conn = None
     try:
         conn = _get_pg_conn()
@@ -2733,6 +2769,15 @@ def pulse_rent_overview():
 @app.route("/api/pulse/bangalore-rent-trend")
 def bangalore_rent_trend():
     """Rolling 30-day city-wide rent trend for Bangalore, grouped by BHK."""
+    try:
+        from sync.replica_queries import bangalore_rent_trend_replica
+        return jsonify(bangalore_rent_trend_replica())
+    except Exception as e:
+        logger.warning(
+            "replica_fallback",
+            extra={"endpoint": "/api/pulse/bangalore-rent-trend", "error": str(e), "request_id": getattr(g, "request_id", None)},
+        )
+
     conn = None
     try:
         conn = _get_pg_conn()
@@ -2889,6 +2934,15 @@ def locality_image(locality):
 @app.route("/api/pulse/feed-for-locality/<locality>")
 def pulse_feed_for_locality(locality):
     """Topic counts + recent posts for a specific locality (30d window)."""
+    try:
+        from sync.replica_queries import pulse_feed_for_locality_replica
+        return jsonify(pulse_feed_for_locality_replica(locality))
+    except Exception as e:
+        logger.warning(
+            "replica_fallback",
+            extra={"endpoint": "/api/pulse/feed-for-locality", "error": str(e), "request_id": getattr(g, "request_id", None)},
+        )
+
     conn = None
     try:
         conn = _get_pg_conn()
@@ -3453,3 +3507,5 @@ if __name__ == "__main__":
 # /api/pulse/rent-overview
 
 # curl -X POST -H "X-Sync-Secret: 010e6ce9f756f4f808ae55a470ce0ed317a6b2ac072acda5301e99711fd40cf2" "http://localhost:5001/api/admin/trigger-sync"
+
+# curl -X POST -H "X-Sync-Secret: 010e6ce9f756f4f808ae55a470ce0ed317a6b2ac072acda5301e99711fd40cf2" "https://housefinder-production.up.railway.app/api/admin/trigger-sync"

@@ -9,6 +9,9 @@ to the caller so the endpoint's try/except can trigger Supabase fallback.
 
 import json
 import logging
+import math
+import statistics
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from local_replica import get_connection
@@ -526,5 +529,392 @@ def get_listing_by_id_replica(composite_id: str) -> Optional[dict]:
                 (source_id,),
             ).fetchone()
         return _row_to_listing_replica(row) if row else None
+    finally:
+        conn.close()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Phase 3c: Pulse endpoint helpers
+# ══════════════════════════════════════════════════════════════════════════════
+
+_LOCALITY_FILTER_SQL = """
+    (LOWER(lf.locality) = LOWER(?) OR EXISTS (
+        SELECT 1 FROM json_each(lf.detected_localities) WHERE json_each.value = ?
+    ))
+"""
+
+
+def _days_since_iso(iso_str):
+    """Return fractional days between an ISO timestamp string and now (UTC)."""
+    if not iso_str:
+        return 999.0
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        delta = datetime.now(timezone.utc) - dt
+        return delta.total_seconds() / 86400.0
+    except (ValueError, TypeError):
+        return 999.0
+
+
+def pulse_feed_replica(locality=None, topic=None, limit=50) -> dict:
+    """SQLite replica of /api/pulse/feed."""
+    conn = get_connection()
+    try:
+        where_clauses = [
+            "lf.category IN ('discussion', 'news')",
+            "lf.relevance_score >= 0.3",
+            "lf.scraped_at >= datetime('now', '-7 days')",
+        ]
+        params = []
+
+        if locality:
+            where_clauses.append(
+                "(LOWER(lf.locality) = LOWER(?) OR EXISTS ("
+                "SELECT 1 FROM json_each(lf.detected_localities) WHERE json_each.value = ?))"
+            )
+            params.extend([locality, locality])
+        if topic:
+            where_clauses.append("lf.canonical_topic = ?")
+            params.append(topic)
+
+        where_sql = " AND ".join(where_clauses)
+
+        cur = conn.execute(
+            f"""
+            SELECT
+                lf.id, lf.source, lf.locality, lf.title, lf.body, lf.url,
+                lf.category, lf.canonical_topic, lf.sentiment_score,
+                lf.relevance_score, lf.detected_localities,
+                lf.posted_at, lf.scraped_at, lf.engagement, lf.author,
+                fc.featured, fc.editor_rank, fc.editor_note,
+                fc.is_trending, fc.trending_score
+            FROM feed_curated fc
+            JOIN locality_feed lf ON lf.id = fc.feed_id
+            WHERE {where_sql}
+            ORDER BY fc.featured DESC, fc.editor_rank ASC,
+                     lf.relevance_score DESC, lf.scraped_at DESC
+            LIMIT ?
+            """,
+            params + [limit * 3],
+        )
+        cols = [d[0] for d in cur.description]
+        rows = cur.fetchall()
+
+        posts = []
+        for row in rows:
+            d = dict(zip(cols, row))
+            d["detected_localities"] = _json_loads_safe(d.get("detected_localities")) or []
+            posts.append(d)
+
+        for p in posts:
+            days_old = _days_since_iso(p.get("scraped_at"))
+            p["_decay_score"] = (p.get("relevance_score") or 0) * math.exp(-0.5 * days_old)
+
+        posts.sort(key=lambda p: (
+            -(p.get("featured") or 0),
+            p.get("editor_rank") or 9999,
+            -p["_decay_score"],
+        ))
+        posts = posts[:limit]
+        for p in posts:
+            del p["_decay_score"]
+
+        # City-wide sentiment (7 days)
+        row = conn.execute("""
+            SELECT AVG(sentiment_score), COUNT(*), MAX(scraped_at)
+            FROM locality_feed
+            WHERE category IN ('discussion', 'news')
+              AND sentiment_score IS NOT NULL
+              AND relevance_score >= 0.3
+              AND scraped_at >= datetime('now', '-7 days')
+        """).fetchone()
+        avg_sent = row[0]
+        sent_count = row[1] or 0
+        last_scraped = row[2]
+
+        # Per-locality sentiment (30 days) via UNION with json_each
+        loc_rows = conn.execute("""
+            WITH expanded AS (
+                SELECT id, locality, sentiment_score
+                FROM locality_feed
+                WHERE category IN ('discussion', 'news')
+                  AND locality IS NOT NULL
+                  AND sentiment_score IS NOT NULL
+                  AND relevance_score >= 0.3
+                  AND scraped_at >= datetime('now', '-30 days')
+                UNION
+                SELECT lf.id, je.value AS locality, lf.sentiment_score
+                FROM locality_feed lf, json_each(lf.detected_localities) je
+                WHERE lf.category IN ('discussion', 'news')
+                  AND lf.detected_localities IS NOT NULL
+                  AND json_valid(lf.detected_localities)
+                  AND json_array_length(lf.detected_localities) > 0
+                  AND lf.sentiment_score IS NOT NULL
+                  AND lf.relevance_score >= 0.3
+                  AND lf.scraped_at >= datetime('now', '-30 days')
+            )
+            SELECT locality, AVG(sentiment_score) AS avg_sent, COUNT(*) AS cnt
+            FROM expanded
+            WHERE LOWER(locality) != 'bengaluru general'
+              AND LOWER(locality) != 'bangalore general'
+            GROUP BY locality
+            ORDER BY cnt DESC
+            LIMIT 20
+        """).fetchall()
+        locality_sentiments = [
+            {"locality": r[0], "avg_sentiment": round(float(r[1]), 3), "count": r[2]}
+            for r in loc_rows
+        ]
+
+        return {
+            "posts": posts,
+            "city_sentiment": round(float(avg_sent), 3) if avg_sent else 0,
+            "city_sentiment_count": sent_count,
+            "city_sentiment_updated_at": last_scraped,
+            "locality_sentiments": locality_sentiments,
+        }
+    finally:
+        conn.close()
+
+
+def pulse_topics_replica() -> dict:
+    """SQLite replica of /api/pulse/topics."""
+    conn = get_connection()
+    try:
+        rows = conn.execute("""
+            SELECT
+                lf.canonical_topic,
+                COUNT(*) AS post_count,
+                AVG(lf.sentiment_score) AS avg_sentiment
+            FROM feed_curated fc
+            JOIN locality_feed lf ON lf.id = fc.feed_id
+            WHERE lf.canonical_topic IS NOT NULL
+              AND lf.canonical_topic != 'other'
+              AND lf.scraped_at >= datetime('now', '-30 days')
+            GROUP BY lf.canonical_topic
+            ORDER BY post_count DESC
+        """).fetchall()
+        topics = []
+        for slug, count, avg_sent in rows:
+            topics.append({
+                "slug": slug,
+                "label": slug.replace("_", " ").title(),
+                "count": count,
+                "avg_sentiment": round(float(avg_sent), 3) if avg_sent else 0,
+            })
+        return {"topics": topics}
+    finally:
+        conn.close()
+
+
+def pulse_trending_replica() -> dict:
+    """SQLite replica of /api/pulse/trending."""
+    conn = get_connection()
+    try:
+        rows = conn.execute("""
+            SELECT
+                lf.id, lf.source, lf.locality, lf.title, lf.body, lf.url,
+                lf.category, lf.canonical_topic, lf.sentiment_score,
+                lf.relevance_score, lf.detected_localities,
+                lf.posted_at, lf.scraped_at, lf.engagement,
+                fc.trending_score
+            FROM feed_curated fc
+            JOIN locality_feed lf ON lf.id = fc.feed_id
+            WHERE fc.is_trending = 1
+            ORDER BY fc.trending_score DESC
+        """).fetchall()
+        cols = ["id", "source", "locality", "title", "body", "url",
+                "category", "canonical_topic", "sentiment_score",
+                "relevance_score", "detected_localities",
+                "posted_at", "scraped_at", "engagement", "trending_score"]
+        result = []
+        for row in rows:
+            d = dict(zip(cols, row))
+            d["detected_localities"] = _json_loads_safe(d.get("detected_localities")) or []
+            result.append(d)
+        return {"trending": result}
+    finally:
+        conn.close()
+
+
+def pulse_locality_replica(locality: str) -> dict:
+    """SQLite replica of /api/pulse/locality/<locality>."""
+    conn = get_connection()
+    try:
+        # 30-day avg sentiment
+        row = conn.execute(
+            """
+            SELECT AVG(sentiment_score), COUNT(*)
+            FROM locality_feed
+            WHERE (LOWER(locality) = LOWER(?) OR EXISTS (
+                SELECT 1 FROM json_each(detected_localities) WHERE json_each.value = ?
+            ))
+              AND category IN ('discussion', 'news')
+              AND sentiment_score IS NOT NULL
+              AND relevance_score >= 0.3
+              AND scraped_at >= datetime('now', '-30 days')
+            """,
+            (locality, locality),
+        ).fetchone()
+        avg_sent = row[0]
+        post_count_30d = row[1] or 0
+
+        # Top topics (30 days)
+        topic_rows = conn.execute(
+            """
+            SELECT canonical_topic, COUNT(*) AS cnt, AVG(sentiment_score) AS avg_sent
+            FROM locality_feed
+            WHERE (LOWER(locality) = LOWER(?) OR EXISTS (
+                SELECT 1 FROM json_each(detected_localities) WHERE json_each.value = ?
+            ))
+              AND canonical_topic IS NOT NULL
+              AND canonical_topic != 'other'
+              AND scraped_at >= datetime('now', '-30 days')
+            GROUP BY canonical_topic
+            ORDER BY cnt DESC
+            LIMIT 8
+            """,
+            (locality, locality),
+        ).fetchall()
+        topics = [
+            {"slug": slug, "label": slug.replace("_", " ").title(),
+             "count": cnt, "avg_sentiment": round(float(s), 3) if s else 0}
+            for slug, cnt, s in topic_rows
+        ]
+
+        # Recent high-relevance posts
+        post_rows = conn.execute(
+            """
+            SELECT id, source, locality, title, body, url,
+                   category, canonical_topic, sentiment_score,
+                   relevance_score, posted_at, scraped_at, engagement
+            FROM locality_feed
+            WHERE (LOWER(locality) = LOWER(?) OR EXISTS (
+                SELECT 1 FROM json_each(detected_localities) WHERE json_each.value = ?
+            ))
+              AND category IN ('discussion', 'news')
+              AND relevance_score >= 0.4
+            ORDER BY scraped_at DESC
+            LIMIT 20
+            """,
+            (locality, locality),
+        ).fetchall()
+        cols = ["id", "source", "locality", "title", "body", "url",
+                "category", "canonical_topic", "sentiment_score",
+                "relevance_score", "posted_at", "scraped_at", "engagement"]
+        posts = [dict(zip(cols, r)) for r in post_rows]
+
+        return {
+            "locality": locality,
+            "avg_sentiment_30d": round(float(avg_sent), 3) if avg_sent else None,
+            "post_count_30d": post_count_30d,
+            "avg_sentiment_7d": round(float(avg_sent), 3) if avg_sent else None,
+            "post_count_7d": post_count_30d,
+            "topics": topics,
+            "recent_posts": posts,
+        }
+    finally:
+        conn.close()
+
+
+def pulse_feed_for_locality_replica(locality: str) -> dict:
+    """SQLite replica of /api/pulse/feed-for-locality/<locality>."""
+    conn = get_connection()
+    try:
+        # Topic counts (30 days)
+        topic_rows = conn.execute(
+            """
+            SELECT canonical_topic, COUNT(*) AS cnt
+            FROM locality_feed
+            WHERE (LOWER(locality) = LOWER(?) OR EXISTS (
+                SELECT 1 FROM json_each(detected_localities) WHERE json_each.value = ?
+            ))
+              AND canonical_topic IS NOT NULL
+              AND scraped_at >= datetime('now', '-30 days')
+            GROUP BY canonical_topic
+            ORDER BY cnt DESC
+            """,
+            (locality, locality),
+        ).fetchall()
+        topics = [{"topic": t, "count": c} for t, c in topic_rows]
+
+        # Recent posts
+        post_rows = conn.execute(
+            """
+            SELECT id, source, author, locality, title, body, url,
+                   canonical_topic AS topic, sentiment_score AS sentiment,
+                   engagement, posted_at
+            FROM locality_feed
+            WHERE (LOWER(locality) = LOWER(?) OR EXISTS (
+                SELECT 1 FROM json_each(detected_localities) WHERE json_each.value = ?
+            ))
+              AND canonical_topic IS NOT NULL
+              AND sentiment_score IS NOT NULL
+            ORDER BY posted_at DESC
+            LIMIT 30
+            """,
+            (locality, locality),
+        ).fetchall()
+        cols = ["id", "source", "author", "locality", "title", "body", "url",
+                "topic", "sentiment", "engagement", "posted_at"]
+        posts = [dict(zip(cols, r)) for r in post_rows]
+
+        return {"topics": topics, "posts": posts}
+    finally:
+        conn.close()
+
+
+def bangalore_rent_trend_replica() -> dict:
+    """SQLite replica of /api/pulse/bangalore-rent-trend."""
+    conn = get_connection()
+    try:
+        # Current period: active/stale listings
+        cur_rows = conn.execute("""
+            SELECT bhk, rent FROM listings
+            WHERE status IN ('active', 'stale')
+              AND rent IS NOT NULL
+              AND rent BETWEEN 3000 AND 500000
+              AND bhk IN ('1 BHK', '2 BHK', '3 BHK')
+              AND source IN ('nobroker', 'housing')
+              AND listing_type = 'full_house'
+        """).fetchall()
+        current_rents = {}
+        for bhk, rent in cur_rows:
+            current_rents.setdefault(bhk, []).append(rent)
+
+        # Previous period: first_seen_at older than 30 days
+        prior_rows = conn.execute("""
+            SELECT bhk, rent FROM listings
+            WHERE first_seen_at < datetime('now', '-30 days')
+              AND rent IS NOT NULL
+              AND rent BETWEEN 3000 AND 500000
+              AND bhk IN ('1 BHK', '2 BHK', '3 BHK')
+              AND source IN ('nobroker', 'housing')
+              AND listing_type = 'full_house'
+        """).fetchall()
+        prior_rents = {}
+        for bhk, rent in prior_rows:
+            prior_rents.setdefault(bhk, []).append(rent)
+
+        results = []
+        for bhk in sorted(current_rents.keys()):
+            rents = current_rents[bhk]
+            if len(rents) < 30:
+                continue
+            current_median = int(statistics.median(rents))
+            prior_median = None
+            trend_pct = None
+            if bhk in prior_rents and len(prior_rents[bhk]) >= 30:
+                prior_median = int(statistics.median(prior_rents[bhk]))
+                if prior_median > 0:
+                    trend_pct = round(((current_median - prior_median) / prior_median) * 100, 1)
+            results.append({
+                "bhk": bhk,
+                "current_median": current_median,
+                "prior_median": prior_median,
+                "listing_count": len(rents),
+                "trend_pct": trend_pct,
+            })
+        return {"bhk_trends": results}
     finally:
         conn.close()
