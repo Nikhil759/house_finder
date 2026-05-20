@@ -2465,7 +2465,7 @@ export default function Search() {
                   <button
                     key={label}
                     onClick={() => {
-                      if (active) { setActiveLocality(null); setQuery(''); doSearch(''); }
+                      if (active) { setActiveLocality(null); setQuery(''); doLocalitySearch(''); }
                       else { setActiveLocality(label); setQuery(label); doLocalitySearch(label); }
                     }}
                     style={{
@@ -3071,7 +3071,7 @@ export default function Search() {
                 if (active) {
                   setActiveLocality(null);
                   setQuery('');
-                  doSearch('');
+                  doLocalitySearch('');
                 } else {
                   setActiveLocality(label);
                   setQuery(label);

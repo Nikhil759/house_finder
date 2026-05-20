@@ -18,7 +18,6 @@ import Preferences from "./pages/Preferences";
 import Stats from "./pages/Stats";
 import LocalityGuide from "./pages/LocalityGuide";
 import LocalityDetail from "./pages/LocalityDetail";
-import InstallBanner from "./components/InstallBanner";
 import PostHogRouteTracker from "./components/PostHogRouteTracker";
 import { initPostHog } from "./lib/posthog";
 import { useAuth } from "./hooks/useAuth";
@@ -61,7 +60,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="/locality-guide" element={<Pulse />} />
           <Route path="/neighbourhood-pulse/:locality" element={<PulseLocality />} />
         </Routes>
-        <InstallBanner />
       </BrowserRouter>
       <Analytics />
     </ThemeProvider>

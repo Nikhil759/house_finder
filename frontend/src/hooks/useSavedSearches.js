@@ -101,6 +101,46 @@ export function useSavedSearches(user) {
     }
   }
 
+  const updateSearch = async (searchId, updates) => {
+    const patch = { ...updates }
+    if (patch.budget !== undefined && patch.budget !== null && patch.budget !== '') {
+      patch.budget = parseInt(patch.budget, 10) || null
+    } else if (patch.budget === '' || patch.budget === undefined) {
+      patch.budget = null
+    }
+    if (
+      patch.location !== undefined ||
+      patch.bhk !== undefined ||
+      patch.budget !== undefined ||
+      patch.keywords !== undefined
+    ) {
+      const existing = savedSearches.find(s => s.id === searchId) || {}
+      patch.name = generateSearchName({ ...existing, ...patch })
+    }
+
+    if (user) {
+      const { data, error } = await supabase
+        .from('saved_searches')
+        .update(patch)
+        .eq('id', searchId)
+        .select()
+        .single()
+
+      if (!error && data) {
+        setSavedSearches(prev => prev.map(s => (s.id === searchId ? data : s)))
+        return data
+      }
+      return null
+    }
+
+    const updated = savedSearches.map(s =>
+      s.id === searchId ? { ...s, ...patch } : s
+    )
+    setSavedSearches(updated)
+    localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(updated))
+    return updated.find(s => s.id === searchId) || null
+  }
+
   const deleteSearch = async (searchId) => {
     if (user) {
       await supabase
@@ -190,6 +230,7 @@ export function useSavedSearches(user) {
     savedSearches,
     loading,
     saveSearch,
+    updateSearch,
     deleteSearch,
     clearAllSearches,
     updateLastRun,

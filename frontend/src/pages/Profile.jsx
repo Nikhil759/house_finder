@@ -30,6 +30,43 @@ function formatBudget(budget) {
   return `under ₹${(n / 1000).toFixed(0)}k`;
 }
 
+const BHK_ALERT_OPTIONS = [
+  { value: '', label: 'Any' },
+  { value: '1BHK', label: '1 BHK' },
+  { value: '2BHK', label: '2 BHK' },
+  { value: '3BHK', label: '3 BHK' },
+  { value: '4+', label: '4+ BHK' },
+];
+
+const SOURCE_OPTIONS = [
+  { id: 'telegram', label: 'Telegram' },
+  { id: 'nobroker', label: 'NoBroker' },
+  { id: 'housing', label: 'Housing' },
+  { id: 'reddit', label: 'Reddit' },
+];
+
+const DEFAULT_SOURCES = ['telegram', 'nobroker', 'housing'];
+
+function formatBhkLabel(bhk) {
+  if (!bhk || bhk === 'any') return null;
+  const opt = BHK_ALERT_OPTIONS.find(o => o.value === bhk);
+  return opt ? opt.label : bhk;
+}
+
+function filterSummaryChips(search) {
+  const chips = [];
+  const bhk = formatBhkLabel(search.bhk);
+  if (bhk) chips.push(bhk);
+  const budget = formatBudget(search.budget);
+  if (budget) chips.push(budget);
+  if (search.keywords?.trim()) chips.push(search.keywords.trim());
+  const sources = search.sources || DEFAULT_SOURCES;
+  if (sources.length && sources.length < SOURCE_OPTIONS.length) {
+    chips.push(sources.join(', '));
+  }
+  return chips;
+}
+
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const s = {
@@ -126,6 +163,140 @@ function FrequencySelector({ value, onChange, disabled }) {
   );
 }
 
+function EmailAlertFilterEditor({ search, onSave, saving }) {
+  const [bhk, setBhk] = useState(search.bhk || '');
+  const [budget, setBudget] = useState(search.budget ? String(search.budget) : '');
+  const [keywords, setKeywords] = useState(search.keywords || '');
+  const [sources, setSources] = useState(
+    search.sources?.length ? [...search.sources] : [...DEFAULT_SOURCES]
+  );
+
+  useEffect(() => {
+    setBhk(search.bhk || '');
+    setBudget(search.budget ? String(search.budget) : '');
+    setKeywords(search.keywords || '');
+    setSources(search.sources?.length ? [...search.sources] : [...DEFAULT_SOURCES]);
+  }, [search.id, search.bhk, search.budget, search.keywords, search.sources]);
+
+  function toggleSource(id) {
+    setSources(prev =>
+      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
+    );
+  }
+
+  function handleSave() {
+    onSave({
+      bhk: bhk || '',
+      budget: budget ? parseInt(budget, 10) : null,
+      keywords: keywords.trim(),
+      sources: sources.length ? sources : DEFAULT_SOURCES,
+    });
+  }
+
+  const inputStyle = {
+    width: '100%', padding: '8px 10px',
+    fontFamily: 'var(--font-mono)', fontSize: 12,
+    background: 'var(--color-bg-primary)', color: 'var(--color-text-primary)',
+    border: '1px solid var(--color-border)', borderRadius: 6,
+    outline: 'none', boxSizing: 'border-box',
+  };
+
+  return (
+    <div style={{
+      padding: '12px 18px 16px',
+      background: 'var(--color-bg-primary)',
+      borderTop: '1px solid var(--color-border)',
+    }}>
+      <p style={{ ...s.monoSmall, marginBottom: 10 }}>
+        Email alert filters (not used in search)
+      </p>
+
+      <div style={{ marginBottom: 12 }}>
+        <p style={{ ...s.monoSmall, marginBottom: 6 }}>BHK</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {BHK_ALERT_OPTIONS.map(opt => (
+            <button
+              key={opt.value || 'any'}
+              type="button"
+              onClick={() => setBhk(opt.value)}
+              style={{
+                padding: '6px 12px', borderRadius: 99,
+                fontFamily: 'var(--font-mono)', fontSize: 11,
+                border: `1px solid ${bhk === opt.value ? 'var(--color-amber)' : 'var(--color-border)'}`,
+                background: bhk === opt.value ? 'rgba(232,160,32,0.15)' : 'transparent',
+                color: bhk === opt.value ? 'var(--color-amber)' : 'var(--color-text-muted)',
+                cursor: 'pointer',
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <p style={{ ...s.monoSmall, marginBottom: 6 }}>Max budget (₹/month)</p>
+        <input
+          type="number"
+          placeholder="e.g. 30000"
+          value={budget}
+          onChange={e => setBudget(e.target.value)}
+          style={inputStyle}
+        />
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <p style={{ ...s.monoSmall, marginBottom: 6 }}>Keywords</p>
+        <input
+          type="text"
+          placeholder="e.g. furnished, parking"
+          value={keywords}
+          onChange={e => setKeywords(e.target.value)}
+          style={inputStyle}
+        />
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <p style={{ ...s.monoSmall, marginBottom: 6 }}>Sources</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {SOURCE_OPTIONS.map(src => (
+            <button
+              key={src.id}
+              type="button"
+              onClick={() => toggleSource(src.id)}
+              style={{
+                padding: '6px 12px', borderRadius: 99,
+                fontFamily: 'var(--font-mono)', fontSize: 11,
+                border: `1px solid ${sources.includes(src.id) ? 'var(--color-amber)' : 'var(--color-border)'}`,
+                background: sources.includes(src.id) ? 'rgba(232,160,32,0.15)' : 'transparent',
+                color: sources.includes(src.id) ? 'var(--color-amber)' : 'var(--color-text-muted)',
+                cursor: 'pointer',
+              }}
+            >
+              {src.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={handleSave}
+        disabled={saving}
+        style={{
+          fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
+          padding: '8px 16px', borderRadius: 6,
+          background: 'var(--color-amber)', color: '#1a0a00',
+          border: 'none', cursor: saving ? 'default' : 'pointer',
+          opacity: saving ? 0.6 : 1,
+        }}
+      >
+        {saving ? 'Saving…' : 'Save filters'}
+      </button>
+    </div>
+  );
+}
+
 function SimpleToast({ message, onDone }) {
   useEffect(() => {
     const t = setTimeout(onDone, 3000);
@@ -175,13 +346,16 @@ export default function Profile() {
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { savedSearches, deleteSearch, saveSearch } = useSavedSearches(user);
+  const { savedSearches, deleteSearch, saveSearch, updateSearch } = useSavedSearches(user);
   const isDesktop = useDesktop();
 
   const [emailPrefs, setEmailPrefs] = useState(null);
   const [emailPrefsLoading, setEmailPrefsLoading] = useState(true);
   const [savingPrefs, setSavingPrefs] = useState(false);
   const [toast, setToast] = useState(null);
+
+  const [expandedSearchId, setExpandedSearchId] = useState(null);
+  const [savingSearchId, setSavingSearchId] = useState(null);
 
   // Locality picker state
   const [addingLocalities, setAddingLocalities] = useState(false);
@@ -247,10 +421,26 @@ export default function Profile() {
 
   async function addSelectedLocalities() {
     for (const loc of selectedNewLocs) {
-      await saveSearch({ location: loc });
+      await saveSearch({
+        location: loc,
+        bhk: '',
+        budget: null,
+        keywords: '',
+        sources: DEFAULT_SOURCES,
+      });
     }
     setAddingLocalities(false);
     setSelectedNewLocs(new Set());
+  }
+
+  async function saveSearchFilters(searchId, patch) {
+    setSavingSearchId(searchId);
+    try {
+      await updateSearch(searchId, patch);
+      setToast('Alert filters saved');
+    } finally {
+      setSavingSearchId(null);
+    }
   }
 
   if (loading) return (
@@ -451,10 +641,10 @@ export default function Profile() {
           </section>
         )}
 
-        {/* ── PREFERRED LOCALITIES ── */}
+        {/* ── EMAIL ALERT AREAS ── */}
         <section style={s.section}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <p style={{ ...s.sectionLabel, marginBottom: 0 }}>Preferred Localities</p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <p style={{ ...s.sectionLabel, marginBottom: 0 }}>Email Alert Areas</p>
             <button
               onClick={openLocalityPicker}
               style={{
@@ -475,9 +665,12 @@ export default function Profile() {
               }}
             >
               <i className="fa-solid fa-plus" style={{ fontSize: 10 }} />
-              <span>Add more</span>
+              <span>Add area</span>
             </button>
           </div>
+          <p style={{ ...s.monoSmall, fontSize: 10, marginBottom: 12, lineHeight: 1.45 }}>
+            Set locality and filters for digest emails. Search is unchanged.
+          </p>
 
           {/* ── Locality picker dropdown ── */}
           {addingLocalities && (
@@ -566,9 +759,9 @@ export default function Profile() {
 
           {savedSearches.length === 0 && !addingLocalities ? (
             <div style={{ ...s.card, textAlign: 'center', padding: '32px' }}>
-              <p style={s.monoSmall}>No preferred localities yet.</p>
+              <p style={s.monoSmall}>No email alert areas yet.</p>
               <p style={{ ...s.monoSmall, fontSize: 10, marginTop: 6 }}>
-                Tap + above to add localities, or save listings to auto-add them.
+                Tap + above to add a locality and set filters for your digest.
               </p>
             </div>
           ) : (
@@ -577,6 +770,8 @@ export default function Profile() {
                 const loc = search.location || search.name || '';
                 const disabled = (emailPrefs?.disabledLocalities || []);
                 const isEnabled = !disabled.some(d => d.toLowerCase() === loc.toLowerCase());
+                const isExpanded = expandedSearchId === search.id;
+                const chips = filterSummaryChips(search);
 
                 function toggleLocality(on) {
                   const updated = on
@@ -593,69 +788,74 @@ export default function Profile() {
                     padding: '12px 18px',
                     gap: 10,
                   }}>
-                    {/* Left: locality name */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedSearchId(isExpanded ? null : search.id)}
+                      style={{
+                        flex: 1, minWidth: 0, textAlign: 'left',
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        padding: 0, color: 'inherit',
+                      }}
+                    >
                       <p style={{ fontWeight: 400, fontSize: 15, opacity: isEnabled ? 1 : 0.45 }}>
                         {loc}
                       </p>
-                      {(search.bhk || formatBudget(search.budget)) && (
-                        <p style={{ ...s.monoSmall, fontSize: 10, marginTop: 2, opacity: isEnabled ? 1 : 0.45 }}>
-                          {[search.bhk, formatBudget(search.budget)].filter(Boolean).join(' · ')}
+                      {chips.length > 0 ? (
+                        <p style={{ ...s.monoSmall, fontSize: 10, marginTop: 4, opacity: isEnabled ? 1 : 0.45 }}>
+                          {chips.join(' · ')}
+                        </p>
+                      ) : (
+                        <p style={{ ...s.monoSmall, fontSize: 10, marginTop: 4, opacity: 0.5 }}>
+                          Any BHK · any budget · all sources
                         </p>
                       )}
-                    </div>
+                    </button>
 
-                    {/* Right: search icon + toggle + delete */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                      <Link
-                        to={`/app?q=${encodeURIComponent(loc)}`}
-                        aria-label={`Search ${loc}`}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedSearchId(isExpanded ? null : search.id)}
+                        aria-label={isExpanded ? 'Collapse filters' : 'Edit filters'}
                         style={{
-                          width: 30, height: 30, borderRadius: 7, flexShrink: 0,
+                          width: 30, height: 30, borderRadius: 7,
                           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          background: 'none',
-                          border: '1px solid var(--color-border)',
-                          color: 'var(--color-text-muted)',
-                          textDecoration: 'none',
-                          transition: 'border-color 0.2s, color 0.2s',
-                        }}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.borderColor = 'var(--color-amber)';
-                          e.currentTarget.style.color = 'var(--color-amber)';
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.borderColor = 'var(--color-border)';
-                          e.currentTarget.style.color = 'var(--color-text-muted)';
+                          background: 'none', border: '1px solid var(--color-border)',
+                          color: isExpanded ? 'var(--color-amber)' : 'var(--color-text-muted)',
+                          cursor: 'pointer', padding: 0,
                         }}
                       >
-                        <i className="fa-solid fa-magnifying-glass" style={{ fontSize: 11 }} />
-                      </Link>
+                        <i className={`fa-solid fa-chevron-${isExpanded ? 'up' : 'down'}`} style={{ fontSize: 10 }} />
+                      </button>
 
                       <Toggle checked={isEnabled} onChange={toggleLocality} />
 
                       <button
-                        onClick={() => removeSearch(search.id)}
+                        type="button"
+                        onClick={() => {
+                          if (expandedSearchId === search.id) setExpandedSearchId(null);
+                          removeSearch(search.id);
+                        }}
                         aria-label={`Remove ${loc}`}
                         style={{
                           width: 30, height: 30, borderRadius: 7, flexShrink: 0,
                           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                           background: 'none', border: '1px solid var(--color-border)',
                           color: 'var(--color-text-muted)', cursor: 'pointer',
-                          padding: 0, transition: 'border-color 0.2s, color 0.2s',
-                        }}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.borderColor = '#e05555';
-                          e.currentTarget.style.color = '#e05555';
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.borderColor = 'var(--color-border)';
-                          e.currentTarget.style.color = 'var(--color-text-muted)';
+                          padding: 0,
                         }}
                       >
                         <i className="fa-solid fa-trash-can" style={{ fontSize: 11 }} />
                       </button>
                     </div>
                   </div>
+
+                  {isExpanded && (
+                    <EmailAlertFilterEditor
+                      search={search}
+                      saving={savingSearchId === search.id}
+                      onSave={(patch) => saveSearchFilters(search.id, patch)}
+                    />
+                  )}
 
                   {i < savedSearches.length - 1 && <div style={s.divider} />}
                 </div>

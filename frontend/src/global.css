@@ -243,7 +243,7 @@ a, button { -webkit-tap-highlight-color: transparent; }
     display: none !important;
   }
 
-  /* Hide the entire AppHeader on desktop (sidebar handles navigation + avatar) */
+  /* Hide mobile header on desktop (sidebar handles navigation + avatar) */
   .nestiq-app-header {
     display: none !important;
   }

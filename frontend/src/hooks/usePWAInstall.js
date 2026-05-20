@@ -1,30 +1,36 @@
 import { useState, useEffect } from "react";
 import { posthog } from "../lib/posthog";
 
+function detectInstalled() {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true
+  );
+}
+
 /**
  * Shared hook for PWA install logic.
  *
  * Returns:
- *   canInstall  — true if the install option should be shown
- *   isInstalled — true if already running as installed PWA
- *   isIOS       — true on iPhone/iPad (needs manual share-sheet instructions)
- *   triggerInstall() — call on button click:
- *                      Android: fires native install prompt, resolves to "accepted"|"dismissed"
- *                      iOS:     returns "ios" so caller can show share-sheet tooltip
+ *   canInstall       — native prompt or iOS manual install available
+ *   isInstalled      — already running as installed PWA
+ *   isIOS            — iPhone/iPad Safari
+ *   hasNativePrompt  — beforeinstallprompt was captured (Android/Chrome)
+ *   triggerInstall() — "accepted"|"dismissed"|"ios"|"unavailable"
  */
 export function usePWAInstall() {
   const [installPrompt, setInstallPrompt] = useState(null);
-  const [isInstalled,   setIsInstalled]   = useState(false);
-  const [isIOS,         setIsIOS]         = useState(false);
+  const [isInstalled, setIsInstalled] = useState(detectInstalled);
+  const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
-    // Already running as installed PWA
-    if (window.matchMedia("(display-mode: standalone)").matches) {
+    if (detectInstalled()) {
       setIsInstalled(true);
       return;
     }
 
-    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !("MSStream" in window);
+    const ios =
+      /iphone|ipad|ipod/i.test(navigator.userAgent) && !("MSStream" in window);
     setIsIOS(ios);
 
     const onPrompt = (e) => {
@@ -34,14 +40,18 @@ export function usePWAInstall() {
     const onInstalled = () => {
       setIsInstalled(true);
       setInstallPrompt(null);
-      try { posthog.capture("app_installed", { platform: ios ? "android" : "unknown" }); } catch (_) {}
+      try {
+        posthog.capture("app_installed", {
+          platform: ios ? "ios" : "android",
+        });
+      } catch (_) {}
     };
 
     window.addEventListener("beforeinstallprompt", onPrompt);
-    window.addEventListener("appinstalled",        onInstalled);
+    window.addEventListener("appinstalled", onInstalled);
     return () => {
       window.removeEventListener("beforeinstallprompt", onPrompt);
-      window.removeEventListener("appinstalled",        onInstalled);
+      window.removeEventListener("appinstalled", onInstalled);
     };
   }, []);
 
@@ -57,7 +67,14 @@ export function usePWAInstall() {
     return outcome;
   };
 
-  const canInstall = !isInstalled && (!!installPrompt || isIOS);
+  const hasNativePrompt = !!installPrompt;
+  const canInstall = !isInstalled && (hasNativePrompt || isIOS);
 
-  return { canInstall, isInstalled, isIOS, triggerInstall };
+  return {
+    canInstall,
+    isInstalled,
+    isIOS,
+    hasNativePrompt,
+    triggerInstall,
+  };
 }
