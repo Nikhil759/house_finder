@@ -6,6 +6,7 @@ import DesktopSidebar from '../components/DesktopSidebar';
 import { useDesktop } from '../hooks/useDesktop';
 import { captureApiError } from '../lib/posthog';
 import { logStart, logSuccess, logError } from '../lib/apiLogger';
+import { pulseSourceLabel } from '../lib/pulseSources';
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -252,7 +253,7 @@ function SignalCard({ post }) {
             fontSize: 'var(--text-xs)',
             color: 'var(--color-text-muted)',
           }}>
-            via {post.source}
+            via {pulseSourceLabel(post.source)}
           </span>
         )}
       </div>

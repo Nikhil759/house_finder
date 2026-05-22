@@ -6,9 +6,15 @@ import DesktopSidebar from '../components/DesktopSidebar';
 import { useDesktop } from '../hooks/useDesktop';
 import { captureApiError } from '../lib/posthog';
 import { logStart, logSuccess, logError } from '../lib/apiLogger';
+import {
+  PULSE_LOCALITY_FEED_TABS,
+  matchesPulseLocalityTab,
+  pulseSourceColor,
+  pulseSourceLabel,
+} from '../lib/pulseSources';
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
-const FEED_TABS = ['All', 'Reddit', 'Telegram', 'News'];
+const FEED_TABS = PULSE_LOCALITY_FEED_TABS;
 const FEED_PAGE_SIZE = 5;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -83,14 +89,8 @@ const s = {
   },
 };
 
-const FEED_SOURCE_COLORS = {
-  reddit:   { color: '#F97316', bg: 'rgba(249,115,22,0.1)',  border: 'rgba(249,115,22,0.3)'  },
-  telegram: { color: '#38BDF8', bg: 'rgba(56,189,248,0.1)', border: 'rgba(56,189,248,0.3)'  },
-  news:     { color: '#60A5FA', bg: 'rgba(96,165,250,0.1)', border: 'rgba(96,165,250,0.3)'  },
-};
-
-function SourceBadge({ source }) {
-  const cfg = FEED_SOURCE_COLORS[(source || '').toLowerCase()] || null;
+function SourceBadge({ sourceKey }) {
+  const cfg = pulseSourceColor(sourceKey);
   return (
     <span style={{
       fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em',
@@ -100,7 +100,7 @@ function SourceBadge({ source }) {
       border: `1px solid ${cfg ? cfg.border : 'var(--color-border)'}`,
       borderRadius: 4, padding: '3px 8px',
     }}>
-      {source}
+      {pulseSourceLabel(sourceKey)}
     </span>
   );
 }
@@ -109,7 +109,7 @@ function FeedItem({ item }) {
   return (
     <article style={s.card}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <SourceBadge source={item.source} />
+        <SourceBadge sourceKey={item.sourceKey} />
         <span style={s.monoSmall}>{item.channel}</span>
         <span style={{ ...s.monoSmall, marginLeft: 'auto' }}>{item.timeAgo}</span>
       </div>
@@ -308,23 +308,18 @@ export default function PulseLocality() {
     : 1;
 
   const visibleFeed = useMemo(() => {
-    const srcLabel  = { reddit: 'Reddit', news: 'News', telegram: 'Telegram', nestiq: 'NestIQ' };
-    const filterMap = { Reddit: 'reddit', Telegram: 'telegram', News: 'news' };
-
-    let posts = feedPosts;
-    if (feedTab !== 'All') {
-      const src = filterMap[feedTab];
-      posts = src ? feedPosts.filter(p => p.source === src) : [];
-    }
+    const posts = feedTab === 'All'
+      ? feedPosts
+      : feedPosts.filter(p => matchesPulseLocalityTab(p, feedTab));
 
     return posts.map(p => ({
-      id:      p.id,
-      source:  srcLabel[p.source] || p.source,
-      channel: p.author || p.locality || '',
-      timeAgo: timeAgoShort(p.posted_at),
-      title:   p.title || '',
-      body:    decodeHTML(p.body) || '',
-      url:     p.url,
+      id:        p.id,
+      sourceKey: p.source,
+      channel:   p.author || p.locality || '',
+      timeAgo:   timeAgoShort(p.posted_at),
+      title:     p.title || '',
+      body:      decodeHTML(p.body) || '',
+      url:       p.url,
     }));
   }, [feedPosts, feedTab]);
 
