@@ -782,7 +782,7 @@ def score_post(post):
     if post.get("source") in ("zolo", "colive", "stanza"):
         # PG aggregators are persistent inventory — age of posted_at is meaningless
         # (scrapers stamp posted_at=now() on every run). Differentiate on data quality.
-        s = 35  # higher base: structured data with images, maps, and verified info
+        s = 40  # higher base: structured data with images, maps, and verified info
         if post.get("price") or post.get("rent"):
             s += 10
         if post.get("latitude") and post.get("longitude"):
