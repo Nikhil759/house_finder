@@ -19,6 +19,7 @@ const SOURCE_DEFS = [
   { id: '99acres',  label: '99acres',     icon: 'fa-solid fa-landmark',  color: '#0076BE' },
   { id: 'zolo',     label: 'Zolo',        icon: 'fa-solid fa-bed',       color: '#FF6F61' },
   { id: 'colive',   label: 'Colive',      icon: 'fa-solid fa-people-roof', color: '#00BFA5' },
+  { id: 'stanza',   label: 'Stanza',      icon: 'fa-solid fa-building-user', color: '#6C5CE7' },
 ];
 
 const s = {

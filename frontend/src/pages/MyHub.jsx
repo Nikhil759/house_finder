@@ -58,7 +58,7 @@ function formatPriceStr(val) {
   return `₹${n.toLocaleString('en-IN')}`;
 }
 
-const KNOWN_SOURCES = new Set(['reddit', 'nobroker', 'telegram', 'housing', '99acres', 'zolo', 'colive']);
+const KNOWN_SOURCES = new Set(['reddit', 'nobroker', 'telegram', 'housing', '99acres', 'zolo', 'colive', 'stanza']);
 
 function stableListingId(p) {
   const raw = (p.id || p.listing_id || '').toString();

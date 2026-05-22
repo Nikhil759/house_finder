@@ -1984,7 +1984,7 @@ export default function App() {
   const [keywords,       setKeywords]       = useState("");
   const [sortBy,         setSortBy]         = useState("score");
   const [minScore,       setMinScore]       = useState(20);
-  const [sources,        setSources]        = useState({ reddit: true, telegram: true, nobroker: true, housing: true, '99acres': true, zolo: true, colive: true });
+  const [sources,        setSources]        = useState({ reddit: true, telegram: true, nobroker: true, housing: true, '99acres': true, zolo: true, colive: true, stanza: true });
   const [posts,          setPosts]          = useState([]);
   const [loading,        setLoading]        = useState(false);
   const [error,          setError]          = useState("");
@@ -2156,7 +2156,7 @@ export default function App() {
     } else { setBudgetMax(0); setBudgetMin(0); }
     setKeywords(s.keywords || "");
     if (s.sources) {
-      const srcMap = { reddit: false, telegram: false, nobroker: false, housing: false, '99acres': false, zolo: false, colive: false };
+      const srcMap = { reddit: false, telegram: false, nobroker: false, housing: false, '99acres': false, zolo: false, colive: false, stanza: false };
       s.sources.forEach(src => { if (src in srcMap) srcMap[src] = true; });
       setSources(srcMap);
     }
@@ -2702,7 +2702,8 @@ export default function App() {
               const acresCount    = sorted.filter(p => p.source === "99acres").length;
               const zoloCount     = sorted.filter(p => p.source === "zolo").length;
               const coliveCount   = sorted.filter(p => p.source === "colive").length;
-              const multiSource   = (redditCount > 0 ? 1 : 0) + (telegramCount > 0 ? 1 : 0) + (nobrokerCount > 0 ? 1 : 0) + (housingCount > 0 ? 1 : 0) + (acresCount > 0 ? 1 : 0) + (zoloCount > 0 ? 1 : 0) + (coliveCount > 0 ? 1 : 0) > 1;
+              const stanzaCount   = sorted.filter(p => p.source === "stanza").length;
+              const multiSource   = (redditCount > 0 ? 1 : 0) + (telegramCount > 0 ? 1 : 0) + (nobrokerCount > 0 ? 1 : 0) + (housingCount > 0 ? 1 : 0) + (acresCount > 0 ? 1 : 0) + (zoloCount > 0 ? 1 : 0) + (coliveCount > 0 ? 1 : 0) + (stanzaCount > 0 ? 1 : 0) > 1;
               return (
                 <>
                   {newCount > 0 && viewMode !== "map" && (

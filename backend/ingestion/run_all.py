@@ -8,14 +8,17 @@ Each source is isolated so a failure in one doesn't block others.
 Preset pipelines (recommended):
     python -m ingestion.run_all pulse        # Reddit discussions → News → Tag
     python -m ingestion.run_all listings     # NoBroker → Housing → Telegram → Reddit listings
+    python -m ingestion.run_all pg           # Zolo → Colive → Stanza (PG-only)
 
 Individual sources:
     python -m ingestion.run_all discussions news tag
     python -m ingestion.run_all reddit
+    python -m ingestion.run_all stanza
 
 Scheduling guide:
-    pulse     — every 3 hours  (scrape discussions + news, then tag)
-    listings  — every 6 hours  (listing sources only)
+    pulse     — every 3 hours   (scrape discussions + news, then tag)
+    listings  — every 6 hours   (listing sources only)
+    pg        — every 12 hours  (PG aggregators: Zolo, Colive, Stanza)
 """
 
 from __future__ import annotations
@@ -37,6 +40,9 @@ SOURCES = {
     "99acres":     [sys.executable, "-m", "ingestion.ingest_99acres"],
     "telegram":    [sys.executable, "-m", "ingestion.ingest_telegram"],
     "reddit":      [sys.executable, "-m", "ingestion.ingest_reddit"],
+    "zolo":        [sys.executable, "-m", "ingestion.ingest_zolo"],
+    "colive":      [sys.executable, "-m", "ingestion.ingest_colive"],
+    "stanza":      [sys.executable, "-m", "ingestion.ingest_stanza"],
     "news":        [sys.executable, "-m", "ingestion.scrape_news"],
     "discussions": [sys.executable, "-m", "ingestion.scrape_reddit_discussions"],
     "tag":         [sys.executable, "-m", "ingestion.tag_locality_feed"],
@@ -45,6 +51,7 @@ SOURCES = {
 PIPELINES = {
     "pulse":    ["discussions", "news", "tag"],
     "listings": ["nobroker", "housing", "99acres", "telegram", "reddit"],
+    "pg":       ["zolo", "colive", "stanza"],
 }
 
 

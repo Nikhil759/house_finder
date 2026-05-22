@@ -47,6 +47,7 @@ const SOURCE_CONFIG = {
   '99acres': { label: '99acres',     color: '#0076BE', icon: 'fa-solid fa-landmark' },
   zolo:      { label: 'Zolo',        color: '#FF6F61', icon: 'fa-solid fa-bed' },
   colive:    { label: 'Colive',      color: '#00BFA5', icon: 'fa-solid fa-people-roof' },
+  stanza:    { label: 'Stanza',      color: '#6C5CE7', icon: 'fa-solid fa-building-user' },
 };
 
 const SOURCE_LABELS = Object.fromEntries(
@@ -144,7 +145,7 @@ const DEFAULT_FILTERS = {
   maxBudget: '',
   furnished: 'Any',
   keywords:  '',
-  sources:   { reddit: true, nobroker: true, housing: true, telegram: true, '99acres': true, zolo: true, colive: true },
+  sources:   { reddit: true, nobroker: true, housing: true, telegram: true, '99acres': true, zolo: true, colive: true, stanza: true },
   genderPref:       '',
   occupancy:        '',
   mealsIncluded:    false,
@@ -173,7 +174,7 @@ function scoreColor(score) {
   return '#555555';                               // muted gray
 }
 
-const KNOWN_SOURCES = new Set(['reddit', 'nobroker', 'telegram', 'housing', '99acres', 'zolo', 'colive']);
+const KNOWN_SOURCES = new Set(['reddit', 'nobroker', 'telegram', 'housing', '99acres', 'zolo', 'colive', 'stanza']);
 
 // Always returns a stable compound ID: "{source}_{source_id}"
 // Handles: DB listings (already compound), live NoBroker cache (nb_xxx), live Reddit (bare id)
@@ -1818,7 +1819,7 @@ export default function Search() {
     setLoading(true);
     const isDefaultLoad = !area;
     const params = new URLSearchParams({
-      sources:   'reddit,telegram,nobroker,housing,99acres,zolo,colive',
+      sources:   'reddit,telegram,nobroker,housing,99acres,zolo,colive,stanza',
       sort:      'score',
       min_score: isDefaultLoad ? 40 : 20,
       limit:     isDefaultLoad ? 20 : 50,
@@ -2107,7 +2108,7 @@ export default function Search() {
   const communityActive = quickFilters.has('community');
   Object.entries(SOURCE_CONFIG).forEach(([key, cfg]) => {
     if (!activeFilters.sources[key]) {
-                  if (communityActive && (key === 'nobroker' || key === 'housing' || key === '99acres' || key === 'zolo' || key === 'colive')) return;
+                  if (communityActive && (key === 'nobroker' || key === 'housing' || key === '99acres' || key === 'zolo' || key === 'colive' || key === 'stanza')) return;
       activePills.push(`No ${cfg.label}`);
     }
   });
@@ -2146,11 +2147,11 @@ export default function Search() {
   function toggleSourceFilter(rawSource) {
     // If community filter is active and user re-enables nobroker or housing,
     // treat it as "exit community mode" and turn that source back on
-    if (quickFilters.has('community') && (rawSource === 'nobroker' || rawSource === 'housing' || rawSource === '99acres' || rawSource === 'zolo' || rawSource === 'colive')) {
+    if (quickFilters.has('community') && (rawSource === 'nobroker' || rawSource === 'housing' || rawSource === '99acres' || rawSource === 'zolo' || rawSource === 'colive' || rawSource === 'stanza')) {
       setQuickFilters(prev => { const n = new Set(prev); n.delete('community'); return n; });
       setActiveFilters(prev => ({
         ...prev,
-        sources: { ...prev.sources, nobroker: true, housing: true, '99acres': true, zolo: true, colive: true },
+        sources: { ...prev.sources, nobroker: true, housing: true, '99acres': true, zolo: true, colive: true, stanza: true },
       }));
     } else {
       setActiveFilters(prev => ({
@@ -2171,7 +2172,7 @@ export default function Search() {
     if (sort === 'Top Rated') return [...listings].sort((a, b) => b.score - a.score);
     // Balanced
     const qualitySorted = [...listings].sort((a, b) => b.score - a.score);
-    const sourceOrder = ['nobroker', 'housing', '99acres', 'zolo', 'colive', 'reddit', 'telegram'];
+    const sourceOrder = ['nobroker', 'housing', '99acres', 'zolo', 'colive', 'stanza', 'reddit', 'telegram'];
     const buckets = Object.fromEntries(sourceOrder.map(s => [s, []]));
     const other = [];
     qualitySorted.forEach(p => {
@@ -3228,6 +3229,7 @@ export default function Search() {
                         '99acres': !turning_on,
                         zolo:      !turning_on,
                         colive:    !turning_on,
+                        stanza:    !turning_on,
                       },
                     }));
                   }
@@ -3312,7 +3314,7 @@ export default function Search() {
                 onClick={() => {
                   setQuickFilters(prev => { const n = new Set(prev); n.delete(key); return n; });
                   if (key === 'community') {
-                    setActiveFilters(f => ({ ...f, sources: { ...f.sources, nobroker: true, housing: true, '99acres': true, zolo: true, colive: true } }));
+                    setActiveFilters(f => ({ ...f, sources: { ...f.sources, nobroker: true, housing: true, '99acres': true, zolo: true, colive: true, stanza: true } }));
                   }
                   setPage(1);
                 }}

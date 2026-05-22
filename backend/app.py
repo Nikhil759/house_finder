@@ -779,7 +779,7 @@ def score_post(post):
     if post.get("source") == "99acres":
         return max(0, min(100, score + 15))
 
-    if post.get("source") in ("zolo", "colive"):
+    if post.get("source") in ("zolo", "colive", "stanza"):
         s = 30
         age = time.time() - post.get("created", 0)
         if age < 86400: s += 15
@@ -794,9 +794,11 @@ def score_post(post):
         ta = post.get("type_attributes") or {}
         if ta.get("gender_pref"):
             s += 5
-        if ta.get("occupancy"):
+        if ta.get("occupancy") or ta.get("occupancy_options"):
             s += 5
         if ta.get("attached_bathroom") is not None:
+            s += 5
+        if ta.get("rating"):
             s += 5
         return max(0, min(100, s))
 
@@ -1432,7 +1434,7 @@ def search():
         _buckets = defaultdict(list)
         for _post in all_posts:
             _buckets[_post["source"]].append(_post)
-        _source_order = ["nobroker", "housing", "99acres", "reddit", "telegram"]
+        _source_order = ["nobroker", "housing", "99acres", "zolo", "colive", "stanza", "reddit", "telegram"]
         _interleaved = []
         while any(_buckets[s] for s in _source_order):
             for _src in _source_order:

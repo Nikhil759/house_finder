@@ -1,0 +1,27 @@
+name: Ingest Stanza Living
+
+on:
+  schedule:
+    - cron: '30 6,18 * * *'   # twice daily — 12:00 PM and midnight IST
+  workflow_dispatch: {}       # manual trigger
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run Stanza Living ingestion
+        working-directory: backend
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: python -m ingestion.ingest_stanza

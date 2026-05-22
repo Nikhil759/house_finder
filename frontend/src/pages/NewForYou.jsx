@@ -19,6 +19,7 @@ const SOURCE_COLORS = {
   '99acres': '#0076be',
   zolo:      '#FF6F61',
   colive:    '#00BFA5',
+  stanza:    '#6C5CE7',
 }
 
 const SOURCE_ICONS = {
@@ -29,6 +30,7 @@ const SOURCE_ICONS = {
   '99acres': 'fa-solid fa-landmark',
   zolo:      'fa-solid fa-bed',
   colive:    'fa-solid fa-people-roof',
+  stanza:    'fa-solid fa-building-user',
 }
 
 const STATUS_STAGES = [
@@ -77,8 +79,8 @@ function MiniCard({ post, onSave, onHide, savedStatus }) {
   const isHousing = source === 'housing'
   const isNoBroker = source === 'nobroker'
   const is99Acres = source === '99acres'
-  const isStructured = isHousing || isNoBroker || is99Acres || source === 'telegram' || source === 'zolo' || source === 'colive'
-
+  const isStructured = isHousing || isNoBroker || is99Acres || source === 'telegram' || source === 'zolo' || source === 'colive' || source === 'stanza'
+  
   const displayPrice    = isStructured ? (post.price_formatted || (post.price ? `₹${post.price.toLocaleString()}` : null)) : null
   const displayBhk      = post.bhk
   const displayLocality = post.locality
@@ -242,7 +244,7 @@ function TrackingCard({ post, onStatusChange, onNotesChange, onUnsave }) {
   const isHousing   = source === 'housing'
   const isNoBroker  = source === 'nobroker'
   const is99Acres   = source === '99acres'
-  const isStructured = isHousing || isNoBroker || is99Acres || source === 'telegram' || source === 'zolo' || source === 'colive'
+  const isStructured = isHousing || isNoBroker || is99Acres || source === 'telegram' || source === 'zolo' || source === 'colive' || source === 'stanza'
   const displayPrice = isStructured
     ? (post.price_formatted || (post.price ? `₹${post.price.toLocaleString()}` : null))
     : null
