@@ -1434,9 +1434,13 @@ def search():
             )
         ]
 
-    # Use curated quality_score when available; fall back to legacy scorer
+    # Use curated quality_score when available; fall back to legacy scorer.
+    # PG aggregators (zolo/colive/stanza) always use score_post() — their
+    # curated scores were computed by a generic pipeline that doesn't understand
+    # PG-specific signals (ratings, occupancy, meals, etc.).
+    _PG_SOURCES = {"zolo", "colive", "stanza"}
     for post in all_posts:
-        if not post.get("detail_score"):
+        if not post.get("detail_score") or post.get("source") in _PG_SOURCES:
             post["quality_score"] = score_post(post)
 
     # Filter out low-quality posts
