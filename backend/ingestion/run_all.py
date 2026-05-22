@@ -6,19 +6,19 @@ Designed for cron / Railway: a single job that runs sources sequentially.
 Each source is isolated so a failure in one doesn't block others.
 
 Preset pipelines (recommended):
-    python -m ingestion.run_all pulse        # Reddit discussions → News → Tag
-    python -m ingestion.run_all listings     # NoBroker → Housing → Telegram → Reddit listings
-    python -m ingestion.run_all pg           # Zolo → Colive → Stanza (PG-only)
+    python -m ingestion.run_all pulse           # Full pulse (incl. Reddit — run locally)
+    python -m ingestion.run_all pulse_railway   # Railway cron: news sources + tag (no Reddit)
+    python -m ingestion.run_all listings        # NoBroker → Housing → Telegram → Reddit listings
+    python -m ingestion.run_all pg              # Zolo → Colive → Stanza (PG-only)
 
 Individual sources:
-    python -m ingestion.run_all discussions news tag
-    python -m ingestion.run_all reddit
-    python -m ingestion.run_all stanza
+    python -m ingestion.run_all discussions news google_news_rss citizen_matters tag
 
-Scheduling guide:
-    pulse     — every 3 hours   (scrape discussions + news, then tag)
-    listings  — every 6 hours   (listing sources only)
-    pg        — every 12 hours  (PG aggregators: Zolo, Colive, Stanza)
+Scheduling:
+    pulse_railway — every 3 hours on Railway Cron
+    pulse (discussions only) — every 6 hours on local macOS crontab (Reddit blocks Railway IPs)
+    listings  — every 6 hours on Railway Cron
+    pg        — every 12 hours on Railway Cron
 """
 
 from __future__ import annotations
@@ -43,15 +43,18 @@ SOURCES = {
     "zolo":        [sys.executable, "-m", "ingestion.ingest_zolo"],
     "colive":      [sys.executable, "-m", "ingestion.ingest_colive"],
     "stanza":      [sys.executable, "-m", "ingestion.ingest_stanza"],
-    "news":        [sys.executable, "-m", "ingestion.scrape_news"],
-    "discussions": [sys.executable, "-m", "ingestion.scrape_reddit_discussions"],
+    "news":              [sys.executable, "-m", "ingestion.scrape_news"],
+    "google_news_rss":   [sys.executable, "-m", "ingestion.scrape_google_news_rss"],
+    "citizen_matters":   [sys.executable, "-m", "ingestion.scrape_citizen_matters"],
+    "discussions":       [sys.executable, "-m", "ingestion.scrape_reddit_discussions"],
     "tag":         [sys.executable, "-m", "ingestion.tag_locality_feed"],
 }
 
 PIPELINES = {
-    "pulse":    ["discussions", "news", "tag"],
-    "listings": ["nobroker", "housing", "99acres", "telegram", "reddit"],
-    "pg":       ["zolo", "colive", "stanza"],
+    "pulse":          ["discussions", "news", "google_news_rss", "citizen_matters", "tag"],
+    "pulse_railway":  ["news", "google_news_rss", "citizen_matters", "tag"],
+    "listings":       ["nobroker", "housing", "99acres", "telegram", "reddit"],
+    "pg":             ["zolo", "colive", "stanza"],
 }
 
 

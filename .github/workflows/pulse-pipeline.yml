@@ -1,9 +1,10 @@
+# Pulse pipeline — manual fallback only.
+# Production crons run on Railway (see backend/scripts/run_pulse_railway_cron.sh).
+
 name: Pulse Pipeline
 
 on:
-  schedule:
-    - cron: '0 */3 * * *'    # every 3 hours
-  workflow_dispatch: {}       # manual trigger
+  workflow_dispatch: {}
 
 jobs:
   pulse:
@@ -19,12 +20,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r backend/requirements.txt
 
-      - name: Run Pulse pipeline (discussions → news → tag)
+      - name: Run Pulse pipeline (Railway subset — no Reddit)
         working-directory: backend
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
-          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python -m ingestion.run_all pulse
+        run: python -m ingestion.run_all pulse_railway

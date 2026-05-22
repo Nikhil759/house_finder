@@ -9,7 +9,7 @@ Listings: run_post_ingest_transforms(source, started_at)
 Pulse: run_post_pulse_transforms(source)
   - Gemini tagging (all sources)
   - Category filter (all sources)
-  - News dedup (news source only)
+  - News dedup (news, google_news_rss, citizen_matters — cross-source)
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from transforms.db import record_transform_start, record_transform_end
 logger = logging.getLogger(__name__)
 
 UNSTRUCTURED_SOURCES = ("reddit", "telegram")
+NEWS_LIKE_SOURCES = frozenset({"news", "google_news_rss", "citizen_matters"})
 
 
 # ─────────────────────────────────────────────
@@ -141,7 +142,7 @@ def run_post_pulse_transforms(source: str):
     _run_gemini_tagging(source)
     _run_category_filter(source)
 
-    if source == "news":
+    if source in NEWS_LIKE_SOURCES:
         _run_news_dedup()
 
     logger.info("Post-pulse transforms complete for %s", source)

@@ -50,6 +50,9 @@ EXCLUDED_CATEGORIES = {"listing", "flatmate_search", "spam"}
 
 NEWS_DEDUP_THRESHOLD = 85
 NEWS_DEDUP_LOOKBACK_HOURS = 48
+NEWS_LIKE_SOURCES = ("news", "google_news_rss", "citizen_matters")
+# Lower = preferred when titles match and engagement is equal.
+SOURCE_QUALITY = {"citizen_matters": 0, "news": 1, "google_news_rss": 2}
 
 
 # ─────────────────────────────────────────────
@@ -189,39 +192,48 @@ def run_category_filter(source: str):
 def run_news_dedup():
     """
     Near-duplicate news article detection (>85% title similarity).
+    Runs across NewsAPI, Google News RSS, and Citizen Matters.
     Keeps the higher-engagement version, removes the duplicate from feed_curated.
     """
     started_at = datetime.now(timezone.utc)
-    run_id = record_transform_start("news_dedup", "news")
+    run_id = record_transform_start("news_dedup", "news_sources")
 
     try:
         conn = get_connection()
         cur = conn.cursor()
 
         cur.execute("""
-            SELECT lf.id, lf.title, lf.engagement
+            SELECT lf.id, lf.title, lf.engagement, lf.source
             FROM locality_feed lf
             JOIN feed_curated fc ON fc.feed_id = lf.id
-            WHERE lf.source = 'news'
+            WHERE lf.source = ANY(%s)
               AND lf.scraped_at > NOW() - INTERVAL '%s hours'
               AND lf.title IS NOT NULL
-            ORDER BY lf.engagement DESC
-        """, (NEWS_DEDUP_LOOKBACK_HOURS,))
+            ORDER BY lf.engagement DESC, lf.scraped_at DESC
+        """, (list(NEWS_LIKE_SOURCES), NEWS_DEDUP_LOOKBACK_HOURS))
         rows = cur.fetchall()
 
         duplicates_removed = 0
-        seen_titles: list[tuple[int, str, int]] = []
+        seen_titles: list[tuple[int, str, int, str]] = []
         ids_to_remove: set[int] = set()
 
-        for feed_id, title, engagement in rows:
+        for feed_id, title, engagement, src in rows:
             if feed_id in ids_to_remove:
                 continue
 
             is_dup = False
-            for seen_id, seen_title, seen_eng in seen_titles:
+            for seen_id, seen_title, seen_eng, seen_src in seen_titles:
                 similarity = fuzz.ratio(title.lower(), seen_title.lower())
                 if similarity >= NEWS_DEDUP_THRESHOLD:
-                    if engagement <= seen_eng:
+                    keep_existing = (
+                        engagement < seen_eng
+                        or (
+                            engagement == seen_eng
+                            and SOURCE_QUALITY.get(src, 99)
+                            > SOURCE_QUALITY.get(seen_src, 99)
+                        )
+                    )
+                    if keep_existing:
                         ids_to_remove.add(feed_id)
                     else:
                         ids_to_remove.add(seen_id)
@@ -229,7 +241,7 @@ def run_news_dedup():
                     break
 
             if not is_dup:
-                seen_titles.append((feed_id, title, engagement))
+                seen_titles.append((feed_id, title, engagement, src))
 
         if ids_to_remove:
             cur.execute(
