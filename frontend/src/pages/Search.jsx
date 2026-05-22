@@ -328,6 +328,69 @@ function PillToggle({ label, active, onClick, activeColor }) {
   );
 }
 
+function SortBar({ sort, onSortChange, scrollable = false, embedded = false }) {
+  const dimAmber = 'rgba(232, 160, 32, 0.55)';
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: embedded ? 0 : 16,
+      ...(scrollable ? { overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } : {}),
+    }}>
+      {!embedded && (
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          color: 'var(--color-text-muted)',
+          whiteSpace: 'nowrap',
+          flexShrink: 0,
+        }}>
+          View
+        </span>
+      )}
+      <div style={{
+        display: 'inline-flex',
+        background: 'var(--color-bg-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 8,
+        padding: 3,
+        gap: 2,
+        flexShrink: 0,
+      }}>
+        {SORT_OPTIONS.map(opt => {
+          const active = sort === opt;
+          return (
+            <button
+              key={opt}
+              onClick={() => onSortChange(opt)}
+              style={{
+                fontFamily: 'var(--font-sans)',
+                fontSize: 12,
+                fontWeight: active ? 500 : 400,
+                letterSpacing: '-0.01em',
+                background: active ? 'var(--color-bg-card)' : 'transparent',
+                color: active ? dimAmber : 'var(--color-text-muted)',
+                border: active ? `1px solid ${dimAmber}` : '1px solid transparent',
+                borderRadius: 6,
+                padding: '6px 14px',
+                cursor: 'pointer',
+                transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+                whiteSpace: 'nowrap',
+                boxShadow: active ? '0 1px 2px rgba(0,0,0,0.2)' : 'none',
+              }}
+            >
+              {opt}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function BudgetInput({ placeholder, value, onChange }) {
   return (
     <input
@@ -610,16 +673,7 @@ function FilterBottomSheet({ open, onClose, initialFilters, initialSort, onApply
 
           {/* View */}
           <SheetSection label="View">
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {SORT_OPTIONS.map(opt => (
-                <PillToggle
-                  key={opt}
-                  label={opt}
-                  active={draftSort === opt}
-                  onClick={() => setDraftSort(opt)}
-                />
-              ))}
-            </div>
+            <SortBar sort={draftSort} onSortChange={setDraftSort} embedded />
           </SheetSection>
 
           {/* Sources */}
@@ -2613,16 +2667,6 @@ export default function Search() {
                 </div>
               )}
 
-              {/* Sort */}
-              <div style={{ marginBottom: 20 }}>
-                <p style={monoLabel}>View</p>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {SORT_OPTIONS.map(opt => (
-                    <PillToggle key={opt} label={opt} active={sort === opt} onClick={() => setSort(opt)} />
-                  ))}
-                </div>
-              </div>
-
               {/* Reset */}
               <button
                 onClick={() => {
@@ -2760,6 +2804,9 @@ export default function Search() {
                 })}
               </div>
             )}
+
+            {/* Sort bar */}
+            <SortBar sort={sort} onSortChange={setSort} />
 
             {/* Results */}
             {searchError ? (
@@ -3454,47 +3501,8 @@ export default function Search() {
         )}
 
         {/* Sort bar */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          marginBottom: 16,
-          overflowX: 'auto',
-          scrollbarWidth: 'none',
-        }}>
-          <span style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10,
-            letterSpacing: '0.1em',
-            textTransform: 'uppercase',
-            color: 'var(--color-text-muted)',
-            whiteSpace: 'nowrap',
-            flexShrink: 0,
-          }}>
-            View
-          </span>
-          {SORT_OPTIONS.map(opt => (
-            <button
-              key={opt}
-              onClick={() => setSort(opt)}
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-                letterSpacing: '0.05em',
-                background: sort === opt ? 'var(--color-amber)' : 'var(--color-bg-surface)',
-                color: sort === opt ? '#1a0a00' : 'var(--color-text-muted)',
-                border: sort === opt ? 'none' : '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-pill)',
-                padding: '6px 14px',
-                cursor: 'pointer',
-                transition: 'background 0.2s, color 0.2s',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
+        <SortBar sort={sort} onSortChange={setSort} scrollable />
+
       </div>
 
       {/* ── RESULTS ── */}

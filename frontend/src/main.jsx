@@ -19,6 +19,7 @@ import Stats from "./pages/Stats";
 import LocalityGuide from "./pages/LocalityGuide";
 import LocalityDetail from "./pages/LocalityDetail";
 import PostHogRouteTracker from "./components/PostHogRouteTracker";
+import ScrollToTop from "./components/ScrollToTop";
 import { initPostHog } from "./lib/posthog";
 import { useAuth } from "./hooks/useAuth";
 
@@ -46,6 +47,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ThemeProvider>
       <BrowserRouter>
+        <ScrollToTop />
         <PostHogRouteTracker />
         <Routes>
           <Route path="/" element={<LandingPage />} />
