@@ -780,48 +780,50 @@ def score_post(post):
         return max(0, min(100, score + 15))
 
     if post.get("source") in ("zolo", "colive", "stanza"):
-        # PG aggregators are persistent inventory — age of posted_at is meaningless
-        # (scrapers stamp posted_at=now() on every run). Differentiate on data quality.
-        s = 40  # higher base: structured data with images, maps, and verified info
-        if post.get("price") or post.get("rent"):
-            s += 10
-        if post.get("latitude") and post.get("longitude"):
-            s += 10
-        # Graded image bonus: any images = +5, gallery (5+) = +8
+        # PG aggregators: guaranteed floor of 75, data-quality bonus capped at +15 → max 90.
+        # This keeps all PG scores in the 75–90 band regardless of how complete the
+        # stored data is (avoids 0 scores when type_attributes is empty on older rows).
+        s = 75
+
+        quality = 0
+        # Images
         img_count = post.get("image_count") or (1 if post.get("thumbnail_url") else 0)
         if img_count >= 5:
-            s += 8
+            quality += 5
         elif img_count > 0:
-            s += 5
-        ta = post.get("type_attributes") or {}
+            quality += 3
+
+        ta = post.get("type_attributes") if isinstance(post.get("type_attributes"), dict) else {}
         if ta.get("gender_pref"):
-            s += 5
+            quality += 2
         if ta.get("occupancy") or ta.get("occupancy_options"):
-            s += 5
+            quality += 2
         if ta.get("attached_bathroom") is not None:
-            s += 5
-        # Meals included is a significant differentiator (mostly Zolo)
+            quality += 2
+        # Meals included (Zolo differentiator)
         if ta.get("meals_included"):
-            s += 5
-        # Active discount on rent (Zolo)
+            quality += 4
+        # Active discount (Zolo)
         try:
             if float(ta.get("discount_pct") or 0) > 0:
-                s += 3
+                quality += 2
         except (TypeError, ValueError):
             pass
         # Confirmed available beds (Colive)
         try:
             if int(ta.get("available_beds") or 0) > 0:
-                s += 3
+                quality += 2
         except (TypeError, ValueError):
             pass
-        # Use rating proportionally so higher-rated properties score better (Stanza, Colive)
+        # Rating proportional (Stanza, Colive): 3.0 → +5, 4.0 → +6, 5.0 → +8
         try:
             rating = float(ta.get("rating") or 0)
             if rating > 0:
-                s += int((rating / 5.0) * 10)   # 3.0 → +6, 4.0 → +8, 5.0 → +10
+                quality += int((rating / 5.0) * 8)
         except (TypeError, ValueError):
             pass
+
+        s += min(quality, 15)  # cap quality bonus so max score = 90
         return max(0, min(100, s))
 
     broker_hits = sum(1 for s in _BROKER_SIGNALS if s in text)
