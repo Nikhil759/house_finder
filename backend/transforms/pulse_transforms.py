@@ -414,19 +414,7 @@ def run_editor_agent():
         conn = get_connection()
         cur = conn.cursor()
 
-        cur.execute("""
-            SELECT lf.id, lf.title, lf.body, lf.locality, lf.source,
-                   lf.canonical_topic, lf.sentiment_score, lf.relevance_score
-            FROM locality_feed lf
-            JOIN feed_curated fc ON fc.feed_id = lf.id
-            WHERE lf.scraped_at > NOW() - INTERVAL '24 hours'
-              AND lf.relevance_score > 0.6
-              AND lf.category IN ('discussion', 'news')
-              AND (fc.featured IS NULL OR fc.featured = FALSE)
-            ORDER BY (lf.sentiment_score * lf.relevance_score) DESC
-            LIMIT 200
-        """)
-        pool = cur.fetchall()
+        pool = _fetch_editor_pool(cur)
 
         if len(pool) < 3:
             logger.info("Editor agent: pool too small (%d posts), skipping", len(pool))
@@ -507,6 +495,50 @@ def run_editor_agent():
         )
 
 
+def _fetch_editor_pool(cur) -> list[tuple]:
+    """Balanced pool of high-sentiment posts from the last 24 hours."""
+    base_sql = """
+        FROM locality_feed lf
+        JOIN feed_curated fc ON fc.feed_id = lf.id
+        WHERE lf.scraped_at > NOW() - INTERVAL '24 hours'
+          AND lf.relevance_score > 0.6
+          AND lf.category IN ('discussion', 'news')
+          AND lf.sentiment_score IS NOT NULL
+          AND (fc.featured IS NULL OR fc.featured = FALSE)
+    """
+    cols = (
+        "lf.id, lf.title, lf.body, lf.locality, lf.source, "
+        "lf.canonical_topic, lf.sentiment_score, lf.relevance_score"
+    )
+
+    cur.execute(f"""
+        SELECT {cols}
+        {base_sql}
+          AND lf.sentiment_score >= 0.3
+        ORDER BY (lf.sentiment_score * lf.relevance_score) DESC
+        LIMIT 100
+    """)
+    positive = cur.fetchall()
+
+    cur.execute(f"""
+        SELECT {cols}
+        {base_sql}
+          AND lf.sentiment_score <= -0.3
+        ORDER BY (ABS(lf.sentiment_score) * lf.relevance_score) DESC
+        LIMIT 100
+    """)
+    negative = cur.fetchall()
+
+    seen = set()
+    pool = []
+    for row in positive + negative:
+        if row[0] in seen:
+            continue
+        seen.add(row[0])
+        pool.append(row)
+    return pool[:200]
+
+
 def _build_editor_prompt(pool: list[tuple]) -> str:
     header = """\
 You are a city news editor for Bengaluru. From the posts below, pick the 10–15 most \
@@ -520,8 +552,13 @@ For each selected post, return a JSON array element with:
 Criteria for selection:
 - Directly affects residents' daily life (water, safety, rent changes, infra)
 - Unique insight or breaking news
-- High community engagement or strong sentiment
+- Strong sentiment (|sentiment_score| >= 0.3) — skip bland neutral posts unless truly breaking
 - Geographic diversity (don't pick 5 posts about the same locality)
+
+Sentiment balance (required):
+- Include at least 4 picks with sentiment_score >= 0.3 (positive)
+- Include at least 4 picks with sentiment_score <= -0.3 (negative)
+- Do not let more than 60% of your picks share the same sentiment sign
 
 Skip: generic complaints, repetitive topics, low-relevance chatter.
 

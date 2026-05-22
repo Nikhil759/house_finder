@@ -558,11 +558,14 @@ def _days_since_iso(iso_str):
 
 def pulse_feed_replica(locality=None, topic=None, limit=50) -> dict:
     """SQLite replica of /api/pulse/feed."""
+    from pulse_feed_ranking import rank_pulse_feed
+
     conn = get_connection()
     try:
         where_clauses = [
             "lf.category IN ('discussion', 'news')",
             "lf.relevance_score >= 0.3",
+            "lf.sentiment_score IS NOT NULL",
             "strftime('%Y-%m-%d %H:%M:%S', lf.scraped_at) >= strftime('%Y-%m-%d %H:%M:%S', datetime('now', '-7 days'))",
         ]
         params = []
@@ -595,7 +598,7 @@ def pulse_feed_replica(locality=None, topic=None, limit=50) -> dict:
                      lf.relevance_score DESC, lf.scraped_at DESC
             LIMIT ?
             """,
-            params + [limit * 3],
+            params + [limit * 4],
         )
         cols = [d[0] for d in cur.description]
         rows = cur.fetchall()
@@ -606,18 +609,7 @@ def pulse_feed_replica(locality=None, topic=None, limit=50) -> dict:
             d["detected_localities"] = _json_loads_safe(d.get("detected_localities")) or []
             posts.append(d)
 
-        for p in posts:
-            days_old = _days_since_iso(p.get("scraped_at"))
-            p["_decay_score"] = (p.get("relevance_score") or 0) * math.exp(-0.5 * days_old)
-
-        posts.sort(key=lambda p: (
-            -(p.get("featured") or 0),
-            p.get("editor_rank") or 9999,
-            -p["_decay_score"],
-        ))
-        posts = posts[:limit]
-        for p in posts:
-            del p["_decay_score"]
+        posts = rank_pulse_feed(posts, limit=limit)
 
         # City-wide sentiment (7 days)
         row = conn.execute("""

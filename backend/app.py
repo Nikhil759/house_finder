@@ -2409,7 +2409,7 @@ def pulse_feed():
             params.append(topic)
 
         where_sql = (" AND " + " AND ".join(where_clauses)) if where_clauses else ""
-        params.append(limit_val)
+        params.append(limit_val * 4)
 
         cur.execute(f"""
             SELECT
@@ -2423,6 +2423,7 @@ def pulse_feed():
             JOIN locality_feed lf ON lf.id = fc.feed_id
             WHERE lf.category IN ('discussion', 'news')
               AND lf.relevance_score >= 0.3
+              AND lf.sentiment_score IS NOT NULL
               AND lf.scraped_at >= NOW() - INTERVAL '7 days'
               {where_sql}
             ORDER BY fc.featured DESC, fc.editor_rank ASC NULLS LAST,
@@ -2437,6 +2438,9 @@ def pulse_feed():
             for k, v in r.items():
                 if hasattr(v, "isoformat"):
                     r[k] = v.isoformat()
+
+        from pulse_feed_ranking import rank_pulse_feed
+        rows = rank_pulse_feed(rows, limit=limit_val)
 
         # City-wide sentiment (all posts, last 7 days).
         # Intentionally a shorter window than per-locality / scoring (30d): the
