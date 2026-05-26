@@ -1,71 +1,63 @@
 """Shared Reva tweet generation logic."""
 
+from __future__ import annotations
+
 import os
 import random
 import re
 
 import google.generativeai as genai
 
-LITERARY_MODE_CHANCE = 0.25
-POSITIVE_MODE_CHANCE = 0.30
-
 RECENT_TWEET_LIMIT = 12
 MAX_GENERATION_ATTEMPTS = 3
 COVERAGE_LOOKBACK_DAYS = 7
+SOURCE_LINK_CHANCE = 0.5
+TWEET_BODY_MAX_WITH_LINK = 215
+TWITTER_MAX_CHARS = 280
+TCO_URL_LENGTH = 23
 
-NEGATIVE_STYLE_MODIFIERS = [
-    "Write this as a dry observation, like you just noticed something no one else was saying out loud.",
-    "Write this like you're gently roasting Bangalore's rental market — fondly, not furiously.",
-    "Find the absurd detail in this and make that the whole tweet. Deadpan delivery.",
-    "Write this like someone who has accepted the chaos and found it kind of funny.",
-    "The vibe is: you've cracked the code on something renters haven't admitted to themselves yet.",
-    "Write this like a plot twist reveal — the data is the punchline.",
-    "Dry humor. The kind where you smile before you realize it's also kind of sad.",
-    "Write this like you're texting a friend who is about to make a mistake renting in this area.",
-    "Open with a specific detail, not a general statement.",
-    "The tone is: amused, not annoyed.",
-]
 
-POSITIVE_STYLE_MODIFIERS = [
-    "Quietly pleased. Something actually went right for renters — note it without turning into a celebration post.",
-    "Understated good news. The vibe is a small nod, not a parade.",
-    "Playful but dry. Like you're mildly smug that renters caught a break for once.",
-    "Warm group-chat energy. Share the win like you'd text a friend, not like you're posting a testimonial.",
-    "Find the one detail that makes this good news feel real and specific — not generic optimism.",
-    "Light and witty. Good news without sounding like you're selling hope.",
-    "The tone is: pleasantly surprised Bangalore didn't disappoint for once.",
-    "Cheerful without cheerleading. Grounded in the data, not vibes alone.",
-]
+def _app_url() -> str:
+    return os.getenv("APP_URL", "https://nestiq.homes").rstrip("/")
 
 LITERARY_STYLE_MODIFIERS = [
-    "Write in the spirit of Dostoevsky: one simple sentence about guilt or compromise in renting. Plain words, heavy feeling. No philosophy lecture.",
-    "Write in the spirit of Kafka: describe the rental process like a ridiculous rule everyone follows. Simple, deadpan, immediately clear.",
-    "Write in the spirit of Hemingway: short sentences. Everyday words. Say exactly what happened.",
+    "Write in the spirit of Dostoevsky: one plain sentence about guilt or compromise in renting. Heavy feeling, simple words. No philosophy lecture.",
+    "Write in the spirit of Orwell: plain English, moral clarity, controlled anger. Say exactly what is happening to renters. No ornament.",
+    "Write in the spirit of R.K. Narayan: gentle, observational, human. Small-town wisdom applied to Bangalore renting. Warm, not sentimental.",
+    "Write in the spirit of Satyajit Ray: humanist and cinematic. One quiet moment that reveals character. Dignity in ordinary struggle.",
+    "Write in the spirit of Ruskin Bond: deceptively simple. One small detail, warm melancholy. Like a note from a window overlooking the city.",
+    "Write in the spirit of Kafka: the rental process as a ridiculous rule everyone follows. Deadpan, immediately clear, slightly absurd.",
     "Write in the spirit of Chekhov: quiet melancholy about ordinary life. Something small and sad and true about renting here.",
-    "Write in the spirit of Vonnegut: darkly funny, humane, slightly cosmic. So it goes. Renting here is ridiculous and you notice.",
-    "Write in the spirit of Wilde: one witty line anyone gets. Clever, not clever-clever.",
-    "Write in the spirit of Gogol: the rental market as slightly grotesque comedy. Uncomfortable and funny, but easy to follow.",
+    "Write in the spirit of Manto: unflinching slice of life. No sentimentality. Say what actually happened, plainly.",
     "Write in the spirit of Murakami: something mundane about this listing becomes quietly strange. Lonely, specific detail, simple words.",
-    "Write in the spirit of R.K. Narayan: gentle, observational, human. Small-town wisdom applied to big-city renting.",
-    "Write in the spirit of Orwell: plain English, moral clarity, controlled anger. No ornament. Say what is actually happening to renters.",
+    "Write in the spirit of Vonnegut: darkly funny, humane, slightly cosmic. Renting here is ridiculous and you notice.",
 ]
 
+LITERARY_POSITIVE_STYLE_MODIFIERS = [
+    "Write in the spirit of R.K. Narayan: gentle, observational, human. Small-town wisdom applied to Bangalore renting. Warm, not sentimental.",
+    "Write in the spirit of Satyajit Ray: humanist and cinematic. One quiet moment that reveals character. Dignity in ordinary struggle.",
+    "Write in the spirit of Ruskin Bond: deceptively simple. One small detail, warm melancholy. Like a note from a window overlooking the city.",
+    "Write in the spirit of Chekhov: quiet tenderness about ordinary life. Something small and true that went right for once.",
+    "Write in the spirit of Vonnegut: darkly funny, humane, slightly cosmic. A small mercy in a ridiculous rental market.",
+]
+
+LITERARY_SENTIMENT_HINTS = {
+    "positive": (
+        "This signal is genuinely good for renters. Express quiet relief or understated hope — "
+        "no hype, no exclamation marks, no words like amazing or incredible. Name one specific win."
+    ),
+    "negative": (
+        "This signal is hard for renters. Let the literary voice carry weight, irony, or melancholy."
+    ),
+    "neutral": (
+        "Find the human truth in this signal. Observational and specific."
+    ),
+}
+
+MODE = "literary"
+
 MODE_LABELS = {
-    "default": "Pulse Drop",
-    "positive": "Pulse Drop — Good News",
     "literary": "Pulse Drop — Literary",
-}
-
-MODE_STYLE_POOLS = {
-    "default": NEGATIVE_STYLE_MODIFIERS,
-    "positive": POSITIVE_STYLE_MODIFIERS,
-    "literary": LITERARY_STYLE_MODIFIERS,
-}
-
-MODE_LOG_NAMES = {
-    "default": "pulse_drop",
-    "positive": "pulse_drop_positive",
-    "literary": "pulse_drop_literary",
 }
 
 SYSTEM_PROMPT = """
@@ -76,13 +68,12 @@ Bangalorean who knows the rental market deeply and is always on
 the renter's side.
 
 Your voice:
+- Literary in rhythm and worldview — always in the spirit of a great author, never parody
 - Smart but never smug
-- Dry wit, not slapstick
+- Dry wit when the signal is hard; quiet warmth when the signal is good
 - Opinionated but grounded in real data
-- Warm underneath the sarcasm
 - You speak like a friend who lives in Bangalore, not a startup
-- When the signal is good news, be quietly cheerful — pleased, not hypey
-- In literary mode, prioritize voice and rhythm — still plain and readable
+- When the signal is good news, be quietly pleased — understated, not hypey
 
 Accessibility:
 - Write for a smart person scrolling Twitter — not a literature seminar
@@ -92,35 +83,23 @@ Accessibility:
 - Locality names are fine. Avoid jargon only longtime renters would know
 
 Hard rules:
-- Max 240 characters
+- Max 215 characters (a link is appended after your text)
 - No hashtags
 - No em dashes
 - No corporate phrases
 - Never explain the joke
 - Never start with "I"
 - One idea per tweet. Never two.
+- Do not name the author in the tweet
 """
 
-TASK_BY_MODE = {
-    "default": (
-        "Task: Write a tweet grounded in this signal. Find the tension, the irony, "
-        "or the truth that most people feel but haven't said. There must be a point "
-        "of view — not just a stat."
-    ),
-    "positive": (
-        "Task: Write a tweet about something genuinely good or hopeful for renters in "
-        "this signal. Be cheerful and playful, but understated — no exclamation marks, "
-        "no hype words (amazing, incredible, game-changer), no fanboying of platforms "
-        "or brokers. Name the specific win. Still sharp and specific, not saccharine."
-    ),
-    "literary": (
-        "Task: Write a tweet grounded in this rental signal, in the literary voice "
-        "described below. Capture rhythm and worldview — not vocabulary, not parody, "
-        "do not name the author. No archaic English. No abstract philosophy. "
-        "If a friend who hasn't read the author wouldn't get it in one glance, simplify. "
-        "Still specific to this locality and topic."
-    ),
-}
+TASK_LITERARY = (
+    "Task: Write a tweet grounded in this rental signal, in the literary voice "
+    "described below. Capture rhythm and worldview — not vocabulary, not parody. "
+    "No archaic English. No abstract philosophy. "
+    "If a friend who hasn't read the author wouldn't get it in one glance, simplify. "
+    "Still specific to this locality and topic."
+)
 
 _POST_SELECT = """
     SELECT
@@ -132,6 +111,7 @@ _POST_SELECT = """
         lf.title,
         lf.body,
         lf.source,
+        lf.url,
         fc.is_trending,
         fc.editor_rank,
         fc.editor_note
@@ -160,6 +140,7 @@ _CURATED_LIST_SELECT = """
         lf.title,
         lf.body,
         lf.source,
+        lf.url,
         fc.is_trending,
         fc.editor_rank,
         fc.editor_note
@@ -178,19 +159,87 @@ _CURATED_LIST_SELECT = """
 
 
 def pick_mode():
-    roll = random.random()
-    if roll < LITERARY_MODE_CHANCE:
-        return "literary"
-    if roll < LITERARY_MODE_CHANCE + POSITIVE_MODE_CHANCE:
-        return "positive"
-    return "default"
+    return MODE
 
 
-def pick_style_modifier(mode, exclude=None):
-    pool = [s for s in MODE_STYLE_POOLS[mode] if s != exclude]
-    if not pool:
-        pool = MODE_STYLE_POOLS[mode]
+def pick_style_modifier(post, exclude=None):
+    if _sentiment_label(post) == "positive":
+        pool = [s for s in LITERARY_POSITIVE_STYLE_MODIFIERS if s != exclude]
+        if not pool:
+            pool = LITERARY_POSITIVE_STYLE_MODIFIERS
+    else:
+        pool = [s for s in LITERARY_STYLE_MODIFIERS if s != exclude]
+        if not pool:
+            pool = LITERARY_STYLE_MODIFIERS
     return random.choice(pool)
+
+
+def log_mode_name(post):
+    if _sentiment_label(post) == "positive":
+        return "pulse_drop_literary_positive"
+    return "pulse_drop_literary"
+
+
+def locality_to_slug(locality: str) -> str:
+    return locality.lower().strip().replace(" ", "-")
+
+
+def nestiq_locality_url(locality: str) -> str:
+    return f"{_app_url()}/neighbourhood-pulse/{locality_to_slug(locality)}"
+
+
+def _infer_link_type(tweet_text: str) -> str | None:
+    if not tweet_text:
+        return None
+    base = _app_url()
+    if f"{base}/neighbourhood-pulse/" in tweet_text:
+        return "nestiq"
+    if re.search(r"https?://", tweet_text):
+        return "source"
+    return None
+
+
+def pick_tweet_link(post, last_tweets=None):
+    """Return (url, link_type) where link_type is 'source' or 'nestiq'."""
+    last_tweets = last_tweets or []
+    recent_types = [_infer_link_type(t) for t in last_tweets[:3]]
+    recent_types = [t for t in recent_types if t]
+
+    prefer_source = random.random() < SOURCE_LINK_CHANCE
+    if len(recent_types) >= 2 and recent_types[0] == recent_types[1]:
+        prefer_source = recent_types[0] == "nestiq"
+
+    source_url = (post.get("url") or "").strip()
+    nestiq_url = nestiq_locality_url(post["locality"])
+
+    if prefer_source and source_url:
+        return source_url, "source"
+    return nestiq_url, "nestiq"
+
+
+def tweet_body_only(text: str) -> str:
+    lines = (text or "").strip().split("\n")
+    if lines and re.match(r"https?://", lines[-1].strip()):
+        return "\n".join(lines[:-1]).strip()
+    return (text or "").strip()
+
+
+def estimated_tweet_length(text: str) -> int:
+    """Approximate Twitter weighted length (URLs count as 23 chars)."""
+    body = tweet_body_only(text)
+    urls = re.findall(r"https?://\S+", text or "")
+    link_chars = len(urls) * TCO_URL_LENGTH
+    if body and urls:
+        return len(body) + 1 + link_chars
+    if urls and not body:
+        return link_chars
+    return len(body)
+
+
+def compose_tweet_with_link(tweet_text: str, post, last_tweets=None):
+    link, link_type = pick_tweet_link(post, last_tweets)
+    final = f"{tweet_text.strip()}\n{link}"
+    return final, link, link_type
 
 
 def _sentiment_filter(prefer_sentiment):
@@ -323,7 +372,7 @@ def log_tweet(conn, tweet_text, tweet_id, mode, post):
         VALUES (%s, %s, %s, %s, %s, %s)
         """,
         (
-            MODE_LOG_NAMES[mode],
+            log_mode_name(post),
             tweet_text,
             str(tweet_id),
             post.get("feed_id"),
@@ -364,13 +413,15 @@ def is_too_similar(candidate, recent_tweets):
     if not recent_tweets:
         return False
 
+    candidate = tweet_body_only(candidate)
     cand_opener = opening_words(candidate)
     cand_words = content_word_set(candidate)
 
     for prev in recent_tweets:
-        if opening_words(prev) == cand_opener and cand_opener:
+        prev_body = tweet_body_only(prev)
+        if opening_words(prev_body) == cand_opener and cand_opener:
             return True
-        prev_words = content_word_set(prev)
+        prev_words = content_word_set(prev_body)
         if not cand_words or not prev_words:
             continue
         overlap = len(cand_words & prev_words) / len(cand_words | prev_words)
@@ -402,6 +453,7 @@ def build_anti_repetition_block(last_tweets, extra_note=""):
 
 def build_prompt(post, style_modifier, mode, last_tweets=None, retry_note=""):
     sentiment_label = _sentiment_label(post)
+    sentiment_hint = LITERARY_SENTIMENT_HINTS[sentiment_label]
 
     context_lines = [
         f"- Locality: {post['locality']}",
@@ -430,7 +482,9 @@ Data signal:
 What people are saying:
 {snippet}
 
-{TASK_BY_MODE[mode]}
+{TASK_LITERARY}
+
+Sentiment guidance: {sentiment_hint}
 
 Style instruction: {style_modifier}
 {anti_repetition}
@@ -453,7 +507,7 @@ def generate_tweet_text(post, style_modifier, mode, last_tweets=None, retry_note
 
 
 def generate_tweet_with_retry(post, mode, last_tweets=None):
-    style_modifier = pick_style_modifier(mode)
+    style_modifier = pick_style_modifier(post)
     tweet_text = ""
     used_style = style_modifier
 
@@ -469,7 +523,7 @@ def generate_tweet_with_retry(post, mode, last_tweets=None):
                 "Previous attempts failed checks. Write one short plain sentence. "
                 "Different opening. Maximum simplicity."
             )
-            used_style = pick_style_modifier(mode, exclude=used_style)
+            used_style = pick_style_modifier(post, exclude=used_style)
 
         tweet_text = generate_tweet_text(
             post,
@@ -478,7 +532,10 @@ def generate_tweet_with_retry(post, mode, last_tweets=None):
             last_tweets,
             retry_note,
         )
-        if len(tweet_text) <= 240 and not is_too_similar(tweet_text, last_tweets or []):
+        if (
+            len(tweet_text) <= TWEET_BODY_MAX_WITH_LINK
+            and not is_too_similar(tweet_text, last_tweets or [])
+        ):
             return tweet_text, used_style
 
     return tweet_text, used_style
@@ -510,20 +567,13 @@ def pick_diverse_posts(posts, n=10):
     return picked[:n]
 
 
-def pick_post_for_mode(posts, mode, used_feed_ids=None):
+def pick_post(posts, used_feed_ids=None):
     used_feed_ids = used_feed_ids or set()
-
-    if mode == "positive":
-        positive = [
-            p for p in posts
-            if (p.get("sentiment_score") or 0) > 0.2 or p.get("sentiment") == "positive"
-        ]
-        for pool in (positive, posts):
-            for post in pool:
-                if post.get("feed_id") not in used_feed_ids:
-                    return post
-
     for post in posts:
         if post.get("feed_id") not in used_feed_ids:
             return post
     return posts[0] if posts else None
+
+
+def pick_post_for_mode(posts, mode, used_feed_ids=None):
+    return pick_post(posts, used_feed_ids)

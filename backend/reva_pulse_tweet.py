@@ -16,6 +16,8 @@ import tweepy
 from dotenv import load_dotenv
 
 from reva_tweet_common import (
+    compose_tweet_with_link,
+    estimated_tweet_length,
     fetch_best_post,
     fetch_last_tweets,
     fetch_recent_coverage,
@@ -23,6 +25,8 @@ from reva_tweet_common import (
     log_tweet,
     pick_mode,
     MODE_LABELS,
+    TWEET_BODY_MAX_WITH_LINK,
+    TWITTER_MAX_CHARS,
 )
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
@@ -56,7 +60,6 @@ def main():
 
     mode = pick_mode()
     exclude_feed_ids, exclude_pairs = fetch_recent_coverage(conn)
-    prefer_sentiment = "positive" if mode == "positive" else None
 
     print(f"Mode: {mode} ({MODE_LABELS[mode]})")
     print(f"Excluding {len(exclude_feed_ids)} feed_ids, {len(exclude_pairs)} locality+topic pairs")
@@ -65,7 +68,6 @@ def main():
     try:
         post = fetch_best_post(
             conn,
-            prefer_sentiment=prefer_sentiment,
             exclude_feed_ids=exclude_feed_ids,
             exclude_pairs=exclude_pairs,
         )
@@ -96,22 +98,33 @@ def main():
         conn.close()
         return
 
-    char_count = len(tweet_text)
-    print(f"Style: {style_modifier[:80]}...")
-    print(f"\nGenerated tweet ({char_count} chars):")
-    print(f"  {tweet_text}")
+    try:
+        final_text, link, link_type = compose_tweet_with_link(
+            tweet_text, post, last_tweets
+        )
+    except Exception as e:
+        print(f"ERROR: Could not compose tweet with link: {e}")
+        conn.close()
+        return
 
-    if char_count > 280:
+    body_count = len(tweet_text)
+    char_count = estimated_tweet_length(final_text)
+    print(f"Style: {style_modifier[:80]}...")
+    print(f"Link ({link_type}): {link}")
+    print(f"\nGenerated tweet (body {body_count} chars, ~{char_count} weighted):")
+    print(f"  {final_text}")
+
+    if char_count > TWITTER_MAX_CHARS:
         print("ERROR: Tweet exceeds 280 characters. Aborting.")
         conn.close()
         return
 
-    if char_count > 240:
-        print("Warning: Tweet exceeds 240-char target but is within Twitter limit.")
+    if body_count > TWEET_BODY_MAX_WITH_LINK:
+        print("Warning: Tweet body exceeds 215-char target but is within Twitter limit.")
 
     print("\nPosting tweet...")
     try:
-        tweet_id = post_tweet(tweet_text)
+        tweet_id = post_tweet(final_text)
         print(f"Posted! Tweet ID: {tweet_id}")
     except Exception as e:
         print(f"ERROR: Could not post tweet: {e}")
@@ -120,7 +133,7 @@ def main():
 
     print("Logging to reva_log...")
     try:
-        log_tweet(conn, tweet_text, tweet_id, mode, post)
+        log_tweet(conn, final_text, tweet_id, mode, post)
         print("Logged.")
     except Exception as e:
         print(f"Warning: tweet posted but failed to log: {e}")

@@ -6,13 +6,18 @@ import psycopg2
 from dotenv import load_dotenv
 
 from reva_tweet_common import (
+    _sentiment_label,
+    compose_tweet_with_link,
+    estimated_tweet_length,
     fetch_curated_posts,
     fetch_last_tweets,
     generate_tweet_with_retry,
     pick_diverse_posts,
     pick_mode,
-    pick_post_for_mode,
+    pick_post,
     MODE_LABELS,
+    TWEET_BODY_MAX_WITH_LINK,
+    TWITTER_MAX_CHARS,
 )
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
@@ -61,7 +66,7 @@ def main():
 
     for i in range(10):
         mode = pick_mode()
-        post = pick_post_for_mode(selected, mode, used_feed_ids)
+        post = pick_post(selected, used_feed_ids)
         if post and post.get("feed_id"):
             used_feed_ids.add(post["feed_id"])
 
@@ -79,29 +84,44 @@ def main():
         try:
             anti_rep = last_tweets + [t["text"] for t in generated]
             tweet, style = generate_tweet_with_retry(post, mode, anti_rep)
-            char_count = len(tweet)
+            final_text, link, link_type = compose_tweet_with_link(
+                tweet, post, anti_rep
+            )
+            body_count = len(tweet)
+            char_count = estimated_tweet_length(final_text)
             flags = []
-            if char_count > 240:
-                flags.append("OVER 240")
-            if char_count > 280:
-                flags.append("OVER 280")
+            if body_count > TWEET_BODY_MAX_WITH_LINK:
+                flags.append(f"BODY OVER {TWEET_BODY_MAX_WITH_LINK}")
+            if char_count > TWITTER_MAX_CHARS:
+                flags.append(f"OVER {TWITTER_MAX_CHARS}")
             flag_str = f"  *** {' / '.join(flags)} ***" if flags else ""
 
             print(f"Style: {style[:80]}...")
-            print(tweet)
-            print(f"[{char_count} chars{flag_str}]")
-            generated.append({"text": tweet, "mode": mode, "post": post})
+            print(f"Link ({link_type}): {link}")
+            print(final_text)
+            print(f"[body {body_count} / ~{char_count} weighted chars{flag_str}]")
+            generated.append({
+                "text": final_text,
+                "link_type": link_type,
+                "sentiment": _sentiment_label(post),
+                "post": post,
+            })
         except Exception as e:
             print(f"ERROR generating tweet: {e}")
 
     print("\n" + "=" * 60)
     print("Summary")
     print("=" * 60)
-    mode_counts = {}
+    sentiment_counts = {}
+    link_counts = {}
     for item in generated:
-        mode_counts[item["mode"]] = mode_counts.get(item["mode"], 0) + 1
-    for mode, count in sorted(mode_counts.items()):
-        print(f"  {mode}: {count}")
+        sentiment_counts[item["sentiment"]] = sentiment_counts.get(item["sentiment"], 0) + 1
+        link_counts[item["link_type"]] = link_counts.get(item["link_type"], 0) + 1
+    for sentiment, count in sorted(sentiment_counts.items()):
+        print(f"  {sentiment}: {count}")
+    print("Link types:")
+    for link_type, count in sorted(link_counts.items()):
+        print(f"  {link_type}: {count}")
     print(f"\nTotal generated: {len(generated)}/10")
     print("Done. No tweets were posted.")
 
