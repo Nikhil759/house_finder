@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { AuthButton } from './AuthButton';
+import { EncoreSidebarBadge } from './EncorePartner';
 
 const NAV_ITEMS = [
   { label: 'Home',    icon: 'fa-solid fa-house',        to: '/',               match: p => p === '/' },
@@ -97,6 +98,8 @@ export default function DesktopSidebar() {
           );
         })}
       </nav>
+
+      <EncoreSidebarBadge />
 
       {/* Footer: avatar + wordmark */}
       <div style={{
