@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 
 export const ENCORE_URL = import.meta.env.VITE_ENCORE_WAV_URL || 'https://www.encorewav.com/';
+
+const ENCORE_TAGLINE = 'Music · Lifestyle · Merch';
+const ENCORE_AD_DISMISSED_KEY = 'encore_ad_dismissed_session';
 
 const fadeSlideUp = {
   hidden: { opacity: 0, y: 16 },
@@ -33,34 +36,42 @@ const logoImgStyle = {
   objectFit: 'contain',
 };
 
-export function EncoreHeaderBadge() {
+function ExternalLinkIcon() {
   return (
-    <a
-      href={ENCORE_URL}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label="In association with Encore Wav — music lifestyle and merch"
-      className="encore-header-badge"
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
-        marginLeft: 8,
-        textDecoration: 'none',
-        flexShrink: 0,
-        minWidth: 0,
-      }}
+    <svg
+      className="encore-external-link-icon"
+      width="11"
+      height="11"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
     >
-      <span className="encore-header-label" style={{ ...labelStyle, fontSize: 8, letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
-        In association with
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+      <polyline points="15 3 21 3 21 9" />
+      <line x1="10" y1="14" x2="21" y2="3" />
+    </svg>
+  );
+}
+
+function EncoreAnimatedTagline({ className }) {
+  return (
+    <span className={className} aria-label={ENCORE_TAGLINE}>
+      <span className="encore-tagline-animated" aria-hidden="true">
+        {[...ENCORE_TAGLINE].map((char, i) => (
+          <span
+            key={`${i}-${char}`}
+            className="encore-tagline-char"
+            style={{ '--char-index': i }}
+          >
+            {char === ' ' ? '\u00a0' : char}
+          </span>
+        ))}
       </span>
-      <img
-        src="/logo_encore_trimmed.png"
-        alt="Encore Wav"
-        className="encore-logo-header"
-        style={{ ...logoImgStyle, height: 22, flexShrink: 0 }}
-      />
-    </a>
+    </span>
   );
 }
 
@@ -101,37 +112,75 @@ export function EncoreSidebarBadge() {
   );
 }
 
-export function EncoreHeroBottomStrip() {
+export function EncoreLeaderboardStrip() {
+  const [visible, setVisible] = useState(
+    () => typeof window === 'undefined' || !sessionStorage.getItem(ENCORE_AD_DISMISSED_KEY),
+  );
+
+  const dismiss = () => {
+    setVisible(false);
+    sessionStorage.setItem(ENCORE_AD_DISMISSED_KEY, '1');
+  };
+
+  if (!visible) return null;
+
   return (
-    <motion.a
-      href={ENCORE_URL}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label="In association with Encore Wav — music lifestyle and merch"
-      className="encore-hero-promo"
+    <motion.div
+      className="encore-ad-zone"
       variants={fadeSlideUp}
       initial="hidden"
       animate="visible"
-      custom={1.65}
-      style={{
-        display: 'inline-flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 10,
-        marginTop: 32,
-        textDecoration: 'none',
-      }}
+      custom={0.15}
     >
-      <span style={labelStyle}>In association with</span>
-      <img
-        src="/logo_new_encore.png"
-        alt="Encore Wav"
-        className="encore-logo-hero"
-        style={{ ...logoImgStyle, height: 52 }}
-      />
-      <span style={subtitleStyle}>
-        Music · Lifestyle · Merch
-      </span>
-    </motion.a>
+      <div className="encore-ad-header">
+        <p className="encore-ad-microbar">Advertisement</p>
+        <button
+          type="button"
+          className="encore-ad-dismiss"
+          onClick={dismiss}
+          aria-label="Dismiss advertisement"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+
+      <a
+        href={ENCORE_URL}
+        target="_blank"
+        rel="noopener noreferrer sponsored"
+        aria-label="Sponsored advertisement — Encore Wav. Music, lifestyle and merch. Opens external site."
+        className="encore-leaderboard-strip"
+      >
+        <div className="encore-leaderboard-inner">
+          <div className="encore-leaderboard-left">
+            <span className="encore-leaderboard-sponsored">Sponsored</span>
+            <span className="encore-leaderboard-partner">Encore Wav</span>
+          </div>
+
+          <div className="encore-leaderboard-divider" aria-hidden="true" />
+
+          <div className="encore-leaderboard-center">
+            <img
+              src="/logo_encore_trimmed.png"
+              alt=""
+              className="encore-logo-leaderboard"
+            />
+          </div>
+
+          <div className="encore-leaderboard-divider" aria-hidden="true" />
+
+          <div className="encore-leaderboard-right">
+            <EncoreAnimatedTagline className="encore-leaderboard-tagline" />
+            <span className="encore-leaderboard-url-row">
+              <span className="encore-leaderboard-url">encorewav.com</span>
+              <ExternalLinkIcon />
+            </span>
+          </div>
+        </div>
+      </a>
+    </motion.div>
   );
 }

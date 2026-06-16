@@ -7,7 +7,7 @@ import DesktopSidebar from '../components/DesktopSidebar';
 import { useDesktop } from '../hooks/useDesktop';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import RadarAnimation from '../components/RadarAnimation';
-import { EncoreHeroBottomStrip } from '../components/EncorePartner';
+import { EncoreLeaderboardStrip } from '../components/EncorePartner';
 import '../global.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -560,8 +560,6 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
             })}
           </div>
         </motion.div>
-
-        <EncoreHeroBottomStrip />
       </div>
     </section>
   );
@@ -1790,6 +1788,8 @@ export default function Landing() {
       <DesktopSidebar />
 
       <AppHeader transparent />
+
+      <EncoreLeaderboardStrip />
 
       {/* ── HERO ── */}
       <HeroSection searchValue={searchValue} setSearchValue={setSearchValue} isDesktop={isDesktop} />

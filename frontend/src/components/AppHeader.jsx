@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthButton } from './AuthButton';
-import { EncoreHeaderBadge } from './EncorePartner';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { useDesktop } from '../hooks/useDesktop';
 
@@ -189,8 +188,6 @@ export default function AppHeader({ backTo = false, transparent = false }) {
               <InstallIcon />
               <span style={installLabelStyle}>Install</span>
             </button>
-
-            <EncoreHeaderBadge />
           </div>
         )}
 
