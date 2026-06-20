@@ -462,34 +462,15 @@ def haversine_km(lat1, lon1, lat2, lon2):
 
 def expand_locality(area: str):
     """
-    Given user input, return all canonical locality names to search for.
+    Given user input, return the canonical locality name to search for.
 
-    - If the input matches a known locality, return it plus all localities
-      within its radius_km, plus any manual also_include entries.
-    - If not recognized, return [area] as-is for keyword fallback.
+    Returns a single-element list for recognized localities (strict match only).
+    Returns [] if the input does not match any known locality.
     """
     canonical = normalize_locality(area)
     if not canonical:
         return []
-
-    meta = LOCALITY_META.get(canonical)
-    if not meta:
-        return [canonical]
-
-    center = meta["coords"]
-    radius = meta["radius_km"]
-
-    nearby = []
-    for name, m in LOCALITY_META.items():
-        dist = haversine_km(center[0], center[1], m["coords"][0], m["coords"][1])
-        if dist <= radius:
-            nearby.append(name)
-
-    for extra in meta.get("also_include", []):
-        if extra not in nearby:
-            nearby.append(extra)
-
-    return nearby
+    return [canonical]
 
 
 def get_nobroker_localities():
