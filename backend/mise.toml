@@ -1,0 +1,8 @@
+[settings]
+# Railway's build image installs Python via mise, which (as of v2026.3.18)
+# verifies GitHub artifact attestations for precompiled python-build-standalone
+# binaries by default. Older/less-common release builds can lack attestations
+# entirely and fail closed, breaking the build even though the binary itself
+# is fine (https://github.com/jdx/mise/pull/8820). Disable just this check so
+# a future Python patch bump can't silently break deploys the same way.
+python.github_attestations = false
