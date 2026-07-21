@@ -90,7 +90,7 @@ export function MobileNav() {
             onClick={() => navigate(tab.path)}
             className="mobile-nav-tab"
             style={{
-              color: active ? '#f5a623' : 'var(--text-muted)',
+              color: active ? 'var(--color-accent)' : 'var(--text-muted)',
             }}
           >
             <div style={{
@@ -103,7 +103,7 @@ export function MobileNav() {
                   position: 'absolute',
                   top: '-4px',
                   right: '-6px',
-                  background: '#f5a623',
+                  background: 'var(--color-accent)',
                   color: '#000',
                   borderRadius: '10px',
                   fontSize: '9px',
@@ -122,7 +122,7 @@ export function MobileNav() {
               fontWeight: active ? '700' : '500',
               marginTop: '3px',
               letterSpacing: '0.2px',
-              color: active ? '#f5a623' : 'var(--text-secondary)',
+              color: active ? 'var(--color-accent)' : 'var(--text-secondary)',
             }}>
               {tab.label}
             </span>

@@ -114,7 +114,7 @@ export default function RenterReports({
                 key={note.id}
                 style={{
                   background: 'var(--color-bg-card)',
-                  borderLeft: '2px solid rgba(232,160,32,0.45)',
+                  borderLeft: '2px solid color-mix(in srgb, var(--color-accent) 45%, transparent)',
                   borderRadius: 6,
                   padding: '10px 12px',
                 }}
@@ -200,8 +200,8 @@ function Header({ total, loading }) {
 function OwnFlagCard({ flag, onEdit, onRetract }) {
   return (
     <div style={{
-      background: 'rgba(232,160,32,0.08)',
-      border: '1px solid rgba(232,160,32,0.30)',
+      background: 'color-mix(in srgb, var(--color-accent) 8%, transparent)',
+      border: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)',
       borderRadius: 10,
       padding: '12px 14px',
       marginBottom: 14,
@@ -270,7 +270,7 @@ const sectionLabel = {
   fontSize: 10,
   letterSpacing: '0.14em',
   textTransform: 'uppercase',
-  color: 'var(--color-amber)',
+  color: 'var(--color-accent)',
   marginBottom: 4,
 }
 

@@ -4,6 +4,8 @@ import { useTheme } from "../ThemeContext";
 import { usePWAInstall } from "../hooks/usePWAInstall";
 import { AuthButton } from "./AuthButton";
 import { useAuth } from "../hooks/useAuth";
+import { CitySwitcher } from "./CitySwitcher";
+import { useCity } from "../CityContext";
 
 const SunIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -27,10 +29,10 @@ const MoonIcon = () => (
 
 const RadarLogo = () => (
   <svg width="24" height="24" viewBox="0 0 32 32">
-    <circle cx="16" cy="16" r="14" fill="none" stroke="#f5a623" strokeWidth="2"/>
-    <circle cx="16" cy="16" r="8"  fill="none" stroke="#f5a623" strokeWidth="1.5" opacity="0.6"/>
-    <circle cx="16" cy="16" r="3"  fill="#f5a623"/>
-    <line x1="16" y1="16" x2="28" y2="6" stroke="#f5a623" strokeWidth="1.5" opacity="0.8"/>
+    <circle cx="16" cy="16" r="14" fill="none" style={{ stroke: 'var(--color-accent)' }} strokeWidth="2"/>
+    <circle cx="16" cy="16" r="8"  fill="none" style={{ stroke: 'var(--color-accent)' }} strokeWidth="1.5" opacity="0.6"/>
+    <circle cx="16" cy="16" r="3"  style={{ fill: 'var(--color-accent)' }}/>
+    <line x1="16" y1="16" x2="28" y2="6" style={{ stroke: 'var(--color-accent)' }} strokeWidth="1.5" opacity="0.8"/>
   </svg>
 );
 
@@ -54,9 +56,9 @@ function HubButton({ count, onClick, isActive }) {
         gap: '6px',
         padding: '6px 12px',
         borderRadius: '8px',
-        background: isActive ? 'rgba(245,166,35,0.14)' : 'rgba(245,166,35,0.06)',
-        border: `1px solid ${isActive ? 'rgba(245,166,35,0.45)' : 'rgba(245,166,35,0.22)'}`,
-        color: isActive ? '#f5a623' : 'var(--text-secondary)',
+        background: isActive ? 'color-mix(in srgb, var(--color-accent) 14%, transparent)' : 'color-mix(in srgb, var(--color-accent) 6%, transparent)',
+        border: `1px solid ${isActive ? 'color-mix(in srgb, var(--color-accent) 45%, transparent)' : 'color-mix(in srgb, var(--color-accent) 22%, transparent)'}`,
+        color: isActive ? 'var(--color-accent)' : 'var(--text-secondary)',
         fontSize: '12px',
         fontWeight: isActive ? '600' : '500',
         cursor: 'pointer',
@@ -64,14 +66,14 @@ function HubButton({ count, onClick, isActive }) {
         flexShrink: 0,
       }}
       onMouseEnter={e => {
-        e.currentTarget.style.borderColor = 'rgba(245,166,35,0.45)'
-        e.currentTarget.style.color = '#f5a623'
-        e.currentTarget.style.background = 'rgba(245,166,35,0.08)'
+        e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-accent) 45%, transparent)'
+        e.currentTarget.style.color = 'var(--color-accent)'
+        e.currentTarget.style.background = 'color-mix(in srgb, var(--color-accent) 8%, transparent)'
       }}
       onMouseLeave={e => {
-        e.currentTarget.style.borderColor = isActive ? 'rgba(245,166,35,0.45)' : 'var(--border)'
-        e.currentTarget.style.color = isActive ? '#f5a623' : 'var(--text-secondary)'
-        e.currentTarget.style.background = isActive ? 'rgba(245,166,35,0.14)' : 'rgba(245,166,35,0.06)'
+        e.currentTarget.style.borderColor = isActive ? 'color-mix(in srgb, var(--color-accent) 45%, transparent)' : 'var(--border)'
+        e.currentTarget.style.color = isActive ? 'var(--color-accent)' : 'var(--text-secondary)'
+        e.currentTarget.style.background = isActive ? 'color-mix(in srgb, var(--color-accent) 14%, transparent)' : 'color-mix(in srgb, var(--color-accent) 6%, transparent)'
       }}
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -82,7 +84,7 @@ function HubButton({ count, onClick, isActive }) {
       My Hub
       {count > 0 && (
         <span style={{
-          background: '#f5a623',
+          background: 'var(--color-accent)',
           color: '#000',
           borderRadius: '10px',
           fontSize: '9px',
@@ -106,9 +108,14 @@ export default function Navbar({ subtitle, showAppCta = true, transparent = fals
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const isSearchListingsPage = location.pathname === "/app";
+  const { city } = useCity();
+  const isSearchListingsPage = location.pathname === "/app" || location.pathname === "/gurgaon/app";
   const isLocalityGuidePage = location.pathname === "/locality-guide" || location.pathname.startsWith("/neighbourhood-pulse");
+  const isSocietiesPage = location.pathname.startsWith("/gurgaon/societies");
   const shouldShowSearchCta = showAppCta && !isSearchListingsPage;
+  const guideLinkTo = city === "gurgaon" ? "/gurgaon/societies" : "/locality-guide";
+  const guideLinkLabel = city === "gurgaon" ? "Societies" : "Neighbourhood Pulse";
+  const isOnGuideLink = city === "gurgaon" ? isSocietiesPage : isLocalityGuidePage;
 
   return (
     <>
@@ -160,7 +167,7 @@ export default function Navbar({ subtitle, showAppCta = true, transparent = fals
           gap: 10px;
           font-size: 20px;
           font-weight: 700;
-          color: #f5a623;
+          color: var(--color-accent);
           text-decoration: none;
           letter-spacing: 0.3px;
         }
@@ -178,18 +185,21 @@ export default function Navbar({ subtitle, showAppCta = true, transparent = fals
           display: inline-flex;
           font-size: 12px;
           font-weight: 600;
-          color: #f5a623;
+          color: var(--color-accent);
           text-decoration: none;
-          border: 1px solid rgba(245,166,35,0.35);
+          border: 1px solid color-mix(in srgb, var(--color-accent) 35%, transparent);
           border-radius: 6px;
           padding: 6px 14px;
           transition: background 0.15s, border-color 0.15s;
           letter-spacing: 0.2px;
         }
         .shared-nav-cta:hover {
-          background: rgba(245,166,35,0.1);
-          border-color: rgba(245,166,35,0.6);
+          background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+          border-color: color-mix(in srgb, var(--color-accent) 60%, transparent);
         }
+        /* .city-switcher-* rules now live in global.css so they apply
+           wherever <CitySwitcher /> is rendered (sidebar, header, etc.),
+           not just inside this component's own <style> block. */
         .shared-nav-guide {
           display: inline-flex;
           align-items: center;
@@ -230,8 +240,8 @@ export default function Navbar({ subtitle, showAppCta = true, transparent = fals
           flex-shrink: 0;
         }
         .shared-nav-health:hover {
-          border-color: #f5a623;
-          color: #f5a623;
+          border-color: var(--color-accent);
+          color: var(--color-accent);
         }
         .shared-nav-theme-btn {
           display: flex;
@@ -248,8 +258,8 @@ export default function Navbar({ subtitle, showAppCta = true, transparent = fals
           flex-shrink: 0;
         }
         .shared-nav-theme-btn:hover {
-          border-color: #f5a623;
-          color: #f5a623;
+          border-color: var(--color-accent);
+          color: var(--color-accent);
         }
         .shared-nav.transparent .shared-nav-health,
         .shared-nav.transparent .shared-nav-theme-btn {
@@ -276,11 +286,11 @@ export default function Navbar({ subtitle, showAppCta = true, transparent = fals
           color: rgba(0,0,0,0.85);
         }
         .shared-nav.transparent .shared-nav-logo {
-          color: #f5a623;
+          color: var(--color-accent);
           text-shadow: 0 1px 4px rgba(0,0,0,0.5);
         }
         .shared-nav.transparent .shared-nav-cta {
-          border-color: rgba(245,166,35,0.5);
+          border-color: color-mix(in srgb, var(--color-accent) 50%, transparent);
           background: rgba(0,0,0,0.2);
         }
         .shared-nav-install {
@@ -289,9 +299,9 @@ export default function Navbar({ subtitle, showAppCta = true, transparent = fals
           gap: 5px;
           font-size: 11px;
           font-weight: 600;
-          color: #f5a623;
-          background: rgba(245,166,35,0.08);
-          border: 1px solid rgba(245,166,35,0.25);
+          color: var(--color-accent);
+          background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+          border: 1px solid color-mix(in srgb, var(--color-accent) 25%, transparent);
           border-radius: 6px;
           padding: 5px 10px;
           cursor: pointer;
@@ -300,8 +310,8 @@ export default function Navbar({ subtitle, showAppCta = true, transparent = fals
           flex-shrink: 0;
         }
         .shared-nav-install:hover {
-          background: rgba(245,166,35,0.15);
-          border-color: rgba(245,166,35,0.5);
+          background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+          border-color: color-mix(in srgb, var(--color-accent) 50%, transparent);
         }
         .nav-ios-tip {
           position: fixed;
@@ -309,7 +319,7 @@ export default function Navbar({ subtitle, showAppCta = true, transparent = fals
           right: 16px;
           z-index: 10000;
           background: #1a1a2a;
-          border: 1px solid rgba(245,166,35,0.3);
+          border: 1px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
           border-radius: 14px;
           padding: 16px 18px;
           box-shadow: 0 8px 32px rgba(0,0,0,0.6);
@@ -333,9 +343,9 @@ export default function Navbar({ subtitle, showAppCta = true, transparent = fals
           width: 20px;
           height: 20px;
           border-radius: 50%;
-          background: rgba(245,166,35,0.15);
-          border: 1px solid rgba(245,166,35,0.3);
-          color: #f5a623;
+          background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+          border: 1px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
+          color: var(--color-accent);
           font-size: 10px;
           font-weight: 700;
           display: flex;
@@ -392,19 +402,20 @@ export default function Navbar({ subtitle, showAppCta = true, transparent = fals
 
         <div className="shared-nav-right">
           {subtitle && <span className="shared-nav-sub">{subtitle}</span>}
-          {!isLocalityGuidePage && (
+          <CitySwitcher />
+          {!isOnGuideLink && (
             <Link
-              to="/locality-guide"
-              className={`shared-nav-guide${isLocalityGuidePage ? ' active' : ''}`}
+              to={guideLinkTo}
+              className={`shared-nav-guide${isOnGuideLink ? ' active' : ''}`}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 3v18h18"/><path d="M7 16l4-6 4 4 4-8"/>
               </svg>
-              Neighbourhood Pulse
+              {guideLinkLabel}
             </Link>
           )}
           {shouldShowSearchCta && (
-            <Link to="/app" className="shared-nav-cta" style={{ alignItems: "center", gap: 6 }}>
+            <Link to={city === "gurgaon" ? "/gurgaon/app" : "/app"} className="shared-nav-cta" style={{ alignItems: "center", gap: 6 }}>
               Search listings
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="5" y1="12" x2="19" y2="12"/>
@@ -430,8 +441,8 @@ export default function Navbar({ subtitle, showAppCta = true, transparent = fals
           {user && (
             <HubButton
               count={newCount}
-              onClick={() => navigate('/new')}
-              isActive={location.pathname === '/new'}
+              onClick={() => navigate(city === "gurgaon" ? '/gurgaon/new' : '/new')}
+              isActive={location.pathname === '/new' || location.pathname === '/gurgaon/new'}
             />
           )}
           <Link to="/health" className="shared-nav-health" title="System health">

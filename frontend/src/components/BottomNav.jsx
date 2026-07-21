@@ -1,35 +1,12 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-
-const TABS = [
-  {
-    label: 'Home',
-    icon: 'fa-solid fa-house',
-    to: '/',
-    match: path => path === '/',
-  },
-  {
-    label: 'Search',
-    icon: 'fa-solid fa-magnifying-glass',
-    to: '/app',
-    match: path => path.startsWith('/app') || path.startsWith('/listing'),
-  },
-  {
-    label: 'Pulse',
-    icon: 'fa-solid fa-chart-line',
-    to: '/locality-guide',
-    match: path => path.startsWith('/locality-guide') || path.startsWith('/neighbourhood-pulse'),
-  },
-  {
-    label: 'My Hub',
-    icon: 'fa-solid fa-layer-group',
-    to: '/new',
-    match: path => path.startsWith('/new'),
-  },
-];
+import { useCity } from '../CityContext';
+import { getNavItems } from '../lib/navConfig';
 
 export default function BottomNav() {
   const { pathname } = useLocation();
+  const { city } = useCity();
+  const tabs = getNavItems(city).filter(item => !item.hideOnMobile);
 
   return (
     <nav className="nestiq-bottom-nav" style={{
@@ -45,7 +22,7 @@ export default function BottomNav() {
       borderTop: '1px solid var(--color-border)',
       paddingBottom: 'env(safe-area-inset-bottom)',
     }}>
-      {TABS.map(tab => {
+      {tabs.map(tab => {
         const active = tab.match(pathname);
         return (
           <Link
@@ -60,8 +37,8 @@ export default function BottomNav() {
               gap: 4,
               padding: '10px 0 12px',
               textDecoration: 'none',
-              color: active ? 'var(--color-amber)' : 'var(--color-text-muted)',
-              borderTop: active ? '1px solid var(--color-amber)' : '1px solid transparent',
+              color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
+              borderTop: active ? '1px solid var(--color-accent)' : '1px solid transparent',
               marginTop: -1,
               transition: 'color 0.2s',
             }}

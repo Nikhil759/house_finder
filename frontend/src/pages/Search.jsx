@@ -5,7 +5,7 @@ import {
   faLaptopCode, faBuilding, faTree, faBeerMugEmpty,
   faHammer, faWater, faHouse, faBolt,
   faCity, faRoad, faLeaf, faStar, faUmbrellaBeach,
-  faTrain, faShop, faSchool,
+  faTrain, faShop, faSchool, faMagnifyingGlass,
 } from '@fortawesome/free-solid-svg-icons';
 import AppHeader from '../components/AppHeader';
 import BottomNav from '../components/BottomNav';
@@ -32,6 +32,7 @@ import {
   captureApiError,
 } from '../lib/posthog';
 import { logStart, logSuccess, logError } from '../lib/apiLogger';
+import { useCity } from '../CityContext';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -169,8 +170,8 @@ function formatPrice(rent) {
 }
 
 function scoreColor(score) {
-  if (score >= 70) return '#E8A020';             // full amber
-  if (score >= 50) return 'rgba(232,160,32,0.5)'; // dim amber
+  if (score >= 70) return 'var(--color-accent)';             // full amber
+  if (score >= 50) return 'color-mix(in srgb, var(--color-accent) 50%, transparent)'; // dim amber
   return '#555555';                               // muted gray
 }
 
@@ -313,9 +314,9 @@ function PillToggle({ label, active, onClick, activeColor }) {
         fontFamily: 'var(--font-mono)',
         fontSize: 12,
         letterSpacing: '0.05em',
-        background: active ? (activeColor || 'var(--color-amber)') : 'var(--color-bg-card)',
+        background: active ? (activeColor || 'var(--color-accent)') : 'var(--color-bg-card)',
         color: active ? (activeColor ? '#fff' : '#1a0a00') : 'var(--color-text-muted)',
-        border: active ? `1px solid ${activeColor || 'var(--color-amber)'}` : '1px solid var(--color-border)',
+        border: active ? `1px solid ${activeColor || 'var(--color-accent)'}` : '1px solid var(--color-border)',
         borderRadius: 'var(--radius-pill)',
         padding: '7px 16px',
         cursor: 'pointer',
@@ -329,7 +330,7 @@ function PillToggle({ label, active, onClick, activeColor }) {
 }
 
 function SortBar({ sort, onSortChange, scrollable = false, embedded = false }) {
-  const dimAmber = 'rgba(232, 160, 32, 0.55)';
+  const dimAmber = 'color-mix(in srgb, var(--color-accent) 55%, transparent)';
   return (
     <div style={{
       display: 'flex',
@@ -567,7 +568,7 @@ function FilterBottomSheet({ open, onClose, initialFilters, initialSort, onApply
               <p style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: 11,
-                color: 'var(--color-amber)',
+                color: 'var(--color-accent)',
                 letterSpacing: '0.04em',
                 marginTop: 8,
                 textAlign: 'right',
@@ -726,7 +727,7 @@ function FilterBottomSheet({ open, onClose, initialFilters, initialSort, onApply
               fontFamily: 'var(--font-mono)',
               fontSize: 13,
               letterSpacing: '0.04em',
-              background: 'var(--color-amber)',
+              background: 'var(--color-accent)',
               border: 'none',
               borderRadius: 8,
               padding: '13px',
@@ -790,7 +791,7 @@ function PaginationBar({ page, pageCount, onPageChange }) {
           fontFamily: 'var(--font-mono)',
           fontSize: 12,
           letterSpacing: '0.04em',
-          background: page === pageCount ? 'none' : 'var(--color-amber)',
+          background: page === pageCount ? 'none' : 'var(--color-accent)',
           border: page === pageCount ? '1px solid var(--color-border)' : 'none',
           color: page === pageCount ? 'var(--color-text-muted)' : '#1a0a00',
           borderRadius: 8,
@@ -866,7 +867,7 @@ function PhotoBadge({ count, compact = false, tiny = false }) {
         fontFamily: 'var(--font-mono)',
         fontSize: 9,
         letterSpacing: '0.04em',
-        color: 'var(--color-amber)',
+        color: 'var(--color-accent)',
         opacity: 0.85,
       }}>
         <i className="fa-solid fa-camera" style={{ fontSize: 9 }} />
@@ -882,9 +883,9 @@ function PhotoBadge({ count, compact = false, tiny = false }) {
       fontFamily: 'var(--font-mono)',
       fontSize: compact ? 10 : 11,
       letterSpacing: '0.05em',
-      color: 'var(--color-amber)',
-      background: 'rgba(232,160,32,0.08)',
-      border: '1px solid rgba(232,160,32,0.25)',
+      color: 'var(--color-accent)',
+      background: 'color-mix(in srgb, var(--color-accent) 8%, transparent)',
+      border: '1px solid color-mix(in srgb, var(--color-accent) 25%, transparent)',
       borderRadius: 4,
       padding: compact ? '2px 6px' : '3px 8px',
     }}>
@@ -957,8 +958,8 @@ function FlagButtonChip({ onClick, count = 0, topCategory = null }) {
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         gap: 5,
         background: 'none',
-        border: `1px solid ${hasReports ? 'rgba(232,160,32,0.35)' : 'var(--color-border)'}`,
-        color: hasReports ? '#E8A020' : 'var(--color-text-muted)',
+        border: `1px solid ${hasReports ? 'color-mix(in srgb, var(--color-accent) 35%, transparent)' : 'var(--color-border)'}`,
+        color: hasReports ? 'var(--color-accent)' : 'var(--color-text-muted)',
         borderRadius: 6,
         padding: hasReports ? '0 10px' : 0,
         width: hasReports ? 'auto' : 32,
@@ -966,10 +967,10 @@ function FlagButtonChip({ onClick, count = 0, topCategory = null }) {
         cursor: 'pointer',
         transition: 'border-color 0.2s, color 0.2s',
       }}
-      onMouseEnter={e => { e.currentTarget.style.color = '#E8A020'; e.currentTarget.style.borderColor = 'rgba(232,160,32,0.5)'; }}
+      onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-accent)'; e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-accent) 50%, transparent)'; }}
       onMouseLeave={e => {
-        e.currentTarget.style.color = hasReports ? '#E8A020' : 'var(--color-text-muted)';
-        e.currentTarget.style.borderColor = hasReports ? 'rgba(232,160,32,0.35)' : 'var(--color-border)';
+        e.currentTarget.style.color = hasReports ? 'var(--color-accent)' : 'var(--color-text-muted)';
+        e.currentTarget.style.borderColor = hasReports ? 'color-mix(in srgb, var(--color-accent) 35%, transparent)' : 'var(--color-border)';
       }}
     >
       <i className="fa-solid fa-triangle-exclamation" style={{ fontSize: 12 }} />
@@ -1006,7 +1007,7 @@ function CardFlagButton({ onClick, hasOwnFlag, compact = false, count = 0, topCa
         background: 'none',
         border: 'none',
         cursor: 'pointer',
-        color: active ? '#E8A020' : 'var(--color-text-muted)',
+        color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
         fontSize: compact ? 14 : 16,
         padding: 0,
         lineHeight: 1,
@@ -1015,8 +1016,8 @@ function CardFlagButton({ onClick, hasOwnFlag, compact = false, count = 0, topCa
         gap: hasReports ? 4 : 0,
         transition: 'color 0.15s',
       }}
-      onMouseEnter={e => { e.currentTarget.style.color = '#E8A020'; }}
-      onMouseLeave={e => { e.currentTarget.style.color = active ? '#E8A020' : 'var(--color-text-muted)'; }}
+      onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-accent)'; }}
+      onMouseLeave={e => { e.currentTarget.style.color = active ? 'var(--color-accent)' : 'var(--color-text-muted)'; }}
     >
       <i className="fa-solid fa-triangle-exclamation" />
       {hasReports && (
@@ -1223,17 +1224,17 @@ function ListingCard({ listing, saved, onToggleSave, onFlagClick, view = 'list',
               fontSize: 11,
               fontWeight: 500,
               letterSpacing: '0.06em',
-              color: 'var(--color-amber)',
-              border: '1px solid rgba(232,160,32,0.3)',
-              background: 'rgba(232,160,32,0.05)',
+              color: 'var(--color-accent)',
+              border: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)',
+              background: 'color-mix(in srgb, var(--color-accent) 5%, transparent)',
               borderRadius: 6,
               padding: '0 14px',
               height: 34,
               textDecoration: 'none',
               transition: 'border-color 0.2s, color 0.2s, background 0.2s',
             }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-amber)'; e.currentTarget.style.background = 'rgba(232,160,32,0.12)'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(232,160,32,0.3)'; e.currentTarget.style.background = 'rgba(232,160,32,0.05)'; }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-accent)'; e.currentTarget.style.background = 'color-mix(in srgb, var(--color-accent) 12%, transparent)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-accent) 30%, transparent)'; e.currentTarget.style.background = 'color-mix(in srgb, var(--color-accent) 5%, transparent)'; }}
           >
             <i className="fa-solid fa-arrow-up-right-from-square" style={{ fontSize: 12 }} />
             Source
@@ -1582,7 +1583,7 @@ function SearchMapView({ listings }) {
     const mutedColor  = isDark ? '#6b7280' : '#9ca3af';
     const pillBg      = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)';
     const dividerColor = isDark ? '#1e1e2e' : '#f3f4f6';
-    const btnBg       = isDark ? 'rgba(232,160,32,0.12)' : 'rgba(232,160,32,0.1)';
+    const btnBg       = isDark ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)' : 'color-mix(in srgb, var(--color-accent) 10%, transparent)';
 
     listings.forEach(listing => {
       let coords;
@@ -1602,13 +1603,13 @@ function SearchMapView({ listings }) {
       }
 
       const scoreColor =
-        listing.score >= 70 ? '#E8A020' :
-        listing.score >= 50 ? 'rgba(232,160,32,0.7)' :
+        listing.score >= 70 ? 'var(--color-accent)' :
+        listing.score >= 50 ? 'color-mix(in srgb, var(--color-accent) 70%, transparent)' :
                               (isDark ? '#4b5563' : '#9ca3af');
 
       const markerColor =
-        listing.score >= 70 ? '#E8A020' :
-        listing.score >= 50 ? 'rgba(232,160,32,0.6)' :
+        listing.score >= 70 ? 'var(--color-accent)' :
+        listing.score >= 50 ? 'color-mix(in srgb, var(--color-accent) 60%, transparent)' :
                               '#555555';
 
       const icon = L.divIcon({
@@ -1684,12 +1685,12 @@ function SearchMapView({ listings }) {
             onclick="window.__nestiqGoTo('${listing.id}')"
             style="
               font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.06em;
-              background:${btnBg};color:#E8A020;
-              border:1px solid rgba(232,160,32,0.3);border-radius:6px;
+              background:${btnBg};color:var(--color-accent);
+              border:1px solid color-mix(in srgb, var(--color-accent) 30%, transparent);border-radius:6px;
               padding:5px 11px;cursor:pointer;
               transition:background 0.15s;
             "
-            onmouseover="this.style.background='rgba(232,160,32,0.2)'"
+            onmouseover="this.style.background='color-mix(in srgb, var(--color-accent) 20%, transparent)'"
             onmouseout="this.style.background='${btnBg}'"
           >View details</button>
         </div>
@@ -1741,7 +1742,7 @@ function SearchMapView({ listings }) {
           {mappableCount} of {listings.length} listings on map
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 10, fontFamily: 'var(--font-mono)' }}>
-          {[['#E8A020', '70+ score'], ['rgba(232,160,32,0.6)', '50–69'], ['#555555', '<50']].map(([c, l]) => (
+          {[['var(--color-accent)', '70+ score'], ['color-mix(in srgb, var(--color-accent) 60%, transparent)', '50–69'], ['#555555', '<50']].map(([c, l]) => (
             <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: c, display: 'inline-block', flexShrink: 0 }} />
               <span style={{ color: 'var(--color-text-muted)', letterSpacing: '0.04em' }}>{l}</span>
@@ -1794,7 +1795,60 @@ function SkeletonCard() {
 
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-export default function Search() {
+// Gurgaon listings aren't ingested yet — show a placeholder instead of the
+// (empty/broken) Bangalore-tuned search experience.
+function SearchComingSoon() {
+  const isDesktop = useDesktop();
+  return (
+    <div className="nestiq-page-body">
+      <DesktopSidebar />
+      <AppHeader />
+      <div
+        style={{
+          minHeight: '70vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+          padding: '0 24px',
+          marginLeft: isDesktop ? 240 : 0,
+        }}
+      >
+        <div
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 24,
+            background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)',
+          }}
+        >
+          <FontAwesomeIcon icon={faMagnifyingGlass} style={{ fontSize: 24, color: 'var(--color-accent)' }} />
+        </div>
+        <h1 style={{ fontSize: 24, fontWeight: 300, marginBottom: 12, color: 'var(--color-text-primary)' }}>
+          Search is coming soon to{' '}
+          <span style={{ color: 'var(--color-accent)', fontWeight: 500 }}>Gurgaon</span>
+        </h1>
+        <p style={{ fontSize: 14, lineHeight: 1.6, color: '#888', maxWidth: 380 }}>
+          We're indexing Gurgaon's rental listings across Reddit, Housing.com, 99acres and more.
+          In the meantime, check out{' '}
+          <Link to="/gurgaon/societies" style={{ color: 'var(--color-accent)', textDecoration: 'underline' }}>
+            Societies
+          </Link>{' '}
+          to explore gated communities in the city.
+        </p>
+      </div>
+      <BottomNav />
+    </div>
+  );
+}
+
+function SearchImpl() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Restore complex state from sessionStorage only when returning to the same search query
@@ -2419,14 +2473,14 @@ export default function Search() {
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 background: 'var(--color-bg-surface)',
-                border: `1px solid ${geoActive ? 'rgba(232,160,32,0.4)' : 'var(--color-border)'}`,
+                border: `1px solid ${geoActive ? 'color-mix(in srgb, var(--color-accent) 40%, transparent)' : 'var(--color-border)'}`,
                 borderRadius: 'var(--radius-pill)',
                 padding: '10px 14px',
                 transition: 'border-color 0.2s',
               }}>
                 <i
                   className={geoActive ? 'fa-solid fa-location-dot' : 'fa-solid fa-magnifying-glass'}
-                  style={{ color: geoActive ? 'var(--color-amber)' : 'var(--color-text-muted)', fontSize: 13, flexShrink: 0 }}
+                  style={{ color: geoActive ? 'var(--color-accent)' : 'var(--color-text-muted)', fontSize: 13, flexShrink: 0 }}
                 />
                 <input
                   ref={areaInputRef}
@@ -2455,7 +2509,7 @@ export default function Search() {
                     onMouseDown={e => { e.preventDefault(); clearGeoSearch(); }}
                     style={{
                       background: 'none', border: 'none', cursor: 'pointer',
-                      color: 'var(--color-amber)', fontSize: 15, padding: '0 2px',
+                      color: 'var(--color-accent)', fontSize: 15, padding: '0 2px',
                       display: 'flex', alignItems: 'center', lineHeight: 1, flexShrink: 0,
                     }}
                     aria-label="Clear search"
@@ -2466,7 +2520,7 @@ export default function Search() {
               {showGeoSuggestions && geoSuggestions.length > 0 && (
                 <ul style={{
                   position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-                  background: '#1a1a1a', border: '1px solid rgba(232,160,32,0.2)',
+                  background: '#1a1a1a', border: '1px solid color-mix(in srgb, var(--color-accent) 20%, transparent)',
                   borderRadius: 10, zIndex: 200, listStyle: 'none',
                   margin: 0, padding: '4px 0', overflow: 'hidden',
                   boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
@@ -2489,12 +2543,12 @@ export default function Search() {
                         padding: '9px 14px', cursor: 'pointer',
                         borderBottom: i < geoSuggestions.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
                       }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(232,160,32,0.08)'; }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'color-mix(in srgb, var(--color-accent) 8%, transparent)'; }}
                       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                     >
                       <i
                         className={s.local ? 'fa-solid fa-map-pin' : 'fa-solid fa-location-dot'}
-                        style={{ fontSize: 11, color: s.local ? '#E8A020' : 'var(--color-text-muted)', marginTop: 3, flexShrink: 0 }}
+                        style={{ fontSize: 11, color: s.local ? 'var(--color-accent)' : 'var(--color-text-muted)', marginTop: 3, flexShrink: 0 }}
                       />
                       <div>
                         <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--color-text-primary)', lineHeight: 1.35 }}>
@@ -2527,8 +2581,8 @@ export default function Search() {
                       display: 'inline-flex', alignItems: 'center', gap: 5,
                       height: 30, fontFamily: 'var(--font-sans)', fontSize: 12,
                       background: active ? '#1A1200' : '#120F00',
-                      color: active ? '#E8A020' : '#AAA',
-                      border: active ? '0.5px solid #E8A020' : '0.5px solid #3A3000',
+                      color: active ? 'var(--color-accent)' : '#AAA',
+                      border: active ? '0.5px solid var(--color-accent)' : '0.5px solid #3A3000',
                       borderRadius: 8, padding: '0 10px', cursor: 'pointer', whiteSpace: 'nowrap',
                       transition: 'background 0.15s, color 0.15s',
                     }}
@@ -2641,7 +2695,7 @@ export default function Search() {
                         type="checkbox"
                         checked={activeFilters.sources[key] !== false}
                         onChange={() => setActiveFilters(f => ({ ...f, sources: { ...f.sources, [key]: !f.sources[key] } }))}
-                        style={{ accentColor: 'var(--color-amber)', width: 14, height: 14 }}
+                        style={{ accentColor: 'var(--color-accent)', width: 14, height: 14 }}
                       />
                       <i className={cfg.icon} style={{ fontSize: 12, color: cfg.color, width: 14, textAlign: 'center' }} />
                       <span style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--color-text-muted)' }}>{cfg.label}</span>
@@ -2727,9 +2781,9 @@ export default function Search() {
                       fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
                       textTransform: 'uppercase', padding: '12px 20px', cursor: 'pointer',
                       background: 'transparent',
-                      color: active ? '#E8A020' : '#777',
+                      color: active ? 'var(--color-accent)' : '#777',
                       border: 'none',
-                      borderBottom: active ? '2px solid #E8A020' : '2px solid transparent',
+                      borderBottom: active ? '2px solid var(--color-accent)' : '2px solid transparent',
                       transition: 'color 0.15s, border-color 0.15s',
                     }}
                   >
@@ -2813,7 +2867,7 @@ export default function Search() {
               <div style={{ padding: '40px 20px', textAlign: 'center', background: 'var(--color-bg-surface)', borderRadius: 12 }}>
                 <p style={{ color: 'var(--color-text-muted)', marginBottom: 12 }}>Something went wrong loading listings. Please try again.</p>
                 {searchError.requestId && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', opacity: 0.6 }}>Request ID: {searchError.requestId}</p>}
-                <button onClick={() => doSearch(query)} style={{ marginTop: 12, padding: '8px 20px', borderRadius: 8, border: '1px solid var(--color-amber)', background: 'transparent', color: 'var(--color-amber)', fontWeight: 600, cursor: 'pointer' }}>Retry</button>
+                <button onClick={() => doSearch(query)} style={{ marginTop: 12, padding: '8px 20px', borderRadius: 8, border: '1px solid var(--color-accent)', background: 'transparent', color: 'var(--color-accent)', fontWeight: 600, cursor: 'pointer' }}>Retry</button>
               </div>
             ) : loading ? (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
@@ -2877,7 +2931,7 @@ export default function Search() {
                 position: 'absolute',
                 top: 0,
                 height: '100%',
-                background: 'var(--color-amber)',
+                background: 'var(--color-accent)',
                 borderRadius: 2,
                 animation: 'progressSlide 1.1s ease-in-out infinite',
               }} />
@@ -2889,7 +2943,7 @@ export default function Search() {
                 left: 0,
                 right: 0,
                 height: '100%',
-                background: 'var(--color-amber)',
+                background: 'var(--color-accent)',
               }} />
             )}
           </div>
@@ -2903,14 +2957,14 @@ export default function Search() {
               alignItems: 'center',
               gap: 10,
               background: 'var(--color-bg-surface)',
-              border: `1px solid ${geoActive ? 'rgba(232,160,32,0.4)' : 'var(--color-border)'}`,
+              border: `1px solid ${geoActive ? 'color-mix(in srgb, var(--color-accent) 40%, transparent)' : 'var(--color-border)'}`,
               borderRadius: 'var(--radius-pill)',
               padding: '10px 16px',
               transition: 'border-color 0.2s',
             }}>
               <i
                 className="fa-solid fa-location-dot"
-                style={{ color: geoActive ? 'var(--color-amber)' : 'var(--color-text-muted)', fontSize: 14, flexShrink: 0 }}
+                style={{ color: geoActive ? 'var(--color-accent)' : 'var(--color-text-muted)', fontSize: 14, flexShrink: 0 }}
               />
               <input
                 ref={areaInputRef}
@@ -2965,7 +3019,7 @@ export default function Search() {
                 style={{
                   flexShrink: 0,
                   background: 'transparent',
-                  border: '1px solid var(--color-amber)',
+                  border: '1px solid var(--color-accent)',
                   borderRadius: 8,
                   width: 32, height: 32,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -2973,7 +3027,7 @@ export default function Search() {
                 }}
                 aria-label="Search"
               >
-                <i className="fa-solid fa-magnifying-glass" style={{ color: 'var(--color-amber)', fontSize: 13 }} />
+                <i className="fa-solid fa-magnifying-glass" style={{ color: 'var(--color-accent)', fontSize: 13 }} />
               </button>
             </div>
 
@@ -2989,7 +3043,7 @@ export default function Search() {
                 padding: '4px 0',
                 listStyle: 'none',
                 background: '#111111',
-                border: '1px solid rgba(232,160,32,0.25)',
+                border: '1px solid color-mix(in srgb, var(--color-accent) 25%, transparent)',
                 borderRadius: 12,
                 overflow: 'hidden',
                 boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
@@ -3013,12 +3067,12 @@ export default function Search() {
                       padding: '10px 16px', cursor: 'pointer',
                       borderBottom: i < geoSuggestions.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(232,160,32,0.08)'; }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'color-mix(in srgb, var(--color-accent) 8%, transparent)'; }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                   >
                     <i
                       className={s.local ? 'fa-solid fa-map-pin' : 'fa-solid fa-location-dot'}
-                      style={{ fontSize: 11, color: s.local ? '#E8A020' : 'var(--color-text-muted)', marginTop: 3, flexShrink: 0 }}
+                      style={{ fontSize: 11, color: s.local ? 'var(--color-accent)' : 'var(--color-text-muted)', marginTop: 3, flexShrink: 0 }}
                     />
                     <div>
                       <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--color-text-primary)', lineHeight: 1.35 }}>
@@ -3050,8 +3104,8 @@ export default function Search() {
           paddingRight: 16,
           paddingTop: 8,
           paddingBottom: 4,
-          borderBottom: '1px solid rgba(232,160,32,0.12)',
-          background: 'rgba(232,160,32,0.04)',
+          borderBottom: '1px solid color-mix(in srgb, var(--color-accent) 12%, transparent)',
+          background: 'color-mix(in srgb, var(--color-accent) 4%, transparent)',
         }}>
           <span style={{
             fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em',
@@ -3069,9 +3123,9 @@ export default function Search() {
                 style={{
                   flexShrink: 0,
                   fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
-                  background: isCurrent ? 'rgba(232,160,32,0.15)' : 'transparent',
-                  color: isCurrent ? '#E8A020' : '#666',
-                  border: `0.5px solid ${isCurrent ? 'rgba(232,160,32,0.5)' : '#333'}`,
+                  background: isCurrent ? 'color-mix(in srgb, var(--color-accent) 15%, transparent)' : 'transparent',
+                  color: isCurrent ? 'var(--color-accent)' : '#666',
+                  border: `0.5px solid ${isCurrent ? 'color-mix(in srgb, var(--color-accent) 50%, transparent)' : '#333'}`,
                   borderRadius: 99, padding: '4px 12px',
                   cursor: 'pointer', whiteSpace: 'nowrap',
                   transition: 'all 0.12s',
@@ -3089,7 +3143,7 @@ export default function Search() {
                 flexShrink: 0,
               }}>of</span>
               <span style={{
-                fontFamily: 'var(--font-sans)', fontSize: 12, color: '#E8A020',
+                fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--color-accent)',
                 flexShrink: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>
                 {geoLabel}
@@ -3135,8 +3189,8 @@ export default function Search() {
                 fontFamily: 'var(--font-sans)',
                 fontSize: 13,
                 background: active ? '#1A1200' : '#120F00',
-                color: active ? '#E8A020' : '#AAA',
-                border: active ? '0.5px solid #E8A020' : '0.5px solid #3A3000',
+                color: active ? 'var(--color-accent)' : '#AAA',
+                border: active ? '0.5px solid var(--color-accent)' : '0.5px solid #3A3000',
                 borderRadius: 10,
                 padding: '0 14px',
                 cursor: 'pointer',
@@ -3146,7 +3200,7 @@ export default function Search() {
             >
               <FontAwesomeIcon
                 icon={icon}
-                style={{ fontSize: 12, color: active ? '#E8A020' : '#666' }}
+                style={{ fontSize: 12, color: active ? 'var(--color-accent)' : '#666' }}
               />
               {label}
             </button>
@@ -3196,11 +3250,11 @@ export default function Search() {
                 padding: '8px 0',
                 cursor: 'pointer',
                 background: 'transparent',
-                color: active ? '#E8A020' : '#777',
+                color: active ? 'var(--color-accent)' : '#777',
                 borderTop: 'none',
                 borderLeft: 'none',
                 borderRight: 'none',
-                borderBottom: active ? '2px solid #E8A020' : '2px solid transparent',
+                borderBottom: active ? '2px solid var(--color-accent)' : '2px solid transparent',
                 transition: 'color 0.15s, border-color 0.15s',
               }}
             >
@@ -3248,7 +3302,7 @@ export default function Search() {
           {activePills.length > 0 && (
             <span style={{
               width: 6, height: 6, borderRadius: '50%',
-              background: 'var(--color-amber)',
+              background: 'var(--color-accent)',
               display: 'inline-block', flexShrink: 0,
             }} />
           )}
@@ -3289,9 +3343,9 @@ export default function Search() {
                 fontFamily: 'var(--font-mono)',
                 fontSize: 11,
                 letterSpacing: '0.05em',
-                background: active ? 'rgba(232,160,32,0.12)' : '#1A1A1A',
-                color: active ? '#E8A020' : '#888',
-                border: `0.5px solid ${active ? 'rgba(232,160,32,0.35)' : '#2A2A2A'}`,
+                background: active ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)' : '#1A1A1A',
+                color: active ? 'var(--color-accent)' : '#888',
+                border: `0.5px solid ${active ? 'color-mix(in srgb, var(--color-accent) 35%, transparent)' : '#2A2A2A'}`,
                 borderRadius: 99,
                 padding: '5px 14px',
                 cursor: 'pointer',
@@ -3330,8 +3384,8 @@ export default function Search() {
             <span style={{
               flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
               fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
-              background: 'rgba(232,160,32,0.1)', color: '#E8A020',
-              border: '0.5px solid rgba(232,160,32,0.4)',
+              background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)', color: 'var(--color-accent)',
+              border: '0.5px solid color-mix(in srgb, var(--color-accent) 40%, transparent)',
               borderRadius: 99, padding: '4px 10px', whiteSpace: 'nowrap',
             }}>
               <i className="fa-solid fa-location-dot" style={{ fontSize: 9 }} />
@@ -3340,7 +3394,7 @@ export default function Search() {
                 onClick={() => { setGeoActive(false); setGeoPin(null); setGeoLabel(''); setQuery(''); }}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
-                  color: '#E8A020', padding: 0, fontSize: 13, lineHeight: 1,
+                  color: 'var(--color-accent)', padding: 0, fontSize: 13, lineHeight: 1,
                   opacity: 0.7, display: 'flex', alignItems: 'center',
                 }}
               >×</button>
@@ -3352,8 +3406,8 @@ export default function Search() {
             <span key={key} style={{
               flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
               fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
-              background: 'rgba(232,160,32,0.1)', color: '#E8A020',
-              border: '0.5px solid rgba(232,160,32,0.4)',
+              background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)', color: 'var(--color-accent)',
+              border: '0.5px solid color-mix(in srgb, var(--color-accent) 40%, transparent)',
               borderRadius: 99, padding: '4px 10px', whiteSpace: 'nowrap',
             }}>
               {label}
@@ -3367,7 +3421,7 @@ export default function Search() {
                 }}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
-                  color: '#E8A020', padding: 0, fontSize: 13, lineHeight: 1,
+                  color: 'var(--color-accent)', padding: 0, fontSize: 13, lineHeight: 1,
                   opacity: 0.7, display: 'flex', alignItems: 'center',
                 }}
               >×</button>
@@ -3379,8 +3433,8 @@ export default function Search() {
             <span key={label} style={{
               flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
               fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
-              background: 'rgba(232,160,32,0.1)', color: '#E8A020',
-              border: '0.5px solid rgba(232,160,32,0.4)',
+              background: 'color-mix(in srgb, var(--color-accent) 10%, transparent)', color: 'var(--color-accent)',
+              border: '0.5px solid color-mix(in srgb, var(--color-accent) 40%, transparent)',
               borderRadius: 99, padding: '4px 10px', whiteSpace: 'nowrap',
             }}>
               {label}
@@ -3388,7 +3442,7 @@ export default function Search() {
                 onClick={() => removePill(label)}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
-                  color: '#E8A020', padding: 0, fontSize: 13, lineHeight: 1,
+                  color: 'var(--color-accent)', padding: 0, fontSize: 13, lineHeight: 1,
                   opacity: 0.7, display: 'flex', alignItems: 'center',
                 }}
               >×</button>
@@ -3511,7 +3565,7 @@ export default function Search() {
           <div style={{ padding: '32px 16px', textAlign: 'center', background: 'var(--color-bg-surface)', borderRadius: 12 }}>
             <p style={{ color: 'var(--color-text-muted)', marginBottom: 12 }}>Something went wrong loading listings. Please try again.</p>
             {searchError.requestId && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', opacity: 0.6 }}>Request ID: {searchError.requestId}</p>}
-            <button onClick={() => doSearch(query)} style={{ marginTop: 12, padding: '8px 20px', borderRadius: 8, border: '1px solid var(--color-amber)', background: 'transparent', color: 'var(--color-amber)', fontWeight: 600, cursor: 'pointer' }}>Retry</button>
+            <button onClick={() => doSearch(query)} style={{ marginTop: 12, padding: '8px 20px', borderRadius: 8, border: '1px solid var(--color-accent)', background: 'transparent', color: 'var(--color-accent)', fontWeight: 600, cursor: 'pointer' }}>Retry</button>
           </div>
         ) : loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -3622,6 +3676,11 @@ export default function Search() {
       )}
     </div>
   );
+}
+
+export default function Search() {
+  const { city } = useCity();
+  return city === 'gurgaon' ? <SearchComingSoon /> : <SearchImpl />;
 }
 
 // Modal host that subscribes to flag state via the hook so submit/retract

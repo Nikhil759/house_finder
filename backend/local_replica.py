@@ -89,6 +89,7 @@ SCHEMA = {
             raw_payload         TEXT,
             society_name        TEXT,
             society_place_id    TEXT,
+            society_id          INTEGER,
             image_urls          TEXT DEFAULT '[]',
             images              TEXT,
             listing_type        TEXT NOT NULL DEFAULT 'full_house',
@@ -108,6 +109,7 @@ SCHEMA = {
         "CREATE INDEX IF NOT EXISTS idx_r_listings_quality ON listings (quality_score DESC)",
         "CREATE INDEX IF NOT EXISTS idx_r_listings_listing_type ON listings (listing_type)",
         "CREATE INDEX IF NOT EXISTS idx_r_listings_active_search ON listings (status, locality, bhk, rent)",
+        "CREATE INDEX IF NOT EXISTS idx_r_listings_society_id ON listings (society_id)",
     ],
 
     "localities": [
@@ -298,9 +300,33 @@ def get_connection() -> sqlite3.Connection:
     return conn
 
 
+# Columns added to an already-created replica table after the fact.
+# CREATE TABLE IF NOT EXISTS is a no-op on a pre-existing SQLite file (e.g. the
+# persistent volume on Railway), so new columns need an explicit ALTER TABLE.
+# SQLite has no "ADD COLUMN IF NOT EXISTS", so _ensure_column() checks
+# PRAGMA table_info first to stay idempotent across restarts.
+_ADDED_COLUMNS: list[tuple[str, str, str]] = [
+    # (table, column, sqlite type) — mirrors listings.society_id in
+    # backend/migrations/020_societies.sql
+    ("listings", "society_id", "INTEGER"),
+]
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, col_type: str) -> None:
+    existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column in existing:
+        return
+    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+    logger.info(
+        "SQLite replica: added missing column",
+        extra={"table": table, "column": column},
+    )
+
+
 def initialize_replica():
     """
-    Create all replica tables and indexes if they don't exist.
+    Create all replica tables and indexes if they don't exist, then patch in
+    any columns added to SCHEMA after the replica file was first created.
 
     Idempotent — safe to call on every app startup. Uses CREATE TABLE IF NOT EXISTS
     and CREATE INDEX IF NOT EXISTS so repeated calls are no-ops.
@@ -308,8 +334,23 @@ def initialize_replica():
     os.makedirs(os.path.dirname(REPLICA_DB_PATH), exist_ok=True)
     conn = get_connection()
     try:
+        # Pass 1: CREATE TABLE statements only (each table's first statement).
+        # Must run before column patches (ALTER TABLE needs the table to
+        # exist) and before CREATE INDEX (which may reference a column that
+        # only _ensure_column is about to add on a pre-existing file).
         for table_name, statements in SCHEMA.items():
-            for sql in statements:
+            conn.execute(statements[0])
+
+        # Pass 2: patch in any columns added to SCHEMA after the replica
+        # file was first created (no-op on a freshly created table, which
+        # already has the column from pass 1).
+        for table, column, col_type in _ADDED_COLUMNS:
+            _ensure_column(conn, table, column, col_type)
+
+        # Pass 3: CREATE INDEX statements — safe now that every column they
+        # reference is guaranteed to exist.
+        for table_name, statements in SCHEMA.items():
+            for sql in statements[1:]:
                 conn.execute(sql)
         conn.commit()
         logger.info(

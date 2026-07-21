@@ -94,7 +94,7 @@ export default function RadarAnimation({ size = 480, isDesktop = false }) {
           top: -60,
           width: size + 120,
           height: size + 120,
-          background: 'radial-gradient(circle, rgba(232,160,32,0.12) 0%, transparent 70%)',
+          background: 'radial-gradient(circle, color-mix(in srgb, var(--color-accent) 12%, transparent) 0%, transparent 70%)',
           pointerEvents: 'none',
           zIndex: 0,
         }}
@@ -123,14 +123,14 @@ export default function RadarAnimation({ size = 480, isDesktop = false }) {
           style={{ position: 'absolute', top: 0, left: 0 }}
         >
           {/* 3 rings */}
-          <circle cx="200" cy="200" r="180" stroke="#E8A020" strokeWidth="0.5" strokeOpacity="0.40" />
-          <circle cx="200" cy="200" r="120" stroke="#E8A020" strokeWidth="0.5" strokeOpacity="0.30" />
-          <circle cx="200" cy="200" r="60"  stroke="#E8A020" strokeWidth="0.5" strokeOpacity="0.20" />
+          <circle cx="200" cy="200" r="180" style={{ stroke: 'var(--color-accent)' }} strokeWidth="0.5" strokeOpacity="0.40" />
+          <circle cx="200" cy="200" r="120" style={{ stroke: 'var(--color-accent)' }} strokeWidth="0.5" strokeOpacity="0.30" />
+          <circle cx="200" cy="200" r="60"  style={{ stroke: 'var(--color-accent)' }} strokeWidth="0.5" strokeOpacity="0.20" />
 
           {/* 4 spokes */}
           {SPOKES.map((s, i) => (
             <line key={i} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2}
-              stroke="#E8A020" strokeWidth="0.5" strokeOpacity="0.25" />
+              style={{ stroke: 'var(--color-accent)' }} strokeWidth="0.5" strokeOpacity="0.25" />
           ))}
 
           {/* Source dots — fade out → reposition → fade in via React state */}
@@ -176,7 +176,7 @@ export default function RadarAnimation({ size = 480, isDesktop = false }) {
           <line
             x1="200" y1="200"
             x2="380" y2="200"
-            stroke="#E8A020"
+            style={{ stroke: 'var(--color-accent)' }}
             strokeOpacity="0.55"
             strokeWidth="1"
             strokeLinecap="round"

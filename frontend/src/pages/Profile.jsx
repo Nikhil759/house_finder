@@ -116,7 +116,7 @@ function Toggle({ checked, onChange, disabled }) {
       onClick={() => onChange(!checked)}
       style={{
         width: 44, height: 26, borderRadius: 13, padding: 3,
-        background: checked ? 'var(--color-amber)' : 'var(--color-border)',
+        background: checked ? 'var(--color-accent)' : 'var(--color-border)',
         border: 'none', cursor: disabled ? 'default' : 'pointer',
         transition: 'background 0.2s', position: 'relative',
         flexShrink: 0, opacity: disabled ? 0.5 : 1,
@@ -148,7 +148,7 @@ function FrequencySelector({ value, onChange, disabled }) {
           style={{
             flex: 1, padding: '9px 0',
             fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
-            background: value === f.value ? 'var(--color-amber)' : 'transparent',
+            background: value === f.value ? 'var(--color-accent)' : 'transparent',
             color: value === f.value ? '#1a0a00' : 'var(--color-text-muted)',
             fontWeight: value === f.value ? 600 : 400,
             border: 'none', cursor: 'pointer',
@@ -222,9 +222,9 @@ function EmailAlertFilterEditor({ search, onSave, saving }) {
               style={{
                 padding: '6px 12px', borderRadius: 99,
                 fontFamily: 'var(--font-mono)', fontSize: 11,
-                border: `1px solid ${bhk === opt.value ? 'var(--color-amber)' : 'var(--color-border)'}`,
-                background: bhk === opt.value ? 'rgba(232,160,32,0.15)' : 'transparent',
-                color: bhk === opt.value ? 'var(--color-amber)' : 'var(--color-text-muted)',
+                border: `1px solid ${bhk === opt.value ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                background: bhk === opt.value ? 'color-mix(in srgb, var(--color-accent) 15%, transparent)' : 'transparent',
+                color: bhk === opt.value ? 'var(--color-accent)' : 'var(--color-text-muted)',
                 cursor: 'pointer',
               }}
             >
@@ -267,9 +267,9 @@ function EmailAlertFilterEditor({ search, onSave, saving }) {
               style={{
                 padding: '6px 12px', borderRadius: 99,
                 fontFamily: 'var(--font-mono)', fontSize: 11,
-                border: `1px solid ${sources.includes(src.id) ? 'var(--color-amber)' : 'var(--color-border)'}`,
-                background: sources.includes(src.id) ? 'rgba(232,160,32,0.15)' : 'transparent',
-                color: sources.includes(src.id) ? 'var(--color-amber)' : 'var(--color-text-muted)',
+                border: `1px solid ${sources.includes(src.id) ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                background: sources.includes(src.id) ? 'color-mix(in srgb, var(--color-accent) 15%, transparent)' : 'transparent',
+                color: sources.includes(src.id) ? 'var(--color-accent)' : 'var(--color-text-muted)',
                 cursor: 'pointer',
               }}
             >
@@ -286,7 +286,7 @@ function EmailAlertFilterEditor({ search, onSave, saving }) {
         style={{
           fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
           padding: '8px 16px', borderRadius: 6,
-          background: 'var(--color-amber)', color: '#1a0a00',
+          background: 'var(--color-accent)', color: '#1a0a00',
           border: 'none', cursor: saving ? 'default' : 'pointer',
           opacity: saving ? 0.6 : 1,
         }}
@@ -326,10 +326,10 @@ function SimpleToast({ message, onDone }) {
       `}</style>
       <span style={{
         width: 28, height: 28, borderRadius: '50%',
-        background: 'rgba(232,160,32,0.14)',
-        border: '1px solid rgba(232,160,32,0.28)',
+        background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)',
+        border: '1px solid color-mix(in srgb, var(--color-accent) 28%, transparent)',
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        color: 'var(--color-amber)', fontSize: 11, flexShrink: 0,
+        color: 'var(--color-accent)', fontSize: 11, flexShrink: 0,
       }}>
         <i className="fa-solid fa-check" />
       </span>
@@ -458,7 +458,7 @@ export default function Profile() {
         <p style={{ ...s.monoSmall, marginBottom: 16 }}>Sign in to view your profile.</p>
         <Link to="/app" style={{
           fontFamily: 'var(--font-mono)', fontSize: 12,
-          color: 'var(--color-amber)', textDecoration: 'none',
+          color: 'var(--color-accent)', textDecoration: 'none',
         }}>
           ← Go to Search
         </Link>
@@ -518,7 +518,7 @@ export default function Profile() {
               }}>
                 <span style={{
                   fontFamily: 'var(--font-mono)', fontSize: 16, fontWeight: 500,
-                  color: 'var(--color-amber)', letterSpacing: '0.05em',
+                  color: 'var(--color-accent)', letterSpacing: '0.05em',
                 }}>
                   {initials}
                 </span>
@@ -623,7 +623,7 @@ export default function Profile() {
                       fontFamily: 'var(--font-mono)',
                       fontSize: 13,
                       letterSpacing: '0.04em',
-                      color: 'var(--color-amber)',
+                      color: 'var(--color-accent)',
                       textDecoration: 'none',
                       display: 'flex',
                       alignItems: 'center',
@@ -656,8 +656,8 @@ export default function Profile() {
                 transition: 'border-color 0.2s, color 0.2s',
               }}
               onMouseEnter={e => {
-                e.currentTarget.style.borderColor = 'var(--color-amber)';
-                e.currentTarget.style.color = 'var(--color-amber)';
+                e.currentTarget.style.borderColor = 'var(--color-accent)';
+                e.currentTarget.style.color = 'var(--color-accent)';
               }}
               onMouseLeave={e => {
                 e.currentTarget.style.borderColor = 'var(--color-border)';
@@ -676,7 +676,7 @@ export default function Profile() {
           {addingLocalities && (
             <div style={{
               ...s.card, marginBottom: 12, padding: '14px 16px',
-              border: '1px solid var(--color-amber)', borderRadius: 'var(--radius-card)',
+              border: '1px solid var(--color-accent)', borderRadius: 'var(--radius-card)',
             }}>
               <input
                 type="text"
@@ -707,7 +707,7 @@ export default function Profile() {
                         display: 'flex', alignItems: 'center', gap: 10,
                         padding: '7px 4px', cursor: 'pointer',
                         borderRadius: 6,
-                        background: isSelected ? 'rgba(245,166,35,0.08)' : 'transparent',
+                        background: isSelected ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'transparent',
                       }}>
                         <input
                           type="checkbox"
@@ -720,7 +720,7 @@ export default function Profile() {
                               return next;
                             });
                           }}
-                          style={{ accentColor: 'var(--color-amber)' }}
+                          style={{ accentColor: 'var(--color-accent)' }}
                         />
                         <span style={{ fontSize: 14, fontFamily: 'var(--font-sans)' }}>{loc}</span>
                       </label>
@@ -746,7 +746,7 @@ export default function Profile() {
                   style={{
                     fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
                     padding: '6px 14px', borderRadius: 6,
-                    background: selectedNewLocs.size > 0 ? 'var(--color-amber)' : 'var(--color-border)',
+                    background: selectedNewLocs.size > 0 ? 'var(--color-accent)' : 'var(--color-border)',
                     color: selectedNewLocs.size > 0 ? '#1a0a00' : 'var(--color-text-muted)',
                     border: 'none', cursor: selectedNewLocs.size > 0 ? 'pointer' : 'default',
                   }}
@@ -820,7 +820,7 @@ export default function Profile() {
                           width: 30, height: 30, borderRadius: 7,
                           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                           background: 'none', border: '1px solid var(--color-border)',
-                          color: isExpanded ? 'var(--color-amber)' : 'var(--color-text-muted)',
+                          color: isExpanded ? 'var(--color-accent)' : 'var(--color-text-muted)',
                           cursor: 'pointer', padding: 0,
                         }}
                       >

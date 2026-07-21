@@ -9,6 +9,10 @@
   --color-bg-surface:   #111111;
   --color-bg-card:      #1A1A1A;
   --color-amber:        #E8A020;
+  /* City accent — Bangalore defaults to amber, Gurgaon overrides to light purple
+     (see [data-city="gurgaon"] below). Prefer --color-accent over --color-amber
+     in any component that should react to the active city. */
+  --color-accent:       var(--color-amber);
   --color-text-primary: #F0EFE9;
   --color-text-muted:   #666666;
   --color-border:       #222222;
@@ -19,7 +23,7 @@
   --bg-primary:    #0d0d14;
   --bg-secondary:  #13131f;
   --border:        rgba(255,255,255,0.08);
-  --border-accent: rgba(245,166,35,0.2);
+  --border-accent: color-mix(in srgb, var(--color-accent) 20%, transparent);
   --input-bg:      rgba(255,255,255,0.05);
   --input-border:  #2a2a3a;
   --input-text:    #e8e4d8;
@@ -35,7 +39,7 @@
   --bg-primary:    #f6f8fa;
   --bg-secondary:  #ffffff;
   --border:        #e5e7eb;
-  --border-accent: rgba(245,166,35,0.3);
+  --border-accent: color-mix(in srgb, var(--color-accent) 30%, transparent);
   --input-bg:      #ffffff;
   --input-border:  #d1d5db;
   --input-text:    #111827;
@@ -45,6 +49,13 @@
   --bg-card:       #ffffff;
   --pill-bg:       rgba(0,0,0,0.05);
   --select-bg:     #ffffff;
+}
+
+/* ── City accent override ──────────────────────────────────────────────────
+   Applied on <html data-city="gurgaon">, set by CityContext. Must come after
+   the theme blocks above so it wins regardless of light/dark theme. */
+[data-city="gurgaon"] {
+  --color-accent: #B9A6F2;
 }
 
 /* ── Global ─────────────────────────────────────────────────────────────────── */
@@ -342,9 +353,9 @@ a, button { -webkit-tap-highlight-color: transparent; }
   background: linear-gradient(
     90deg,
     #555555 20%,
-    #E8A020 42%,
+    var(--color-accent) 42%,
     #FFD580 50%,
-    #E8A020 58%,
+    var(--color-accent) 58%,
     #555555 80%
   );
   background-size: 300% auto;
@@ -352,6 +363,21 @@ a, button { -webkit-tap-highlight-color: transparent; }
   -webkit-text-fill-color: transparent;
   background-clip: text;
   animation: heroBadgeShimmer 12s linear infinite;
+}
+
+[data-city="gurgaon"] .hero-badge-shimmer {
+  background: linear-gradient(
+    90deg,
+    #555555 20%,
+    var(--color-accent) 42%,
+    #EDE4FB 50%,
+    var(--color-accent) 58%,
+    #555555 80%
+  );
+  background-size: 300% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 /* ── Encore Wav partner branding ───────────────────────────────────────────── */
@@ -660,5 +686,91 @@ a, button { -webkit-tap-highlight-color: transparent; }
   .encore-external-link-icon {
     width: 10px;
     height: 10px;
+  }
+}
+
+/* ── City switcher ──────────────────────────────────────────────────────────
+   Rendered inside DesktopSidebar (desktop) and AppHeader (mobile) so it's
+   reachable from every page, not just the (legacy) Navbar component. */
+.city-switcher {
+  position: relative;
+  flex-shrink: 0;
+}
+.city-switcher.full-width {
+  width: 100%;
+}
+.city-switcher-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
+  border-radius: var(--radius-pill);
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+  font-family: var(--font-sans);
+}
+.city-switcher.full-width .city-switcher-btn {
+  width: 100%;
+  justify-content: space-between;
+}
+.city-switcher-btn:hover {
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent) 50%, transparent);
+}
+.city-switcher-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 160px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  z-index: 250;
+}
+.city-switcher.full-width .city-switcher-menu {
+  left: 0;
+  right: 0;
+  min-width: 0;
+}
+.city-switcher-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: background 0.12s;
+  font-family: var(--font-sans);
+}
+.city-switcher-option:hover {
+  background: rgba(255,255,255,0.06);
+}
+.city-switcher-option.active {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+.city-switcher-check {
+  color: var(--color-accent);
+  font-size: 11px;
+}
+@media (max-width: 600px) {
+  .city-switcher:not(.full-width) .city-switcher-btn {
+    padding: 6px 10px;
+    font-size: 11px;
   }
 }

@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthButton } from './AuthButton';
+import { CitySwitcher } from './CitySwitcher';
+import Logo from './Logo';
+import { useCity } from '../CityContext';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { useDesktop } from '../hooks/useDesktop';
 
@@ -18,6 +21,7 @@ const isAndroid =
 export default function AppHeader({ backTo = false, transparent = false }) {
   const navigate = useNavigate();
   const isDesktop = useDesktop();
+  const { city } = useCity();
   const { isInstalled, isIOS, triggerInstall } = usePWAInstall();
   const [showIOSTip, setShowIOSTip] = useState(false);
   const [showManualTip, setShowManualTip] = useState(false);
@@ -67,10 +71,10 @@ export default function AppHeader({ backTo = false, transparent = false }) {
     gap: 5,
     padding: '3px 8px',
     marginLeft: 10,
-    background: 'rgba(232, 160, 32, 0.08)',
-    border: '1px solid rgba(232, 160, 32, 0.25)',
+    background: 'color-mix(in srgb, var(--color-accent) 8%, transparent)',
+    border: '1px solid color-mix(in srgb, var(--color-accent) 25%, transparent)',
     borderRadius: 6,
-    color: 'var(--color-amber)',
+    color: 'var(--color-accent)',
     cursor: 'pointer',
     flexShrink: 0,
     transition: 'background 0.15s, border-color 0.15s',
@@ -96,7 +100,7 @@ export default function AppHeader({ backTo = false, transparent = false }) {
             right: 16px;
             z-index: 10001;
             background: var(--color-bg-surface);
-            border: 1px solid rgba(232, 160, 32, 0.3);
+            border: 1px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
             border-radius: 14px;
             padding: 16px 18px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.6);
@@ -151,7 +155,7 @@ export default function AppHeader({ backTo = false, transparent = false }) {
             flex: 1,
           }}>
             <Link
-              to="/"
+              to={city === 'gurgaon' ? '/gurgaon' : '/'}
               className="nestiq-header-logo"
               style={{
                 display: 'flex',
@@ -161,17 +165,17 @@ export default function AppHeader({ backTo = false, transparent = false }) {
                 minWidth: 0,
               }}
             >
-              <img src="/icon.svg" alt="NestIQ logo" style={{ width: 26, height: 26, flexShrink: 0 }} />
+              <Logo size={26} />
               <span style={{
                 fontFamily: 'var(--font-sans)',
                 fontWeight: 300,
                 fontSize: 18,
                 letterSpacing: '-0.02em',
-                color: 'var(--color-text-primary)',
+                color: city === 'gurgaon' ? 'var(--color-accent)' : 'var(--color-text-primary)',
                 whiteSpace: 'nowrap',
               }}>
                 Nest<span style={{
-                  color: 'var(--color-amber)',
+                  color: 'var(--color-accent)',
                   fontFamily: 'var(--font-mono)',
                   fontWeight: 500,
                 }}>IQ</span>
@@ -191,7 +195,10 @@ export default function AppHeader({ backTo = false, transparent = false }) {
           </div>
         )}
 
-        <AuthButton />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          <CitySwitcher />
+          <AuthButton />
+        </div>
       </header>
 
       {showIOSTip && (
@@ -208,9 +215,9 @@ export default function AppHeader({ backTo = false, transparent = false }) {
               <div key={step} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: 'var(--color-text-muted)' }}>
                 <span style={{
                   width: 20, height: 20, borderRadius: '50%',
-                  background: 'rgba(232,160,32,0.15)',
-                  border: '1px solid rgba(232,160,32,0.3)',
-                  color: 'var(--color-amber)',
+                  background: 'color-mix(in srgb, var(--color-accent) 15%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)',
+                  color: 'var(--color-accent)',
                   fontSize: 10, fontWeight: 700,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   flexShrink: 0,

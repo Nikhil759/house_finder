@@ -2,17 +2,15 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { AuthButton } from './AuthButton';
 import { EncoreSidebarBadge } from './EncorePartner';
-
-const NAV_ITEMS = [
-  { label: 'Home',    icon: 'fa-solid fa-house',        to: '/',               match: p => p === '/' },
-  { label: 'Search',  icon: 'fa-solid fa-magnifying-glass', to: '/app',        match: p => p.startsWith('/app') || p.startsWith('/listing') },
-  { label: 'Pulse',   icon: 'fa-solid fa-chart-line',   to: '/locality-guide', match: p => p.startsWith('/locality-guide') || p.startsWith('/neighbourhood-pulse') },
-  { label: 'My Hub',  icon: 'fa-solid fa-layer-group',     to: '/new',            match: p => p.startsWith('/new') },
-  { label: 'Profile', icon: 'fa-solid fa-user',         to: '/profile',        match: p => p.startsWith('/profile') },
-];
+import { useCity } from '../CityContext';
+import { getNavItems } from '../lib/navConfig';
+import { CitySwitcher } from './CitySwitcher';
+import Logo from './Logo';
 
 export default function DesktopSidebar() {
   const { pathname } = useLocation();
+  const { city } = useCity();
+  const navItems = getNavItems(city);
 
   return (
     <aside style={{
@@ -29,7 +27,7 @@ export default function DesktopSidebar() {
 
       {/* Logo */}
       <Link
-        to="/"
+        to={city === 'gurgaon' ? '/gurgaon' : '/'}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -40,25 +38,30 @@ export default function DesktopSidebar() {
           flexShrink: 0,
         }}
       >
-        <img src="/icon.svg" alt="NestIQ" style={{ width: 28, height: 28 }} />
+        <Logo size={28} />
         <span style={{
           fontFamily: 'var(--font-sans)',
           fontWeight: 300,
           fontSize: 20,
           letterSpacing: '-0.02em',
-          color: 'var(--color-text-primary)',
+          color: city === 'gurgaon' ? 'var(--color-accent)' : 'var(--color-text-primary)',
         }}>
           Nest<span style={{
-            color: 'var(--color-amber)',
+            color: 'var(--color-accent)',
             fontFamily: 'var(--font-mono)',
             fontWeight: 500,
           }}>IQ</span>
         </span>
       </Link>
 
+      {/* City switcher */}
+      <div style={{ padding: '14px 20px 4px' }}>
+        <CitySwitcher fullWidth />
+      </div>
+
       {/* Nav items */}
       <nav style={{ flex: 1, padding: '12px 0', overflowY: 'auto' }}>
-        {NAV_ITEMS.map(item => {
+        {navItems.map(item => {
           const active = item.match(pathname);
           return (
             <Link
@@ -70,9 +73,9 @@ export default function DesktopSidebar() {
                 gap: 12,
                 padding: '11px 20px',
                 textDecoration: 'none',
-                color: active ? 'var(--color-amber)' : 'var(--color-text-muted)',
-                background: active ? 'rgba(232,160,32,0.06)' : 'transparent',
-                borderLeft: `2px solid ${active ? 'var(--color-amber)' : 'transparent'}`,
+                color: active ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                background: active ? 'color-mix(in srgb, var(--color-accent) 6%, transparent)' : 'transparent',
+                borderLeft: `2px solid ${active ? 'var(--color-accent)' : 'transparent'}`,
                 transition: 'color 0.15s, background 0.15s',
                 fontFamily: 'var(--font-sans)',
                 fontSize: 14,
@@ -117,7 +120,7 @@ export default function DesktopSidebar() {
           color: '#333',
           textTransform: 'uppercase',
         }}>
-          NestIQ · Bangalore
+          NestIQ · {city === 'gurgaon' ? 'Gurgaon' : 'Bangalore'}
         </span>
         <AuthButton />
       </div>

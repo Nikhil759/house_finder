@@ -20,8 +20,8 @@ const TIME_FILTERS = ['Last 24h', 'Last 3 days', 'Last 7 days'];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function scoreColor(score) {
-  if (score >= 80) return 'var(--color-amber)';
-  if (score >= 60) return 'rgba(232,160,32,0.55)';
+  if (score >= 80) return 'var(--color-accent)';
+  if (score >= 60) return 'color-mix(in srgb, var(--color-accent) 55%, transparent)';
   return 'var(--color-text-muted)';
 }
 
@@ -146,7 +146,7 @@ const s = {
     padding: '5px 12px',
     cursor: 'pointer',
     border: active ? 'none' : '1px solid var(--color-border)',
-    background: active ? 'var(--color-amber)' : 'var(--color-bg-surface)',
+    background: active ? 'var(--color-accent)' : 'var(--color-bg-surface)',
     color: active ? '#1a0a00' : 'var(--color-text-muted)',
     transition: 'background 0.2s, color 0.2s',
     whiteSpace: 'nowrap',
@@ -197,13 +197,13 @@ function PipelineTracker({ listings, activeStage, totalCount }) {
 
   function dotStyle(i) {
     if (i < activeIdx)   return { bg: 'rgba(34,197,94,0.35)', border: 'rgba(34,197,94,0.65)' };
-    if (i === activeIdx) return { bg: 'var(--color-amber)', border: 'var(--color-amber)' };
+    if (i === activeIdx) return { bg: 'var(--color-accent)', border: 'var(--color-accent)' };
     return { bg: '#111', border: '#2A2A2A' };
   }
 
   function textColor(i) {
     if (i < activeIdx)   return 'rgba(34,197,94,0.65)';
-    if (i === activeIdx) return 'var(--color-amber)';
+    if (i === activeIdx) return 'var(--color-accent)';
     return '#555';
   }
 
@@ -343,7 +343,7 @@ function MyListingCard({ listing, onRemove, onStageChange, onNoteSave, listingSt
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
           <span style={{
             fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 500,
-            color: 'var(--color-amber)', letterSpacing: '-0.01em',
+            color: 'var(--color-accent)', letterSpacing: '-0.01em',
           }}>
             {listing.price}/mo
           </span>
@@ -488,15 +488,15 @@ function MyListingCard({ listing, onRemove, onStageChange, onNoteSave, listingSt
               marginLeft: 'auto',
               fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500,
               letterSpacing: '0.06em',
-              color: 'var(--color-amber)',
-              border: '1px solid rgba(232,160,32,0.3)',
-              background: 'rgba(232,160,32,0.05)',
+              color: 'var(--color-accent)',
+              border: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)',
+              background: 'color-mix(in srgb, var(--color-accent) 5%, transparent)',
               borderRadius: 6, padding: '0 14px', height: 34,
               display: 'inline-flex', alignItems: 'center',
               textDecoration: 'none', transition: 'border-color 0.2s, background 0.2s',
             }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-amber)'; e.currentTarget.style.background = 'rgba(232,160,32,0.12)'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(232,160,32,0.3)'; e.currentTarget.style.background = 'rgba(232,160,32,0.05)'; }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-accent)'; e.currentTarget.style.background = 'color-mix(in srgb, var(--color-accent) 12%, transparent)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-accent) 30%, transparent)'; e.currentTarget.style.background = 'color-mix(in srgb, var(--color-accent) 5%, transparent)'; }}
           >
             Details
           </Link>
@@ -509,14 +509,14 @@ function MyListingCard({ listing, onRemove, onStageChange, onNoteSave, listingSt
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500,
                 letterSpacing: '0.06em',
-                color: 'var(--color-amber)',
-                border: '1px solid rgba(232,160,32,0.3)',
-                background: 'rgba(232,160,32,0.05)',
+                color: 'var(--color-accent)',
+                border: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)',
+                background: 'color-mix(in srgb, var(--color-accent) 5%, transparent)',
                 borderRadius: 6, padding: '0 14px', height: 34,
                 textDecoration: 'none', transition: 'border-color 0.2s, background 0.2s',
               }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-amber)'; e.currentTarget.style.background = 'rgba(232,160,32,0.12)'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(232,160,32,0.3)'; e.currentTarget.style.background = 'rgba(232,160,32,0.05)'; }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-accent)'; e.currentTarget.style.background = 'color-mix(in srgb, var(--color-accent) 12%, transparent)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-accent) 30%, transparent)'; e.currentTarget.style.background = 'color-mix(in srgb, var(--color-accent) 5%, transparent)'; }}
             >
               <i className="fa-solid fa-arrow-up-right-from-square" style={{ fontSize: 12 }} />
               Source
@@ -646,15 +646,15 @@ function NewLeadCard({ listing, onSave, onHide, isSavedFn }) {
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500,
                 letterSpacing: '0.06em',
-                color: 'var(--color-amber)',
-                border: '1px solid rgba(232,160,32,0.3)',
-                background: 'rgba(232,160,32,0.05)',
+                color: 'var(--color-accent)',
+                border: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)',
+                background: 'color-mix(in srgb, var(--color-accent) 5%, transparent)',
                 borderRadius: 6, padding: '0 14px', height: 34,
                 textDecoration: 'none',
                 transition: 'border-color 0.2s, background 0.2s',
               }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-amber)'; e.currentTarget.style.background = 'rgba(232,160,32,0.12)'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(232,160,32,0.3)'; e.currentTarget.style.background = 'rgba(232,160,32,0.05)'; }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-accent)'; e.currentTarget.style.background = 'color-mix(in srgb, var(--color-accent) 12%, transparent)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-accent) 30%, transparent)'; e.currentTarget.style.background = 'color-mix(in srgb, var(--color-accent) 5%, transparent)'; }}
             >
               <i className="fa-solid fa-arrow-up-right-from-square" style={{ fontSize: 12 }} />
               Source
@@ -720,12 +720,12 @@ function LockedNewLeadsState({ savedListings, onSignIn }) {
     }}>
       <div style={{
         width: 48, height: 48, borderRadius: '50%',
-        background: 'rgba(232,160,32,0.12)',
-        border: '1px solid rgba(232,160,32,0.28)',
+        background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
+        border: '1px solid color-mix(in srgb, var(--color-accent) 28%, transparent)',
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         marginBottom: 20,
       }}>
-        <i className="fa-solid fa-bolt" style={{ color: 'var(--color-amber)', fontSize: 20 }} />
+        <i className="fa-solid fa-bolt" style={{ color: 'var(--color-accent)', fontSize: 20 }} />
       </div>
 
       <h2 style={{
@@ -748,7 +748,7 @@ function LockedNewLeadsState({ savedListings, onSignIn }) {
           marginBottom: 24,
         }}>
           Sign in to see new listings in{' '}
-          <span style={{ color: 'var(--color-amber)', fontWeight: 500 }}>{previewData.locality}</span>
+          <span style={{ color: 'var(--color-accent)', fontWeight: 500 }}>{previewData.locality}</span>
           {' — '}
           <span style={{ fontWeight: 500 }}>{previewData.count} new</span> in the last 24h
         </p>
@@ -778,7 +778,7 @@ function LockedNewLeadsState({ savedListings, onSignIn }) {
           fontFamily: 'var(--font-sans)',
           fontSize: 14,
           fontWeight: 500,
-          background: 'var(--color-amber)',
+          background: 'var(--color-accent)',
           color: '#1a0a00',
           border: 'none',
           borderRadius: 10,
@@ -929,7 +929,7 @@ export default function MyHub() {
                 padding: 0,
                 fontFamily: 'inherit',
                 fontSize: 'inherit',
-                color: 'var(--color-amber)',
+                color: 'var(--color-accent)',
                 fontWeight: 500,
                 cursor: 'pointer',
                 textDecoration: 'underline',
@@ -976,7 +976,7 @@ export default function MyHub() {
                 <span style={{
                   position: 'absolute', top: 4, right: 12,
                   fontFamily: 'var(--font-mono)', fontSize: 9,
-                  background: 'var(--color-amber)', color: '#1a0a00',
+                  background: 'var(--color-accent)', color: '#1a0a00',
                   borderRadius: 'var(--radius-pill)', padding: '1px 5px',
                   letterSpacing: '0.04em',
                 }}>
@@ -1059,7 +1059,7 @@ export default function MyHub() {
                   <Link to="/search" style={{
                     display: 'inline-block', marginTop: 16,
                     fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.06em',
-                    color: 'var(--color-amber)', textDecoration: 'none',
+                    color: 'var(--color-accent)', textDecoration: 'none',
                   }}>
                     Search listings →
                   </Link>
@@ -1160,7 +1160,7 @@ export default function MyHub() {
                       </h2>
                       <span style={{
                         fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em',
-                        background: 'var(--color-amber)', color: '#1a0a00',
+                        background: 'var(--color-accent)', color: '#1a0a00',
                         borderRadius: 'var(--radius-pill)', padding: '2px 8px', fontWeight: 500,
                       }}>
                         {visible.length} NEW
@@ -1189,7 +1189,7 @@ export default function MyHub() {
                         padding: '10px', cursor: 'pointer', marginTop: 4,
                         transition: 'border-color 0.2s, color 0.2s',
                       }}
-                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-amber)'; e.currentTarget.style.color = 'var(--color-amber)'; }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-accent)'; e.currentTarget.style.color = 'var(--color-accent)'; }}
                       onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-muted)'; }}
                     >
                       Show {remaining} more →
@@ -1229,7 +1229,7 @@ export default function MyHub() {
                 </p>
                 <Link to="/search" style={{
                   fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.06em',
-                  color: 'var(--color-amber)', textDecoration: 'none',
+                  color: 'var(--color-accent)', textDecoration: 'none',
                 }}>
                   Go to Search →
                 </Link>

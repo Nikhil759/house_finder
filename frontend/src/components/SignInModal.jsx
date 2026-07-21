@@ -88,13 +88,13 @@ export default function SignInModal({ source, onClose }) {
           gap: 10,
         }}>
           <li style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-            <i className="fa-solid fa-shield-halved" style={{ color: 'var(--color-amber)', fontSize: 13, marginTop: 3, flexShrink: 0 }} />
+            <i className="fa-solid fa-shield-halved" style={{ color: 'var(--color-accent)', fontSize: 13, marginTop: 3, flexShrink: 0 }} />
             <span style={{ fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
               Keep your shortlist forever — across phone, laptop, and browser sessions
             </span>
           </li>
           <li style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-            <i className="fa-solid fa-bolt" style={{ color: 'var(--color-amber)', fontSize: 13, marginTop: 3, flexShrink: 0 }} />
+            <i className="fa-solid fa-bolt" style={{ color: 'var(--color-accent)', fontSize: 13, marginTop: 3, flexShrink: 0 }} />
             <span style={{ fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
               Auto-curated new listings in your interest areas, with seen/unseen tracking
             </span>
@@ -106,7 +106,7 @@ export default function SignInModal({ source, onClose }) {
           style={{
             width: '100%',
             height: 48,
-            background: 'var(--color-amber)',
+            background: 'var(--color-accent)',
             color: '#1a0a00',
             border: 'none',
             borderRadius: 12,

@@ -1518,6 +1518,102 @@ def get_listing(listing_id):
 
 
 # ─────────────────────────────────────────────
+# Societies (gated-community directory — launched for Gurgaon)
+#
+# Reads straight from Supabase Postgres. The `societies` table is small
+# (tens to low hundreds of rows) and low-write-frequency, so it isn't worth
+# plumbing through the SQLite replica yet — unlike `listings`, which needs
+# the replica for latency/scale reasons.
+# ─────────────────────────────────────────────
+
+_SOCIETY_LIST_COLUMNS = [
+    "id", "city", "name", "slug", "locality", "developer",
+    "latitude", "longitude", "image_urls", "listing_count", "place_id",
+]
+
+_SOCIETY_DETAIL_COLUMNS = _SOCIETY_LIST_COLUMNS + [
+    "description", "amenities", "source_url",
+]
+
+
+@app.route("/api/societies")
+def get_societies():
+    """List active societies for a city (defaults to gurgaon)."""
+    city = (request.args.get("city") or "gurgaon").strip().lower()
+    try:
+        from ingestion.db import get_connection as get_pg_connection
+        conn = get_pg_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                f"""
+                SELECT {", ".join(_SOCIETY_LIST_COLUMNS)}
+                FROM societies
+                WHERE city = %s AND is_active = TRUE
+                ORDER BY listing_count DESC, name ASC
+                """,
+                (city,),
+            )
+            rows = [dict(zip(_SOCIETY_LIST_COLUMNS, row)) for row in cur.fetchall()]
+        finally:
+            conn.close()
+        return jsonify({"city": city, "societies": rows, "count": len(rows)})
+    except Exception as e:
+        logger.error("get_societies db error: %s", e, exc_info=True)
+        return jsonify({"error": "database_error", "request_id": getattr(g, "request_id", None)}), 500
+
+
+@app.route("/api/society/<int:society_id>")
+def get_society(society_id):
+    """Single society detail + the listings linked to it via listings.society_id."""
+    try:
+        from ingestion.db import get_connection as get_pg_connection
+        conn = get_pg_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                f"""
+                SELECT {", ".join(_SOCIETY_DETAIL_COLUMNS)}
+                FROM societies
+                WHERE id = %s AND is_active = TRUE
+                """,
+                (society_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return jsonify({"error": "Society not found"}), 404
+            society = dict(zip(_SOCIETY_DETAIL_COLUMNS, row))
+
+            cur.execute(
+                """
+                SELECT source, source_id, title, rent, deposit, bhk, property_type,
+                       furnishing, area_sqft, thumbnail_url, image_urls, posted_at
+                FROM listings
+                WHERE society_id = %s AND status = 'active'
+                ORDER BY posted_at DESC NULLS LAST
+                LIMIT 100
+                """,
+                (society_id,),
+            )
+            listing_cols = [
+                "source", "source_id", "title", "rent", "deposit", "bhk", "property_type",
+                "furnishing", "area_sqft", "thumbnail_url", "image_urls", "posted_at",
+            ]
+            listings = []
+            for r in cur.fetchall():
+                item = dict(zip(listing_cols, r))
+                item["id"] = f"{item['source']}_{item['source_id']}"
+                listings.append(item)
+        finally:
+            conn.close()
+        society["listings"] = listings
+        return jsonify(society)
+    except Exception as e:
+        logger.error("get_society db error: %s", e, exc_info=True)
+        return jsonify({"error": "database_error", "request_id": getattr(g, "request_id", None)}), 500
+
+
+# ─────────────────────────────────────────────
 # Listing flags (renter reports)
 #
 # Flags are a SOFT signal — visibility/ranking is NEVER affected. These

@@ -8,6 +8,7 @@ import { useDesktop } from '../hooks/useDesktop';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import RadarAnimation from '../components/RadarAnimation';
 import { EncoreLeaderboardStrip } from '../components/EncorePartner';
+import { useCity } from '../CityContext';
 import '../global.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -40,7 +41,7 @@ const s = {
     fontFamily: 'var(--font-mono)',
     fontSize: 11,
     letterSpacing: '0.14em',
-    color: 'var(--color-amber)',
+    color: 'var(--color-accent)',
     textTransform: 'uppercase',
     marginBottom: 16,
   },
@@ -78,55 +79,55 @@ const s = {
 
 const DIVIDER_SVG_CONTENT = (
   <>
-    <line x1="40.1365" y1="0.389806" x2="80.2042" y2="45.4661" stroke="#E8A020"/>
-    <line x1="21.1412" y1="23.3952" x2="40.1412" y2="45.3952" stroke="#E8A020"/>
-    <line x1="32.1214" y1="10.3736" x2="66.1214" y2="45.3736" stroke="#E8A020"/>
-    <line x1="10.0991" y1="35.352" x2="21.0991" y2="45.352" stroke="#E8A020"/>
-    <line x1="53.4092" y1="12.3684" x2="65.4092" y2="0.368435" stroke="#E8A020"/>
-    <line x1="74.3923" y1="32.3862" x2="103.392" y2="0.386228" stroke="#E8A020"/>
-    <line x1="121.136" y1="1.38981" x2="161.204" y2="46.4661" stroke="#E8A020"/>
-    <line x1="134.409" y1="13.3684" x2="146.409" y2="1.36844" stroke="#E8A020"/>
-    <line x1="155.392" y1="33.3862" x2="184.392" y2="1.38623" stroke="#E8A020"/>
-    <line x1="113.121" y1="11.3736" x2="147.121" y2="46.3736" stroke="#E8A020"/>
-    <line x1="102.141" y1="24.3952" x2="121.141" y2="46.3952" stroke="#E8A020"/>
-    <line x1="91.0991" y1="36.352" x2="102.099" y2="46.352" stroke="#E8A020"/>
-    <line x1="202.136" y1="2.38981" x2="242.204" y2="47.4661" stroke="#E8A020"/>
-    <line x1="215.409" y1="14.3684" x2="227.409" y2="2.36844" stroke="#E8A020"/>
-    <line x1="236.392" y1="34.3862" x2="265.392" y2="2.38623" stroke="#E8A020"/>
-    <line x1="194.121" y1="12.3736" x2="228.121" y2="47.3736" stroke="#E8A020"/>
-    <line x1="183.141" y1="25.3952" x2="202.141" y2="47.3952" stroke="#E8A020"/>
-    <line x1="172.099" y1="37.352" x2="183.099" y2="47.352" stroke="#E8A020"/>
-    <line x1="283.136" y1="1.38981" x2="323.204" y2="46.4661" stroke="#E8A020"/>
-    <line x1="296.409" y1="13.3684" x2="308.409" y2="1.36844" stroke="#E8A020"/>
-    <line x1="317.392" y1="33.3862" x2="346.392" y2="1.38623" stroke="#E8A020"/>
-    <line x1="275.121" y1="11.3736" x2="309.121" y2="46.3736" stroke="#E8A020"/>
-    <line x1="264.141" y1="24.3952" x2="283.141" y2="46.3952" stroke="#E8A020"/>
-    <line x1="253.099" y1="36.352" x2="264.099" y2="46.352" stroke="#E8A020"/>
-    <line x1="363.136" y1="1.38981" x2="403.204" y2="46.4661" stroke="#E8A020"/>
-    <line x1="376.409" y1="13.3684" x2="388.409" y2="1.36844" stroke="#E8A020"/>
-    <line x1="397.392" y1="33.3862" x2="426.392" y2="1.38623" stroke="#E8A020"/>
-    <line x1="355.121" y1="11.3736" x2="389.121" y2="46.3736" stroke="#E8A020"/>
-    <line x1="344.141" y1="24.3952" x2="363.141" y2="46.3952" stroke="#E8A020"/>
-    <line x1="443.136" y1="1.38981" x2="483.204" y2="46.4661" stroke="#E8A020"/>
-    <line x1="456.409" y1="13.3684" x2="468.409" y2="1.36844" stroke="#E8A020"/>
-    <line x1="477.392" y1="33.3862" x2="506.392" y2="1.38623" stroke="#E8A020"/>
-    <line x1="435.121" y1="11.3736" x2="469.121" y2="46.3736" stroke="#E8A020"/>
-    <line x1="424.141" y1="24.3952" x2="443.141" y2="46.3952" stroke="#E8A020"/>
-    <line x1="494.099" y1="37.352" x2="505.099" y2="47.352" stroke="#E8A020"/>
-    <line x1="0.381378" y1="46.3986" x2="39.3814" y2="0.398644" stroke="#E8A020"/>
-    <line x1="80.3814" y1="46.3986" x2="119.381" y2="0.398644" stroke="#E8A020"/>
-    <line x1="62.4168" y1="23.361" x2="86.4168" y2="0.360994" stroke="#E8A020"/>
-    <line x1="403.381" y1="47.3986" x2="442.381" y2="1.39864" stroke="#E8A020"/>
-    <line x1="483.381" y1="47.3986" x2="522.381" y2="1.39864" stroke="#E8A020"/>
-    <line x1="465.417" y1="24.361" x2="489.417" y2="1.36099" stroke="#E8A020"/>
-    <line x1="323.381" y1="47.3986" x2="362.381" y2="1.39864" stroke="#E8A020"/>
-    <line x1="385.417" y1="24.361" x2="409.417" y2="1.36099" stroke="#E8A020"/>
-    <line x1="243.381" y1="47.3986" x2="282.381" y2="1.39864" stroke="#E8A020"/>
-    <line x1="305.417" y1="24.361" x2="329.417" y2="1.36099" stroke="#E8A020"/>
-    <line x1="162.381" y1="48.3986" x2="201.381" y2="2.39864" stroke="#E8A020"/>
-    <line x1="242.381" y1="48.3986" x2="281.381" y2="2.39864" stroke="#E8A020"/>
-    <line x1="224.417" y1="25.361" x2="248.417" y2="2.36099" stroke="#E8A020"/>
-    <line x1="143.417" y1="24.361" x2="167.417" y2="1.36099" stroke="#E8A020"/>
+    <line x1="40.1365" y1="0.389806" x2="80.2042" y2="45.4661" stroke="var(--color-accent)"/>
+    <line x1="21.1412" y1="23.3952" x2="40.1412" y2="45.3952" stroke="var(--color-accent)"/>
+    <line x1="32.1214" y1="10.3736" x2="66.1214" y2="45.3736" stroke="var(--color-accent)"/>
+    <line x1="10.0991" y1="35.352" x2="21.0991" y2="45.352" stroke="var(--color-accent)"/>
+    <line x1="53.4092" y1="12.3684" x2="65.4092" y2="0.368435" stroke="var(--color-accent)"/>
+    <line x1="74.3923" y1="32.3862" x2="103.392" y2="0.386228" stroke="var(--color-accent)"/>
+    <line x1="121.136" y1="1.38981" x2="161.204" y2="46.4661" stroke="var(--color-accent)"/>
+    <line x1="134.409" y1="13.3684" x2="146.409" y2="1.36844" stroke="var(--color-accent)"/>
+    <line x1="155.392" y1="33.3862" x2="184.392" y2="1.38623" stroke="var(--color-accent)"/>
+    <line x1="113.121" y1="11.3736" x2="147.121" y2="46.3736" stroke="var(--color-accent)"/>
+    <line x1="102.141" y1="24.3952" x2="121.141" y2="46.3952" stroke="var(--color-accent)"/>
+    <line x1="91.0991" y1="36.352" x2="102.099" y2="46.352" stroke="var(--color-accent)"/>
+    <line x1="202.136" y1="2.38981" x2="242.204" y2="47.4661" stroke="var(--color-accent)"/>
+    <line x1="215.409" y1="14.3684" x2="227.409" y2="2.36844" stroke="var(--color-accent)"/>
+    <line x1="236.392" y1="34.3862" x2="265.392" y2="2.38623" stroke="var(--color-accent)"/>
+    <line x1="194.121" y1="12.3736" x2="228.121" y2="47.3736" stroke="var(--color-accent)"/>
+    <line x1="183.141" y1="25.3952" x2="202.141" y2="47.3952" stroke="var(--color-accent)"/>
+    <line x1="172.099" y1="37.352" x2="183.099" y2="47.352" stroke="var(--color-accent)"/>
+    <line x1="283.136" y1="1.38981" x2="323.204" y2="46.4661" stroke="var(--color-accent)"/>
+    <line x1="296.409" y1="13.3684" x2="308.409" y2="1.36844" stroke="var(--color-accent)"/>
+    <line x1="317.392" y1="33.3862" x2="346.392" y2="1.38623" stroke="var(--color-accent)"/>
+    <line x1="275.121" y1="11.3736" x2="309.121" y2="46.3736" stroke="var(--color-accent)"/>
+    <line x1="264.141" y1="24.3952" x2="283.141" y2="46.3952" stroke="var(--color-accent)"/>
+    <line x1="253.099" y1="36.352" x2="264.099" y2="46.352" stroke="var(--color-accent)"/>
+    <line x1="363.136" y1="1.38981" x2="403.204" y2="46.4661" stroke="var(--color-accent)"/>
+    <line x1="376.409" y1="13.3684" x2="388.409" y2="1.36844" stroke="var(--color-accent)"/>
+    <line x1="397.392" y1="33.3862" x2="426.392" y2="1.38623" stroke="var(--color-accent)"/>
+    <line x1="355.121" y1="11.3736" x2="389.121" y2="46.3736" stroke="var(--color-accent)"/>
+    <line x1="344.141" y1="24.3952" x2="363.141" y2="46.3952" stroke="var(--color-accent)"/>
+    <line x1="443.136" y1="1.38981" x2="483.204" y2="46.4661" stroke="var(--color-accent)"/>
+    <line x1="456.409" y1="13.3684" x2="468.409" y2="1.36844" stroke="var(--color-accent)"/>
+    <line x1="477.392" y1="33.3862" x2="506.392" y2="1.38623" stroke="var(--color-accent)"/>
+    <line x1="435.121" y1="11.3736" x2="469.121" y2="46.3736" stroke="var(--color-accent)"/>
+    <line x1="424.141" y1="24.3952" x2="443.141" y2="46.3952" stroke="var(--color-accent)"/>
+    <line x1="494.099" y1="37.352" x2="505.099" y2="47.352" stroke="var(--color-accent)"/>
+    <line x1="0.381378" y1="46.3986" x2="39.3814" y2="0.398644" stroke="var(--color-accent)"/>
+    <line x1="80.3814" y1="46.3986" x2="119.381" y2="0.398644" stroke="var(--color-accent)"/>
+    <line x1="62.4168" y1="23.361" x2="86.4168" y2="0.360994" stroke="var(--color-accent)"/>
+    <line x1="403.381" y1="47.3986" x2="442.381" y2="1.39864" stroke="var(--color-accent)"/>
+    <line x1="483.381" y1="47.3986" x2="522.381" y2="1.39864" stroke="var(--color-accent)"/>
+    <line x1="465.417" y1="24.361" x2="489.417" y2="1.36099" stroke="var(--color-accent)"/>
+    <line x1="323.381" y1="47.3986" x2="362.381" y2="1.39864" stroke="var(--color-accent)"/>
+    <line x1="385.417" y1="24.361" x2="409.417" y2="1.36099" stroke="var(--color-accent)"/>
+    <line x1="243.381" y1="47.3986" x2="282.381" y2="1.39864" stroke="var(--color-accent)"/>
+    <line x1="305.417" y1="24.361" x2="329.417" y2="1.36099" stroke="var(--color-accent)"/>
+    <line x1="162.381" y1="48.3986" x2="201.381" y2="2.39864" stroke="var(--color-accent)"/>
+    <line x1="242.381" y1="48.3986" x2="281.381" y2="2.39864" stroke="var(--color-accent)"/>
+    <line x1="224.417" y1="25.361" x2="248.417" y2="2.36099" stroke="var(--color-accent)"/>
+    <line x1="143.417" y1="24.361" x2="167.417" y2="1.36099" stroke="var(--color-accent)"/>
   </>
 );
 
@@ -187,6 +188,8 @@ const fadeSlideUp = {
 
 /* ── Hero Section ───────────────────────────────────────────────────────── */
 function HeroSection({ searchValue, setSearchValue, isDesktop }) {
+  const { city } = useCity();
+  const cityLabel = city === 'gurgaon' ? 'Gurgaon' : 'Bangalore';
   const navigate = useNavigate();
   const [isFocused, setIsFocused] = useState(false);
   const [sourceCounts, setSourceCounts] = useState(null);
@@ -245,7 +248,7 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
         transform: 'translate(-50%, -30%)',
         width: 700,
         height: 500,
-        background: 'radial-gradient(ellipse 50% 40% at 50% 50%, rgba(232,160,32,0.05) 0%, transparent 70%)',
+        background: 'radial-gradient(ellipse 50% 40% at 50% 50%, color-mix(in srgb, var(--color-accent) 5%, transparent) 0%, transparent 70%)',
         pointerEvents: 'none',
         zIndex: 0,
       }} />
@@ -293,7 +296,7 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
           }}
         >
           Rental Intelligence<br />
-          for <span style={{ color: '#E8A020' }}>Bangalore</span>
+          for <span style={{ color: 'var(--color-accent)' }}>{cityLabel}</span>
         </motion.h1>
 
         {/* Sub-heading — Inter */}
@@ -331,12 +334,12 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
               className="hero-search-bar"
               animate={isFocused ? {
                 boxShadow: [
-                  '0 0 0 1px #333, 0 0 20px rgba(232,160,32,0.08)',
-                  '0 0 0 1px #444, 0 0 32px rgba(232,160,32,0.14)',
-                  '0 0 0 1px #333, 0 0 20px rgba(232,160,32,0.08)',
+                  '0 0 0 1px #333, 0 0 20px color-mix(in srgb, var(--color-accent) 8%, transparent)',
+                  '0 0 0 1px #444, 0 0 32px color-mix(in srgb, var(--color-accent) 14%, transparent)',
+                  '0 0 0 1px #333, 0 0 20px color-mix(in srgb, var(--color-accent) 8%, transparent)',
                 ],
               } : {
-                boxShadow: '0 0 0 1px #333, 0 0 0px rgba(232,160,32,0)',
+                boxShadow: '0 0 0 1px #333, 0 0 0px color-mix(in srgb, var(--color-accent) 0%, transparent)',
               }}
               transition={isFocused ? {
                 duration: 2.4,
@@ -411,7 +414,7 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
               <Link
                 to={`/app${searchValue ? `?q=${encodeURIComponent(searchValue)}` : ''}`}
                 style={{
-                  background: '#E8A020',
+                  background: 'var(--color-accent)',
                   color: '#0A0A0A',
                   fontFamily: "'DM Mono', monospace",
                   fontWeight: 700,
@@ -481,13 +484,13 @@ function HeroSection({ searchValue, setSearchValue, isDesktop }) {
             <span style={{
               width: 4, height: 4,
               borderRadius: '50%',
-              background: '#E8A020',
-              boxShadow: '0 0 6px rgba(232,160,32,0.6)',
+              background: 'var(--color-accent)',
+              boxShadow: '0 0 6px color-mix(in srgb, var(--color-accent) 60%, transparent)',
               flexShrink: 0,
             }} />
             Indexing{' '}
             <span style={{
-              color: '#E8A020',
+              color: 'var(--color-accent)',
               fontSize: 13,
               fontWeight: 500,
               letterSpacing: '-0.02em',
@@ -617,14 +620,14 @@ function AnimatedScoreCircle({ trigger, size = 68, score = 92 }) {
         cy={size / 2}
         r={r}
         fill="none"
-        stroke="#E8A020"
+        stroke="var(--color-accent)"
         strokeWidth="2"
         strokeLinecap="round"
         style={{
           strokeDasharray: circumference,
           strokeDashoffset: trigger ? filledOffset : circumference,
           transition: 'stroke-dashoffset 1.4s cubic-bezier(0.25,0.46,0.45,0.94)',
-          filter: 'drop-shadow(0 0 8px rgba(232,160,32,0.35))',
+          filter: 'drop-shadow(0 0 8px color-mix(in srgb, var(--color-accent) 35%, transparent))',
         }}
       />
     </svg>
@@ -768,7 +771,7 @@ function UnifiedIntelligenceSection({ isDesktop }) {
               fontSize: 9,
               letterSpacing: '0.2em',
               textTransform: 'uppercase',
-              color: 'rgba(232,160,32,0.5)',
+              color: 'color-mix(in srgb, var(--color-accent) 50%, transparent)',
               margin: 0,
             }}>
               The Fix
@@ -778,8 +781,8 @@ function UnifiedIntelligenceSection({ isDesktop }) {
               fontSize: 8,
               letterSpacing: '0.12em',
               textTransform: 'uppercase',
-              color: '#E8A020',
-              border: '1px solid rgba(232,160,32,0.3)',
+              color: 'var(--color-accent)',
+              border: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)',
               borderRadius: 4,
               padding: '2px 7px',
             }}>
@@ -793,7 +796,7 @@ function UnifiedIntelligenceSection({ isDesktop }) {
             fontSize: isDesktop ? 32 : 24,
             lineHeight: 1.2,
             letterSpacing: '-0.02em',
-            color: '#E8A020',
+            color: 'var(--color-accent)',
             marginBottom: 32,
           }}>
             One search. Every platform.
@@ -823,14 +826,14 @@ function UnifiedIntelligenceSection({ isDesktop }) {
                   gap: 10,
                   padding: '9px 16px',
                   borderRadius: 8,
-                  background: 'rgba(232,160,32,0.04)',
-                  border: '1px solid rgba(232,160,32,0.12)',
+                  background: 'color-mix(in srgb, var(--color-accent) 4%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--color-accent) 12%, transparent)',
                 }}
               >
                 <span style={{
                   fontFamily: "'DM Mono', monospace",
                   fontSize: 11,
-                  color: '#E8A020',
+                  color: 'var(--color-accent)',
                   flexShrink: 0,
                 }}>
                   ✓
@@ -873,7 +876,7 @@ function UnifiedIntelligenceSection({ isDesktop }) {
               position: 'absolute',
               inset: 0,
               backgroundImage:
-                'linear-gradient(rgba(232,160,32,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(232,160,32,0.04) 1px, transparent 1px)',
+                'linear-gradient(color-mix(in srgb, var(--color-accent) 4%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--color-accent) 4%, transparent) 1px, transparent 1px)',
               backgroundSize: '40px 40px',
             }} />
 
@@ -892,7 +895,7 @@ function UnifiedIntelligenceSection({ isDesktop }) {
                     y1={50 + node.y * 0.8}
                     x2={50 + next.x * 0.8}
                     y2={50 + next.y * 0.8}
-                    stroke="#E8A020"
+                    stroke="var(--color-accent)"
                     strokeWidth="0.12"
                     opacity={converging ? 0 : 0.25}
                     style={{ transition: 'opacity 0.8s ease' }}
@@ -955,7 +958,7 @@ function UnifiedIntelligenceSection({ isDesktop }) {
               width: 340,
               height: 220,
               borderRadius: '50%',
-              background: 'radial-gradient(ellipse, rgba(232,160,32,0.14) 0%, transparent 70%)',
+              background: 'radial-gradient(ellipse, color-mix(in srgb, var(--color-accent) 14%, transparent) 0%, transparent 70%)',
               zIndex: 1,
               pointerEvents: 'none',
             }}
@@ -982,7 +985,7 @@ function UnifiedIntelligenceSection({ isDesktop }) {
               alignItems: 'center',
               gap: isDesktop ? 24 : 18,
               boxShadow: fused
-                ? '0 0 80px rgba(232,160,32,0.12), 0 0 30px rgba(232,160,32,0.06)'
+                ? '0 0 80px color-mix(in srgb, var(--color-accent) 12%, transparent), 0 0 30px color-mix(in srgb, var(--color-accent) 6%, transparent)'
                 : 'none',
             }}
           >
@@ -991,7 +994,7 @@ function UnifiedIntelligenceSection({ isDesktop }) {
               width: 68,
               height: 68,
               borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(232,160,32,0.15) 0%, rgba(232,160,32,0.04) 70%)',
+              background: 'radial-gradient(circle, color-mix(in srgb, var(--color-accent) 15%, transparent) 0%, color-mix(in srgb, var(--color-accent) 4%, transparent) 70%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -1003,7 +1006,7 @@ function UnifiedIntelligenceSection({ isDesktop }) {
                 fontFamily: "'DM Mono', monospace",
                 fontSize: 22,
                 fontWeight: 500,
-                color: '#E8A020',
+                color: 'var(--color-accent)',
                 letterSpacing: '-0.03em',
                 position: 'relative',
                 zIndex: 1,
@@ -1017,7 +1020,7 @@ function UnifiedIntelligenceSection({ isDesktop }) {
               <p style={{
                 fontFamily: "'DM Mono', monospace",
                 fontSize: 10,
-                color: '#E8A020',
+                color: 'var(--color-accent)',
                 letterSpacing: '0.1em',
                 textTransform: 'uppercase',
                 marginBottom: 6,
@@ -1202,7 +1205,7 @@ function PulseSpotlightSection({ isDesktop }) {
                 <span style={{
                   fontFamily: "'DM Mono', monospace",
                   fontSize: 11,
-                  color: '#E8A020',
+                  color: 'var(--color-accent)',
                 }}>
                   +<AnimatedScore target={3.2} trigger={countsReady} />%
                 </span>
@@ -1212,14 +1215,14 @@ function PulseSpotlightSection({ isDesktop }) {
                 <polyline
                   points="0,28 20,24 40,26 60,20 80,22 100,16 120,18 140,12 160,14 180,8 200,10"
                   fill="none"
-                  stroke="#E8A020"
+                  stroke="var(--color-accent)"
                   strokeWidth="1.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
                 <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#E8A020" stopOpacity="0.15" />
-                  <stop offset="100%" stopColor="#E8A020" stopOpacity="0" />
+                  <stop offset="0%" stopColor="var(--color-accent)" stopOpacity="0.15" />
+                  <stop offset="100%" stopColor="var(--color-accent)" stopOpacity="0" />
                 </linearGradient>
                 <polygon
                   points="0,28 20,24 40,26 60,20 80,22 100,16 120,18 140,12 160,14 180,8 200,10 200,32 0,32"
@@ -1390,21 +1393,21 @@ function PulseSpotlightSection({ isDesktop }) {
               fontSize: 11,
               letterSpacing: '0.18em',
               textTransform: 'uppercase',
-              color: '#E8A020',
+              color: 'var(--color-accent)',
               padding: '15px 34px',
               borderRadius: 10,
-              border: '1px solid rgba(232,160,32,0.2)',
+              border: '1px solid color-mix(in srgb, var(--color-accent) 20%, transparent)',
               background: 'transparent',
               textDecoration: 'none',
               overflow: 'hidden',
               transition: 'color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease',
             }}
             onMouseEnter={e => {
-              e.currentTarget.style.borderColor = 'rgba(232,160,32,0.5)';
-              e.currentTarget.style.boxShadow = '0 0 28px rgba(232,160,32,0.1), inset 0 0 20px rgba(232,160,32,0.03)';
+              e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-accent) 50%, transparent)';
+              e.currentTarget.style.boxShadow = '0 0 28px color-mix(in srgb, var(--color-accent) 10%, transparent), inset 0 0 20px color-mix(in srgb, var(--color-accent) 3%, transparent)';
             }}
             onMouseLeave={e => {
-              e.currentTarget.style.borderColor = 'rgba(232,160,32,0.2)';
+              e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-accent) 20%, transparent)';
               e.currentTarget.style.boxShadow = 'none';
             }}
           >
@@ -1414,7 +1417,7 @@ function PulseSpotlightSection({ isDesktop }) {
               Explore the Bangalore Pulse
             </span>
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ position: 'relative', zIndex: 1, flexShrink: 0, transition: 'transform 0.3s ease' }} className="pulse-cta-icon">
-              <path d="M4 12L12 4M12 4H5M12 4V11" stroke="#E8A020" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M4 12L12 4M12 4H5M12 4V11" stroke="var(--color-accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             {/* Scanning line */}
             <span className="pulse-cta-scan" />
@@ -1493,9 +1496,9 @@ function MyHubSection({ isDesktop }) {
                     textTransform: 'uppercase',
                     padding: '10px 22px',
                     borderRadius: 8,
-                    border: `1px solid ${active ? 'rgba(232,160,32,0.5)' : 'rgba(255,255,255,0.06)'}`,
-                    background: active ? 'rgba(232,160,32,0.08)' : 'rgba(255,255,255,0.02)',
-                    color: active ? '#E8A020' : '#555',
+                    border: `1px solid ${active ? 'color-mix(in srgb, var(--color-accent) 50%, transparent)' : 'rgba(255,255,255,0.06)'}`,
+                    background: active ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : 'rgba(255,255,255,0.02)',
+                    color: active ? 'var(--color-accent)' : '#555',
                     transition: 'all 0.2s ease',
                   }}
                 >
@@ -1553,7 +1556,7 @@ function MyHubSection({ isDesktop }) {
               background: '#111',
               border: '1px solid rgba(255,255,255,0.06)',
             }}>
-              <i className="fa-solid fa-bolt" style={{ fontSize: 12, color: '#E8A020' }} />
+              <i className="fa-solid fa-bolt" style={{ fontSize: 12, color: 'var(--color-accent)' }} />
               <span style={{
                 fontFamily: "'DM Mono', monospace",
                 fontSize: 12,
@@ -1568,7 +1571,7 @@ function MyHubSection({ isDesktop }) {
                 fontSize: 10,
                 fontWeight: 500,
                 color: '#0A0A0A',
-                background: '#E8A020',
+                background: 'var(--color-accent)',
                 borderRadius: 10,
                 padding: '2px 8px',
                 lineHeight: '16px',
@@ -1599,21 +1602,21 @@ function MyHubSection({ isDesktop }) {
               fontSize: 11,
               letterSpacing: '0.18em',
               textTransform: 'uppercase',
-              color: '#E8A020',
+              color: 'var(--color-accent)',
               padding: '15px 34px',
               borderRadius: 10,
-              border: '1px solid rgba(232,160,32,0.2)',
+              border: '1px solid color-mix(in srgb, var(--color-accent) 20%, transparent)',
               background: 'transparent',
               textDecoration: 'none',
               overflow: 'hidden',
               transition: 'color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease',
             }}
             onMouseEnter={e => {
-              e.currentTarget.style.borderColor = 'rgba(232,160,32,0.5)';
-              e.currentTarget.style.boxShadow = '0 0 28px rgba(232,160,32,0.1), inset 0 0 20px rgba(232,160,32,0.03)';
+              e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-accent) 50%, transparent)';
+              e.currentTarget.style.boxShadow = '0 0 28px color-mix(in srgb, var(--color-accent) 10%, transparent), inset 0 0 20px color-mix(in srgb, var(--color-accent) 3%, transparent)';
             }}
             onMouseLeave={e => {
-              e.currentTarget.style.borderColor = 'rgba(232,160,32,0.2)';
+              e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-accent) 20%, transparent)';
               e.currentTarget.style.boxShadow = 'none';
             }}
           >
@@ -1622,7 +1625,7 @@ function MyHubSection({ isDesktop }) {
               Explore My Hub
             </span>
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ position: 'relative', zIndex: 1, flexShrink: 0, transition: 'transform 0.3s ease' }} className="pulse-cta-icon">
-              <path d="M4 12L12 4M12 4H5M12 4V11" stroke="#E8A020" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M4 12L12 4M12 4H5M12 4V11" stroke="var(--color-accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             <span className="pulse-cta-scan" />
           </Link>
@@ -1689,7 +1692,7 @@ function FaqRow({ item, isOpen, onToggle }) {
           fontSize: 11,
           letterSpacing: '0.12em',
           textTransform: 'uppercase',
-          color: isOpen ? '#E8A020' : '#999',
+          color: isOpen ? 'var(--color-accent)' : '#999',
           transition: 'color 0.25s ease',
           flex: 1,
         }}>
@@ -1701,7 +1704,7 @@ function FaqRow({ item, isOpen, onToggle }) {
           style={{
             fontFamily: "'DM Mono', monospace",
             fontSize: 16,
-            color: isOpen ? '#E8A020' : '#555',
+            color: isOpen ? 'var(--color-accent)' : '#555',
             flexShrink: 0,
             lineHeight: 1,
             transition: 'color 0.25s ease',
@@ -1820,7 +1823,7 @@ export default function Landing() {
       <section style={{
         padding: '80px 24px 140px',
         textAlign: 'center',
-        background: 'radial-gradient(ellipse 60% 50% at 50% 100%, rgba(232,160,32,0.07) 0%, transparent 70%)',
+        background: 'radial-gradient(ellipse 60% 50% at 50% 100%, color-mix(in srgb, var(--color-accent) 7%, transparent) 0%, transparent 70%)',
       }}>
         <h2 style={{ fontWeight: 300, fontSize: 30, letterSpacing: '-0.025em', marginBottom: 10 }}>
           Start your smartest home search.
@@ -1840,21 +1843,21 @@ export default function Landing() {
             fontSize: 11,
             letterSpacing: '0.18em',
             textTransform: 'uppercase',
-            color: '#E8A020',
+            color: 'var(--color-accent)',
             padding: '15px 34px',
             borderRadius: 10,
-            border: '1px solid rgba(232,160,32,0.2)',
+            border: '1px solid color-mix(in srgb, var(--color-accent) 20%, transparent)',
             background: 'transparent',
             textDecoration: 'none',
             overflow: 'hidden',
             transition: 'color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease',
           }}
           onMouseEnter={e => {
-            e.currentTarget.style.borderColor = 'rgba(232,160,32,0.5)';
-            e.currentTarget.style.boxShadow = '0 0 30px -6px rgba(232,160,32,0.25)';
+            e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-accent) 50%, transparent)';
+            e.currentTarget.style.boxShadow = '0 0 30px -6px color-mix(in srgb, var(--color-accent) 25%, transparent)';
           }}
           onMouseLeave={e => {
-            e.currentTarget.style.borderColor = 'rgba(232,160,32,0.2)';
+            e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-accent) 20%, transparent)';
             e.currentTarget.style.boxShadow = 'none';
           }}
         >
@@ -1863,7 +1866,7 @@ export default function Landing() {
             Start Search
           </span>
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ position: 'relative', zIndex: 1, flexShrink: 0, transition: 'transform 0.3s ease' }} className="pulse-cta-icon">
-            <path d="M4 12L12 4M12 4H5M12 4V11" stroke="#E8A020" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M4 12L12 4M12 4H5M12 4V11" stroke="var(--color-accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <span className="pulse-cta-scan" />
         </Link>
@@ -1901,7 +1904,7 @@ function PWAInstallNudge() {
     }}>
       <div style={{
         background: 'var(--color-bg-surface)',
-        border: '1px solid rgba(232,160,32,0.18)',
+        border: '1px solid color-mix(in srgb, var(--color-accent) 18%, transparent)',
         borderRadius: 16,
         padding: '20px 18px',
         display: 'flex',
@@ -1913,14 +1916,14 @@ function PWAInstallNudge() {
           width: 44,
           height: 44,
           borderRadius: 12,
-          background: 'rgba(232,160,32,0.08)',
-          border: '1px solid rgba(232,160,32,0.2)',
+          background: 'color-mix(in srgb, var(--color-accent) 8%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--color-accent) 20%, transparent)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           flexShrink: 0,
         }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E8A020" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 2v13M8 11l4 4 4-4" />
             <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
           </svg>
@@ -1955,7 +1958,7 @@ function PWAInstallNudge() {
             fontSize: 11,
             letterSpacing: '0.1em',
             textTransform: 'uppercase',
-            background: '#E8A020',
+            background: 'var(--color-accent)',
             color: '#1a0a00',
             border: 'none',
             borderRadius: 8,
@@ -1974,7 +1977,7 @@ function PWAInstallNudge() {
         <div style={{
           marginTop: 10,
           background: 'var(--color-bg-surface)',
-          border: '1px solid rgba(232,160,32,0.25)',
+          border: '1px solid color-mix(in srgb, var(--color-accent) 25%, transparent)',
           borderRadius: 14,
           padding: '16px 18px',
         }}>
@@ -1989,9 +1992,9 @@ function PWAInstallNudge() {
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: i < 2 ? 10 : 0 }}>
               <div style={{
                 width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
-                background: 'rgba(232,160,32,0.12)',
-                border: '1px solid rgba(232,160,32,0.3)',
-                color: '#E8A020',
+                background: 'color-mix(in srgb, var(--color-accent) 12%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--color-accent) 30%, transparent)',
+                color: 'var(--color-accent)',
                 fontSize: 10, fontWeight: 700,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>

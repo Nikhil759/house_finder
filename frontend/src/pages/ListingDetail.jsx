@@ -73,13 +73,13 @@ function timeAgo(epoch) {
 }
 
 function scoreColor(score) {
-  if (score >= 70) return 'var(--color-amber)';
-  if (score >= 50) return 'rgba(232,160,32,0.6)';
+  if (score >= 70) return 'var(--color-accent)';
+  if (score >= 50) return 'color-mix(in srgb, var(--color-accent) 60%, transparent)';
   return 'var(--color-text-muted)';
 }
 
 function deltaColor(delta) {
-  return delta >= 0 ? 'var(--color-amber)' : '#e05c5c';
+  return delta >= 0 ? 'var(--color-accent)' : '#e05c5c';
 }
 
 function normalizeSource(raw) {
@@ -146,7 +146,7 @@ function ScoreRing({ score, size = 100 }) {
       <circle
         cx={cx} cy={cx} r={r}
         fill="none"
-        stroke="var(--color-amber)"
+        stroke="var(--color-accent)"
         strokeWidth={4}
         strokeLinecap="round"
         strokeDasharray={`${fill} ${circ - fill}`}
@@ -165,7 +165,7 @@ function TypeBadge({ imageType, locality, societyName }) {
         display: 'inline-flex', alignItems: 'center', gap: 5,
         fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.08em',
         textTransform: 'uppercase', color: '#1a0a00', fontWeight: 500,
-        background: '#E8A020', borderRadius: 4, padding: '4px 10px',
+        background: 'var(--color-accent)', borderRadius: 4, padding: '4px 10px',
       }}>
         <i className="fa-solid fa-building" style={{ fontSize: 10 }} />
         Society{societyName ? `: ${societyName}` : ''}
@@ -183,7 +183,7 @@ function TypeBadge({ imageType, locality, societyName }) {
         backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
         borderRadius: 4, padding: '4px 10px',
       }}>
-        <i className="fa-solid fa-location-dot" style={{ fontSize: 10, color: 'var(--color-amber)' }} />
+        <i className="fa-solid fa-location-dot" style={{ fontSize: 10, color: 'var(--color-accent)' }} />
         Area{locality ? `: ${locality}` : ''}
       </span>
     );
@@ -207,7 +207,7 @@ function ImageGallery({ images, locality, societyName, heroHeight }) {
       }}>
         <div style={{
           position: 'absolute', inset: 0,
-          background: 'radial-gradient(ellipse 70% 60% at 50% 50%, rgba(232,160,32,0.06) 0%, transparent 70%)',
+          background: 'radial-gradient(ellipse 70% 60% at 50% 50%, color-mix(in srgb, var(--color-accent) 6%, transparent) 0%, transparent 70%)',
         }} />
         <div style={{ textAlign: 'center', position: 'relative' }}>
           <p style={{ fontSize: 32, marginBottom: 8 }}>🏙</p>
@@ -282,7 +282,7 @@ function ImageGallery({ images, locality, societyName, heroHeight }) {
                 flexShrink: 0, width: 64, height: 46,
                 padding: 0, border: 'none', cursor: 'pointer',
                 position: 'relative', overflow: 'hidden',
-                outline: i === activeIdx ? '2px solid #E8A020' : '2px solid transparent',
+                outline: i === activeIdx ? '2px solid var(--color-accent)' : '2px solid transparent',
                 outlineOffset: -2,
                 borderRadius: 2,
                 opacity: i === activeIdx ? 1 : 0.55,
@@ -322,7 +322,7 @@ const s = {
     fontSize: 10,
     letterSpacing: '0.14em',
     textTransform: 'uppercase',
-    color: 'var(--color-amber)',
+    color: 'var(--color-accent)',
     marginBottom: 14,
   },
   monoSmall: {
@@ -562,7 +562,7 @@ export default function ListingDetail() {
   const sentColor = sentScore == null ? 'var(--color-text-muted)'
     : sentScore >= 0.1  ? '#34D399'
     : sentScore <= -0.1 ? '#F87171'
-    : 'var(--color-amber)';
+    : 'var(--color-accent)';
 
   const localitySlug = listing?.locality ? localityToSlug(listing.locality) : '';
   const sourceLabel  = normalizeSource(listing?.source);
@@ -577,7 +577,7 @@ export default function ListingDetail() {
     colive:        '#00BFA5',
     stanza:        '#6C5CE7',
   };
-  const brandColor = SOURCE_BRAND[(listing?.source || '').toLowerCase()] || 'var(--color-amber)';
+  const brandColor = SOURCE_BRAND[(listing?.source || '').toLowerCase()] || 'var(--color-accent)';
 
   function handleCopyScript() {
     const script = `Hi, I saw your listing for "${listing?.title}" on NestIQ. I'm interested in viewing the property. Could you please share more details? Thank you.`;
@@ -610,7 +610,7 @@ export default function ListingDetail() {
         <div style={{ padding: '40px 16px', textAlign: 'center' }}>
           <p style={{ color: 'var(--color-text-muted)', marginBottom: 12 }}>Something went wrong loading this listing. Please try again.</p>
           {fetchError.requestId && <p style={{ fontSize: 11, color: 'var(--color-text-muted)', opacity: 0.6 }}>Request ID: {fetchError.requestId}</p>}
-          <button onClick={() => window.location.reload()} style={{ marginTop: 12, padding: '8px 20px', borderRadius: 8, border: '1px solid var(--color-amber)', background: 'transparent', color: 'var(--color-amber)', fontWeight: 600, cursor: 'pointer' }}>Retry</button>
+          <button onClick={() => window.location.reload()} style={{ marginTop: 12, padding: '8px 20px', borderRadius: 8, border: '1px solid var(--color-accent)', background: 'transparent', color: 'var(--color-accent)', fontWeight: 600, cursor: 'pointer' }}>Retry</button>
         </div>
       </div>
     );
@@ -844,7 +844,7 @@ export default function ListingDetail() {
               </p>
               <p style={{
                 fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 500,
-                color: 'var(--color-amber)',
+                color: 'var(--color-accent)',
               }}>
                 {marketFit}
               </p>
@@ -893,7 +893,7 @@ export default function ListingDetail() {
                   marginTop: 10, background: 'none', border: 'none',
                   cursor: 'pointer', padding: 0,
                   fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
-                  color: 'var(--color-amber)', transition: 'opacity 0.2s',
+                  color: 'var(--color-accent)', transition: 'opacity 0.2s',
                 }}
                 onMouseEnter={e => (e.currentTarget.style.opacity = '0.7')}
                 onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
@@ -928,7 +928,7 @@ export default function ListingDetail() {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6,
                   fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.06em',
-                  background: 'var(--color-amber)', color: '#1a0a00',
+                  background: 'var(--color-accent)', color: '#1a0a00',
                   border: 'none', borderRadius: 8,
                   padding: '9px 18px', textDecoration: 'none', fontWeight: 500,
                   transition: 'opacity 0.2s',
@@ -976,10 +976,10 @@ export default function ListingDetail() {
                 flex: 1,
                 fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
                 textTransform: 'uppercase',
-                background: copiedScript ? 'rgba(232,160,32,0.12)' : 'none',
-                border: `1px solid ${copiedScript ? 'rgba(232,160,32,0.4)' : 'var(--color-border)'}`,
+                background: copiedScript ? 'color-mix(in srgb, var(--color-accent) 12%, transparent)' : 'none',
+                border: `1px solid ${copiedScript ? 'color-mix(in srgb, var(--color-accent) 40%, transparent)' : 'var(--color-border)'}`,
                 borderRadius: 8, padding: '10px 14px',
-                color: copiedScript ? 'var(--color-amber)' : 'var(--color-text-muted)',
+                color: copiedScript ? 'var(--color-accent)' : 'var(--color-text-muted)',
                 cursor: 'pointer', transition: 'all 0.2s',
               }}
             >
@@ -1017,9 +1017,9 @@ export default function ListingDetail() {
               fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
               textTransform: 'uppercase',
               background: 'none',
-              border: `1px solid ${flagsApi.ownFlag ? 'rgba(232,160,32,0.45)' : 'var(--color-border)'}`,
+              border: `1px solid ${flagsApi.ownFlag ? 'color-mix(in srgb, var(--color-accent) 45%, transparent)' : 'var(--color-border)'}`,
               borderRadius: 8, padding: '10px 14px',
-              color: flagsApi.ownFlag ? '#E8A020' : 'var(--color-text-muted)',
+              color: flagsApi.ownFlag ? 'var(--color-accent)' : 'var(--color-text-muted)',
               cursor: 'pointer', transition: 'all 0.2s',
             }}
           >
@@ -1082,7 +1082,7 @@ export default function ListingDetail() {
                 border: '1px solid var(--color-border)',
                 transition: 'border-color 0.2s, color 0.2s',
               }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-amber)'; e.currentTarget.style.color = 'var(--color-amber)'; }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-accent)'; e.currentTarget.style.color = 'var(--color-accent)'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-muted)'; }}
             >
               View Full Intelligence Report
@@ -1159,10 +1159,10 @@ export default function ListingDetail() {
                   style={{
                     flex: 1, textAlign: 'center',
                     fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 500,
-                    background: 'var(--color-amber)', color: '#1a0a00',
+                    background: 'var(--color-accent)', color: '#1a0a00',
                     border: 'none', borderRadius: 8, padding: '10px 16px',
                     textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    boxShadow: '0 0 20px -4px rgba(232,160,32,0.3)', transition: 'opacity 0.2s',
+                    boxShadow: '0 0 20px -4px color-mix(in srgb, var(--color-accent) 30%, transparent)', transition: 'opacity 0.2s',
                   }}
                   onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
                   onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
@@ -1175,7 +1175,7 @@ export default function ListingDetail() {
                   style={{
                     flex: 1, textAlign: 'center',
                     fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 500,
-                    background: 'var(--color-amber)', color: '#1a0a00',
+                    background: 'var(--color-accent)', color: '#1a0a00',
                     border: 'none', borderRadius: 8, padding: '10px 16px',
                     textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     transition: 'opacity 0.2s',
@@ -1242,9 +1242,9 @@ export default function ListingDetail() {
                 fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
                 textTransform: 'uppercase',
                 background: 'none',
-                border: `1px solid ${flagsApi.ownFlag ? 'rgba(232,160,32,0.45)' : 'var(--color-border)'}`,
+                border: `1px solid ${flagsApi.ownFlag ? 'color-mix(in srgb, var(--color-accent) 45%, transparent)' : 'var(--color-border)'}`,
                 borderRadius: 8, padding: '10px 14px',
-                color: flagsApi.ownFlag ? '#E8A020' : 'var(--color-text-muted)',
+                color: flagsApi.ownFlag ? 'var(--color-accent)' : 'var(--color-text-muted)',
                 cursor: 'pointer', transition: 'all 0.2s',
               }}
             >
@@ -1292,7 +1292,7 @@ export default function ListingDetail() {
                     borderRadius: 8, padding: '10px 14px',
                     border: '1px solid var(--color-border)', transition: 'border-color 0.2s, color 0.2s',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-amber)'; e.currentTarget.style.color = 'var(--color-amber)'; }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-accent)'; e.currentTarget.style.color = 'var(--color-accent)'; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-muted)'; }}
                 >
                   Full Intelligence Report <span>→</span>
@@ -1355,10 +1355,10 @@ export default function ListingDetail() {
             style={{
               fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 500,
               letterSpacing: '0.04em',
-              background: 'var(--color-amber)', color: '#1a0a00',
+              background: 'var(--color-accent)', color: '#1a0a00',
               border: 'none', borderRadius: 8,
               padding: '10px 24px', textDecoration: 'none', flexShrink: 0,
-              boxShadow: '0 0 24px -4px rgba(232,160,32,0.3)',
+              boxShadow: '0 0 24px -4px color-mix(in srgb, var(--color-accent) 30%, transparent)',
               transition: 'opacity 0.2s',
             }}
             onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
@@ -1372,10 +1372,10 @@ export default function ListingDetail() {
             style={{
               fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 500,
               letterSpacing: '0.04em',
-              background: 'var(--color-amber)', color: '#1a0a00',
+              background: 'var(--color-accent)', color: '#1a0a00',
               border: 'none', borderRadius: 8,
               padding: '10px 24px', textDecoration: 'none', flexShrink: 0,
-              boxShadow: '0 0 24px -4px rgba(232,160,32,0.3)',
+              boxShadow: '0 0 24px -4px color-mix(in srgb, var(--color-accent) 30%, transparent)',
               transition: 'opacity 0.2s',
             }}
             onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}

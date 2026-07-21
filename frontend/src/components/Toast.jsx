@@ -1,6 +1,7 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { trackFirstSaveToastHubClicked } from '../lib/posthog'
+import { useCity } from '../CityContext'
 
 /**
  * Subtle bottom toast used for search auto-save notifications.
@@ -11,6 +12,7 @@ import { trackFirstSaveToastHubClicked } from '../lib/posthog'
  *   { type: 'first_save' }                        — first save celebration + My Hub link
  */
 export default function Toast({ toast, onDismiss, onSignIn }) {
+  const { prefix } = useCity()
   if (!toast) return null
 
   const isNudge = toast.type === 'nudge'
@@ -91,12 +93,12 @@ export default function Toast({ toast, onDismiss, onSignIn }) {
                   width: 28,
                   height: 28,
                   borderRadius: '50%',
-                  background: 'rgba(232,160,32,0.14)',
-                  border: '1px solid rgba(232,160,32,0.28)',
+                  background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--color-accent) 28%, transparent)',
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: 'var(--color-amber)',
+                  color: 'var(--color-accent)',
                   fontSize: 12,
                   flexShrink: 0,
                 }}
@@ -121,7 +123,7 @@ export default function Toast({ toast, onDismiss, onSignIn }) {
                   fontSize: 12,
                   fontWeight: 500,
                   letterSpacing: '0.01em',
-                  background: 'var(--color-amber)',
+                  background: 'var(--color-accent)',
                   color: '#1a0a00',
                   border: 'none',
                   borderRadius: 8,
@@ -150,12 +152,12 @@ export default function Toast({ toast, onDismiss, onSignIn }) {
                   width: 28,
                   height: 28,
                   borderRadius: '50%',
-                  background: 'rgba(232,160,32,0.14)',
-                  border: '1px solid rgba(232,160,32,0.28)',
+                  background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--color-accent) 28%, transparent)',
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: 'var(--color-amber)',
+                  color: 'var(--color-accent)',
                   fontSize: 12,
                   flexShrink: 0,
                 }}
@@ -171,9 +173,9 @@ export default function Toast({ toast, onDismiss, onSignIn }) {
               }}>
                 Saved! Find your list in{' '}
                 <Link
-                  to="/new"
+                  to={`${prefix}/new`}
                   onClick={() => { trackFirstSaveToastHubClicked(); onDismiss?.() }}
-                  style={{ color: 'var(--color-amber)', fontWeight: 500, textDecoration: 'none' }}
+                  style={{ color: 'var(--color-accent)', fontWeight: 500, textDecoration: 'none' }}
                 >
                   My Hub
                 </Link>
@@ -196,12 +198,12 @@ export default function Toast({ toast, onDismiss, onSignIn }) {
                   width: 28,
                   height: 28,
                   borderRadius: '50%',
-                  background: 'rgba(232,160,32,0.14)',
-                  border: '1px solid rgba(232,160,32,0.28)',
+                  background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--color-accent) 28%, transparent)',
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: 'var(--color-amber)',
+                  color: 'var(--color-accent)',
                   fontSize: 12,
                   flexShrink: 0,
                 }}
@@ -218,7 +220,7 @@ export default function Toast({ toast, onDismiss, onSignIn }) {
                 textOverflow: 'ellipsis',
               }}>
                 Sign in to get auto leads for{' '}
-                <span style={{ color: 'var(--color-amber)', fontWeight: 500 }}>{toast.locality}</span>
+                <span style={{ color: 'var(--color-accent)', fontWeight: 500 }}>{toast.locality}</span>
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -229,7 +231,7 @@ export default function Toast({ toast, onDismiss, onSignIn }) {
                   fontSize: 12,
                   fontWeight: 500,
                   letterSpacing: '0.01em',
-                  background: 'var(--color-amber)',
+                  background: 'var(--color-accent)',
                   color: '#1a0a00',
                   border: 'none',
                   borderRadius: 8,
@@ -258,12 +260,12 @@ export default function Toast({ toast, onDismiss, onSignIn }) {
                   width: 28,
                   height: 28,
                   borderRadius: '50%',
-                  background: 'rgba(232,160,32,0.14)',
-                  border: '1px solid rgba(232,160,32,0.28)',
+                  background: 'color-mix(in srgb, var(--color-accent) 14%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--color-accent) 28%, transparent)',
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: 'var(--color-amber)',
+                  color: 'var(--color-accent)',
                   fontSize: 11,
                   flexShrink: 0,
                 }}

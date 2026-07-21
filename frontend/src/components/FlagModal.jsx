@@ -83,7 +83,7 @@ export default function FlagModal({
 
   const noteRemaining = Math.max(0, NOTE_MAX - (note?.length || 0))
   const charCounterColor = noteRemaining < 40
-    ? 'var(--color-amber)'
+    ? 'var(--color-accent)'
     : 'var(--color-text-muted)'
 
   return (
@@ -190,10 +190,10 @@ export default function FlagModal({
                   style={{
                     display: 'flex', alignItems: 'center', gap: 10,
                     padding: '12px 14px',
-                    background: active ? 'rgba(232,160,32,0.08)' : '#1A1A1A',
-                    border: `1px solid ${active ? 'rgba(232,160,32,0.45)' : 'rgba(255,255,255,0.06)'}`,
+                    background: active ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)' : '#1A1A1A',
+                    border: `1px solid ${active ? 'color-mix(in srgb, var(--color-accent) 45%, transparent)' : 'rgba(255,255,255,0.06)'}`,
                     borderRadius: 10,
-                    color: active ? 'var(--color-amber)' : 'rgba(255,255,255,0.85)',
+                    color: active ? 'var(--color-accent)' : 'rgba(255,255,255,0.85)',
                     fontFamily: 'var(--font-sans)',
                     fontSize: 13.5, lineHeight: 1.3,
                     textAlign: 'left',
@@ -206,14 +206,14 @@ export default function FlagModal({
                     style={{
                       width: 14, height: 14, borderRadius: '50%',
                       flexShrink: 0,
-                      border: `1px solid ${active ? 'var(--color-amber)' : 'rgba(255,255,255,0.25)'}`,
+                      border: `1px solid ${active ? 'var(--color-accent)' : 'rgba(255,255,255,0.25)'}`,
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                     }}
                   >
                     {active && (
                       <span style={{
                         width: 6, height: 6, borderRadius: '50%',
-                        background: 'var(--color-amber)',
+                        background: 'var(--color-accent)',
                       }} />
                     )}
                   </span>
@@ -324,7 +324,7 @@ export default function FlagModal({
               disabled={submitting || !category}
               style={{
                 fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 500,
-                background: 'var(--color-amber)',
+                background: 'var(--color-accent)',
                 color: '#1a0a00',
                 border: 'none',
                 borderRadius: 10,
