@@ -11,21 +11,17 @@ import logging
 import random
 import threading
 import uuid as uuid_mod
+from collections import OrderedDict
 from decimal import Decimal
 from urllib.parse import urlparse
 from dotenv import load_dotenv
 from pythonjsonlogger import json as jsonlog
 from nobroker import (
-    start_background_refresh,
     get_cached_listings,
     NOBROKER_LOCALITIES,
     _cache_updated_at,
     _nobroker_cache,
     _cache_lock,
-)
-from housing import (
-    start_background_refresh as start_housing_refresh,
-    warm_hash_cache,
 )
 from localities import (
     normalize_locality,
@@ -123,7 +119,17 @@ _posthog_api_key = os.environ.get("POSTHOG_API_KEY", "")
 _posthog_host = os.environ.get("POSTHOG_HOST", "https://us.i.posthog.com")
 posthog_client = None
 if _posthog_api_key:
-    posthog_client = Posthog(_posthog_api_key, host=_posthog_host)
+    # enable_local_evaluation defaults to True in posthog-python, which starts a
+    # background Poller (every poll_interval=30s, recreated on every Gunicorn
+    # worker fork) that hits /flags/definitions for local feature-flag
+    # evaluation. We only ever use this client for capture_exception() — no
+    # feature flags, no secret_key/personal_api_key configured — so that
+    # poller just fails and retries forever, spamming logs every 30s per
+    # worker and generating constant outbound traffic that also prevents
+    # Railway's Serverless auto-sleep (which requires 10 idle minutes).
+    posthog_client = Posthog(
+        _posthog_api_key, host=_posthog_host, enable_local_evaluation=False
+    )
     logger.info("PostHog error tracking initialized", extra={"host": _posthog_host})
 else:
     logger.warning("POSTHOG_API_KEY not set — exception tracking disabled")
@@ -175,8 +181,15 @@ try:
 except Exception as _replica_err:
     logger.error("SQLite replica init failed (non-fatal): %s", _replica_err)
 
-# Start background ingestion workers
-start_background_refresh()   # NoBroker: every 3 hours
+# NOTE: In-process background ingestion (NoBroker/Housing.com/Telegram) used
+# to be started here on every web dyno boot. That's now handled exclusively
+# by the dedicated Railway cron services (see ingestion/run_all.py), so it's
+# intentionally NOT started in the web process anymore — running it here was
+# pure duplicate work, and the constant outbound traffic (every 2-5s while
+# active) also blocked Railway's Serverless auto-sleep. See
+# nobroker.start_background_refresh(), housing.start_background_refresh(),
+# and start_telegram_ingestion() below if this ever needs to be reinstated
+# (e.g. behind an env var) for local dev.
 
 _UA = "python:bangalore-housing-finder:v1.0 (by /u/nikhil7599)"
 HEADERS = {"User-Agent": _UA}
@@ -259,8 +272,30 @@ def _get_reddit_token():
 # ─────────────────────────────────────────────
 # Session-based Reddit fetching with anti-403 measures
 # ─────────────────────────────────────────────
-_reddit_cache: dict = {}
-REDDIT_CACHE_TTL = 600  # 10 minutes
+# Bounded LRU-ish cache: keyed on user-controlled search params (area/bhk/
+# budget/keywords), so cardinality is effectively unbounded over time. Without
+# a hard size cap this dict grows forever (never evicted, just checked for
+# staleness on read) — that was the cause of the Railway memory leak. Order
+# is insertion/re-insertion order, so the oldest entry is always first.
+_reddit_cache: "OrderedDict[str, tuple[float, dict]]" = OrderedDict()
+REDDIT_CACHE_TTL = 600            # 10 minutes
+REDDIT_CACHE_MAX_ENTRIES = 200    # hard cap regardless of TTL
+_reddit_cache_lock = threading.Lock()
+
+
+def _reddit_cache_set(cache_key: str, results: dict) -> None:
+    """Insert/refresh a cache entry, evicting expired and over-capacity entries."""
+    now = time.time()
+    with _reddit_cache_lock:
+        _reddit_cache.pop(cache_key, None)  # drop so re-insert moves it to the end
+        _reddit_cache[cache_key] = (now, results)
+
+        expired = [k for k, (ts, _) in _reddit_cache.items() if now - ts >= REDDIT_CACHE_TTL]
+        for k in expired:
+            _reddit_cache.pop(k, None)
+
+        while len(_reddit_cache) > REDDIT_CACHE_MAX_ENTRIES:
+            _reddit_cache.popitem(last=False)  # drop oldest
 
 
 def fetch_reddit_listings(query, subreddits, limit=50):
@@ -308,9 +343,10 @@ def fetch_reddit_with_retry(query, subreddits, limit=50, retries=2):
 
 
 def get_reddit_cached(query, subreddits, limit=50):
-    """Return cached Reddit results (10-minute TTL) or fetch fresh ones."""
+    """Return cached Reddit results (10-minute TTL, capped at REDDIT_CACHE_MAX_ENTRIES) or fetch fresh ones."""
     cache_key = f"{query}_{','.join(sorted(subreddits))}"
-    cached    = _reddit_cache.get(cache_key)
+    with _reddit_cache_lock:
+        cached = _reddit_cache.get(cache_key)
     if cached:
         ts, results = cached
         if time.time() - ts < REDDIT_CACHE_TTL:
@@ -318,7 +354,7 @@ def get_reddit_cached(query, subreddits, limit=50):
             return results
 
     results = fetch_reddit_with_retry(query, subreddits, limit)
-    _reddit_cache[cache_key] = (time.time(), results)
+    _reddit_cache_set(cache_key, results)
     return results
 
 
@@ -966,9 +1002,10 @@ def init_db():
 
 init_db()
 init_listings_table()
-start_telegram_ingestion()  # Telegram: every 3 hours
-start_housing_refresh()     # Housing.com: every 3 hours (staggered 3 min after startup)
-warm_hash_cache()           # Pre-resolve Housing.com locality hashes in background
+# start_telegram_ingestion() / housing.start_background_refresh() /
+# housing.warm_hash_cache() were removed from web-process startup — see the
+# NoBroker note above. The dedicated Railway cron services already cover
+# Telegram and Housing.com ingestion on a schedule.
 
 
 # ─────────────────────────────────────────────
