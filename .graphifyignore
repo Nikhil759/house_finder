@@ -1,0 +1,37 @@
+# Dependencies & build output
+node_modules/
+frontend/dist/
+frontend/.vite/
+venv/
+.venv/
+
+# Secrets & env
+.env
+*.env
+
+# Local DB / sessions
+*.db
+*.db-shm
+*.db-wal
+*.session
+*.session-journal
+
+# Graphify output (don't re-parse itself)
+graphify-out/
+
+# Logs
+logs/
+*.log
+
+# Large/binary assets (no AST value)
+knowledge/assets/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+public/lottie/
+
+# Lock files
+package-lock.json
+frontend/package-lock.json
